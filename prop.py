@@ -1,10 +1,13 @@
 import bpy
 import blf
+from .damo import *
 
 font_info = {
     "font_id": 0,
     "handler": None,
 }
+
+flag = True
 
 
 def My_Properties():
@@ -222,9 +225,29 @@ def My_Properties():
     )
 
 
-def Houdu(self, context):
+# 添加厚度修改器
+def modify(self, context):
+    global flag
+    context1 = bpy.context.space_data.context
+    if flag == True and context1 == 'RENDER':
+        flag = False
+        obj = bpy.context.active_object
+        md = obj.modifiers.new("jiahou", "SOLIDIFY")
+        md.use_rim_only = True
+        md.use_quality_normals = True
+        md.offset = 1
+        md.thickness = context.scene.laHouDU
+        # context.window_manager.modal_handler_add(self)
+        # MyHandleClass.add_handler(draw_callback_px,(None,context.scene.laHouDU))
+        return {'RUNNING_MODAL'}
+    else:
+        # MyHandleClass.remove_handler()
+        return {'FINISHED'}
 
+
+def Houdu(self, context):
     bl_description = "初始耳模的厚度"
+    modify(self, context)
     thickness = context.scene.laHouDU
     active_object = bpy.context.active_object
     name = active_object.name
@@ -253,7 +276,7 @@ def draw_callback_px(self, thickness):
     """Draw on the viewports"""
     # BLF drawing routine
     font_id = font_info["font_id"]
-    blf.position(font_id, 1500, 80, 0)
+    blf.position(font_id, 1300, 80, 0)
     blf.size(font_id, 50)
     rounded_number = round(thickness, 2)
     blf.draw(font_id, str(rounded_number)+"mm")
