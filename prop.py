@@ -252,8 +252,8 @@ def Houdu(self, context):
     active_object = bpy.context.active_object
     name = active_object.name
     bpy.data.objects[name].modifiers["jiahou"].thickness = thickness
-    MyHandleClass.remove_handler()
-    MyHandleClass.add_handler(draw_callback_px, (None, thickness))
+    #MyHandleClass.remove_handler()
+    #MyHandleClass.add_handler(draw_callback_px, (None, thickness))
 
 
 class MyHandleClass:

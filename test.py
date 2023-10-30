@@ -215,7 +215,7 @@ class TEST_OT_SelectMouseOveredMesh(bpy.types.Operator):
                             else:
                                 colvert.x = 0
                                 colvert.y = 1 + color
-                                colvert.z = color*(-1)
+                                colvert.z = color * (-1)
                         bm.to_mesh(me)
                         bm.free()
                     else:
