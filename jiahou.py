@@ -20,7 +20,7 @@ def newMaterial(id):
     return mat
 
 
-def newShader(id, type, r, g, b):
+def newShader(id):
 
     mat = newMaterial(id)
 
@@ -28,41 +28,28 @@ def newShader(id, type, r, g, b):
     links = mat.node_tree.links
     output = nodes.new(type='ShaderNodeOutputMaterial')
 
-    if type == "diffuse":
-        shader = nodes.new(type='ShaderNodeBsdfDiffuse')
-        nodes["Diffuse BSDF"].inputs[0].default_value = (r, g, b, 1)
+    shader = nodes.new(type='ShaderNodeBsdfPrincipled')
+    color = nodes.new(type="ShaderNodeVertexColor")
 
-    elif type == "emission":
-        shader = nodes.new(type='ShaderNodeEmission')
-        nodes["Emission"].inputs[0].default_value = (r, g, b, 1)
-        nodes["Emission"].inputs[1].default_value = 1
-
-    elif type == "glossy":
-        shader = nodes.new(type='ShaderNodeBsdfGlossy')
-        nodes["Glossy BSDF"].inputs[0].default_value = (r, g, b, 1)
-        nodes["Glossy BSDF"].inputs[1].default_value = 0
-
-    elif type == "principled":
-        shader = nodes.new(type='ShaderNodeBsdfPrincipled')
-        nodes["Principled BSDF"].inputs[0].default_value = (r, g, b, 0.8)
-        # nodes["Glossy BSDF"].inputs[1].default_value = 0
+    links.new(color.outputs[0], nodes["Principled BSDF"].inputs[0])
     links.new(shader.outputs[0], output.inputs[0])
+
     return mat
 
 
 def initialModelColor():
-    mat = newShader("Blue1", "principled", 0, 0.25, 1)  # 初始化模型颜色
+    mat = newShader("Blue1")  # 初始化模型颜色
     obj = bpy.context.active_object
     obj.data.materials.clear()
     obj.data.materials.append(mat)
     bpy.context.space_data.shading.type = 'MATERIAL'
-    bpy.context.scene.world.use_nodes = False  # 初始化背景颜色
-    bpy.context.space_data.shading.background_type = 'WORLD'
-    bpy.context.scene.world.color = (0.787, 0.871, 1)
+    # bpy.context.scene.world.use_nodes = False  # 初始化背景颜色
+    # bpy.context.space_data.shading.background_type = 'WORLD'
+    # bpy.context.scene.world.color = (0.787, 0.871, 1)
 
 
 def initialTransparency():
-    mat = newShader("Blue2", "principled", 0, 0.25, 1)
+    mat = newShader("Blue2")
     obj = bpy.context.active_object
     obj.data.materials.clear()
     obj.data.materials.append(mat)

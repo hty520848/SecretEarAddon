@@ -1,11 +1,7 @@
 import bpy
-import blf
 from .damo import *
+from .qiege import *
 
-font_info = {
-    "font_id": 0,
-    "handler": None,
-}
 
 flag = True
 
@@ -37,7 +33,8 @@ def My_Properties():
         description='this is option',
         items=[
             ('OP1', '平面切割', ''),
-            ('OP2', '阶梯状切割', '')]
+            ('OP2', '阶梯状切割', '')],
+        update=qiegeenum
     )
     bpy.types.Scene.sheRuPianYi = bpy.props.FloatProperty(
         name="sheRuPianYi", min=-1.0, max=1.0)
@@ -226,7 +223,7 @@ def My_Properties():
 
 
 # 添加厚度修改器
-def modify(self, context):
+def modify(self, context, thinckness):
     global flag
     context1 = bpy.context.space_data.context
     if flag == True and context1 == 'RENDER':
@@ -241,45 +238,40 @@ def modify(self, context):
         # MyHandleClass.add_handler(draw_callback_px,(None,context.scene.laHouDU))
         return {'RUNNING_MODAL'}
     else:
+        if thinckness < 0:
+            name = bpy.context.active_object.name
+            md = bpy.data.objects[name].modifiers["jiahou"]
+            md.use_flip_normals = True
+
+        else:
+            name = bpy.context.active_object.name
+            md = bpy.data.objects[name].modifiers["jiahou"]
+            md.use_flip_normals = False
         # MyHandleClass.remove_handler()
         return {'FINISHED'}
 
 
 def Houdu(self, context):
     bl_description = "初始耳模的厚度"
-    modify(self, context)
     thickness = context.scene.laHouDU
+    modify(self, context, thickness)
     active_object = bpy.context.active_object
     name = active_object.name
     bpy.data.objects[name].modifiers["jiahou"].thickness = thickness
-    #MyHandleClass.remove_handler()
-    #MyHandleClass.add_handler(draw_callback_px, (None, thickness))
+    # MyHandleClass.remove_handler()
+    # MyHandleClass.add_handler(draw_callback_px, (None, thickness))
 
 
-class MyHandleClass:
-    _handler = None
+def qiegeenum(self, context):
+    bl_description = "选择切割方式"
+    enum = bpy.context.scene.qieGeTypeEnum
+    if enum == "OP1":
+        quitStepCut()
+        initCircle()
+    if enum == "OP2":
+        quitCut()
+        initPlane()
 
-    @classmethod
-    def add_handler(cls, function, args=()):
-        cls._handler = bpy.types.SpaceView3D.draw_handler_add(
-            function, args, 'WINDOW', 'POST_PIXEL'
-        )
-
-    @classmethod
-    def remove_handler(cls):
-        if cls._handler is not None:
-            bpy.types.SpaceView3D.draw_handler_remove(cls._handler, 'WINDOW')
-            cls._handler = None
-
-
-def draw_callback_px(self, thickness):
-    """Draw on the viewports"""
-    # BLF drawing routine
-    font_id = font_info["font_id"]
-    blf.position(font_id, 1300, 80, 0)
-    blf.size(font_id, 50)
-    rounded_number = round(thickness, 2)
-    blf.draw(font_id, str(rounded_number)+"mm")
 
 # 回调函数，根据绑定的属性值更改选中区域的厚度
 

@@ -154,7 +154,6 @@ class TEST_OT_SelectMouseOveredMesh(bpy.types.Operator):
                         index = 0
                         bm.faces.ensure_lookup_table()
                         oribm.faces.ensure_lookup_table()
-                        bm.faces[fidx].material_index = 1
                         for v in bm.faces[fidx].verts:
                             vec = v.co - co
                             between = vec.dot(vec)
@@ -191,7 +190,7 @@ class TEST_OT_SelectMouseOveredMesh(bpy.types.Operator):
                             disvec_color = oribm.verts[index_color].co - \
                                 bm.verts[index_color].co
                             dis_color = disvec_color.dot(disvec_color)
-                            thinkness = round(math.sqrt(dis_color), 2)
+                            thickness = round(math.sqrt(dis_color), 2)
                             # origin_color = innermw_inv @ cl
                             # dest_color = innermw_inv @ vert.co
                             # direc_color = dest_color - origin_color
@@ -202,13 +201,45 @@ class TEST_OT_SelectMouseOveredMesh(bpy.types.Operator):
                             origin_veccol = oribm.verts[index_color].normal
                             flag_color = origin_veccol.dot(disvec_color)
                             if flag_color > 0:
-                                thinkness *= -1
-                            color = round(thinkness / 0.8, 2)
+                                thickness *= -1
+
+                            if (context.scene.localLaHouDu):
+                                maxHoudu = context.scene.maxLaHouDu
+                                minHoudu = context.scene.minLaHouDu
+                                if (thickness > maxHoudu or thickness < minHoudu):
+                                    # print("原坐标：",oribm.verts[index_color].co)
+                                    # print("现坐标：",bm.verts[index_color].co)
+                                    # 应该绘制的厚度
+                                    if thickness > maxHoudu:
+                                        lenth = maxHoudu
+                                    elif thickness < minHoudu:
+                                        lenth = minHoudu * (-1)
+                                    # print("实际厚度：",thickness)
+                                    # print("理论厚度：",lenth)
+                                    # 根据厚度修改坐标
+                                    bm.verts[index_color].co = oribm.verts[index_color].co - \
+                                        disvec_color.normalized()*lenth
+                                    # print("原坐标：",oribm.verts[index_color].co)
+                                    # print("现坐标：",bm.verts[index_color].co)
+                                    disvec_color = oribm.verts[index_color].co - \
+                                        bm.verts[index_color].co
+                                    dis_color = disvec_color.dot(
+                                        disvec_color)
+                                    thickness = round(
+                                        math.sqrt(dis_color), 2)
+                                    origin_veccol = oribm.verts[index_color].normal
+                                    flag_color = origin_veccol.dot(
+                                        disvec_color)
+                                    if flag_color > 0:
+                                        thickness *= -1
+                                    # print("修改后的厚度：",thickness)
+
+                            color = round(thickness / 0.8, 2)
                             if color >= 1:
                                 color = 1
                             if color <= -1:
                                 color = -1
-                            if thinkness >= 0:
+                            if thickness >= 0:
                                 colvert.x = color
                                 colvert.y = 1 - color
                                 colvert.z = 0
@@ -227,7 +258,7 @@ class TEST_OT_SelectMouseOveredMesh(bpy.types.Operator):
                             colvert.z = 1
                         bm.to_mesh(me)
                         bm.free()
-                        print("no select")
+                        # print("no select")
 
         return {'PASS_THROUGH'}
 

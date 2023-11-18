@@ -71,8 +71,8 @@ class CustomPanelLocalOrGlobalJiaHou(bpy.types.Panel):
         layout.separator()
         col = layout.column(align=True)
         col.prop(context.scene, 'bianKuangKuanDu', text="边框宽度")
-        col = layout.column(align=True)
-        col.operator("object.rightmouse", text="鼠标行为")
+        # col = layout.column(align=True)
+        # col.operator("object.rightmouse", text="鼠标行为")
 
 
 # 点面切割
@@ -88,6 +88,7 @@ class CustomPanelDianMianQieGe(bpy.types.Panel):
         layout = self.layout
         layout.separator()
         col = layout.column(align=True)
+        col.prop(context.scene, 'qieGeTypeEnum', text="选择工具")
 
 
 class CustomPanelPlantCut(bpy.types.Panel):
@@ -848,9 +849,9 @@ _classes = [
     CustomPanelPaiQiKong,
     CustomPanelHouQiDaMo,
     # TOPBAR_HT_upper_bar,
-    TOPBAR_MT_transparency1,
-    TOPBAR_MT_transparency2,
-    TOPBAR_MT_transparency3,
+    # TOPBAR_MT_transparency1,
+    # TOPBAR_MT_transparency2,
+    # TOPBAR_MT_transparency3,
     # TOPBAR_MT_editor_menus,
     TOPBAR_MT_screteEarFile,
     TOPBAR_MT_huierFile,

@@ -15,6 +15,7 @@ import bpy
 from . import (
     damo,
     jiahou,
+    qiege,
     ui,
     prop,
     test
@@ -39,6 +40,7 @@ if "bpy" in locals():
         "damo"
         "jiahou"
         "test"
+        "qiege"
     ]
     # reload()函数重新载入模块，调试时加载的模块发生改变时，
     for module in reloadable_modules:
@@ -55,6 +57,7 @@ def register():
     jiahou.register()
     prop.register()
     test.register()
+    qiege.register()
 
 
 def unregister():
@@ -62,6 +65,7 @@ def unregister():
     damo.unregister()
     jiahou.unregister()
     test.unregister()
+    qiege.unregister()
 
 
 if __name__ == "__main__":

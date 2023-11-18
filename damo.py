@@ -1,10 +1,10 @@
 import bpy
 from bpy.types import WorkSpaceTool
-import bpy_extras
-from .prop import *
+from .tool import *
 from math import *
 import mathutils
 import bmesh
+import bpy_extras
 from bpy_extras import view3d_utils
 import math
 
@@ -17,152 +17,16 @@ is_copy = False
 is_modifier = False
 
 
-def copy_object(context):
+def copy_object():
     # 获取当前选中的物体
-    selected_obj = context.active_object
+    active_obj = bpy.context.active_object
 
     # 复制物体
-    duplicate_obj = selected_obj.copy()
-    duplicate_obj.data = selected_obj.data.copy()
-    duplicate_obj.animation_data_clear()
+    mesh = active_obj.data
+    new_object = bpy.data.objects.new(name="damofuzhi", object_data=mesh)
     # 将复制的物体加入到场景集合中
-    scene = bpy.context.scene
-    scene.collection.objects.link(duplicate_obj)
-    duplicate_obj.hide_set(True)
-
-
-# 获取区域和空间，鼠标行为切换相关
-def get_region_and_space(context, area_type, region_type, space_type):
-    region = None
-    area = None
-    space = None
-
-    # 获取指定区域的信息
-    for a in context.screen.areas:
-        if a.type == area_type:
-            area = a
-            break
-    else:
-        return (None, None)
-    # 获取指定区域的信息
-    for r in area.regions:
-        if r.type == region_type:
-            region = r
-            break
-    # 获取指定区域的信息
-    for s in area.spaces:
-        if s.type == space_type:
-            space = s
-            break
-
-    return (region, space)
-
-
-# 判断鼠标是否在物体上
-def is_mouse_on_object(context, event):
-    active_obj = context.active_object
-
-    is_on_object = False  # 初始化变量
-
-    if context.area:
-        context.area.tag_redraw()
-
-    # 获取鼠标光标的区域坐标
-    mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
-
-    # 获取信息和空间信息
-    region, space = get_region_and_space(
-        context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
-    )
-
-    ray_dir = view3d_utils.region_2d_to_vector_3d(
-        region,
-        space.region_3d,
-        mv
-    )
-    ray_orig = view3d_utils.region_2d_to_origin_3d(
-        region,
-        space.region_3d,
-        mv
-    )
-
-    start = ray_orig
-    end = ray_orig + ray_dir
-
-    # 确定光线和对象的相交
-    mwi = active_obj.matrix_world.inverted()
-    mwi_start = mwi @ start
-    mwi_end = mwi @ end
-    mwi_dir = mwi_end - mwi_start
-
-    if active_obj.type == 'MESH':
-        if (active_obj.mode == 'OBJECT' or active_obj.mode == "SCULPT"):
-            mesh = active_obj.data
-            bm = bmesh.new()
-            bm.from_mesh(mesh)
-            tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
-
-            _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
-
-            if fidx is not None:
-                is_on_object = True  # 如果发生交叉，将变量设为True
-    return is_on_object
-
-
-# 判断鼠标状态是否发生改变
-def is_changed(context, event):
-    active_obj = context.active_object
-
-    curr_on_object = False             # 当前鼠标是否在物体上,初始化为False
-    global prev_on_object  # 之前鼠标是否在物体上
-
-    if context.area:
-        context.area.tag_redraw()
-
-    # 获取鼠标光标的区域坐标
-    mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
-
-    # 获取信息和空间信息
-    region, space = get_region_and_space(
-        context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
-    )
-
-    ray_dir = view3d_utils.region_2d_to_vector_3d(
-        region,
-        space.region_3d,
-        mv
-    )
-    ray_orig = view3d_utils.region_2d_to_origin_3d(
-        region,
-        space.region_3d,
-        mv
-    )
-
-    start = ray_orig
-    end = ray_orig + ray_dir
-
-    # 确定光线和对象的相交
-    mwi = active_obj.matrix_world.inverted()
-    mwi_start = mwi @ start
-    mwi_end = mwi @ end
-    mwi_dir = mwi_end - mwi_start
-
-    if active_obj.type == 'MESH':
-        if (active_obj.mode == 'OBJECT' or active_obj.mode == "SCULPT"):
-            mesh = active_obj.data
-            bm = bmesh.new()
-            bm.from_mesh(mesh)
-            tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
-
-            _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
-
-            if fidx is not None:
-                curr_on_object = True                     # 如果发生交叉，将变量设为True
-    if (curr_on_object != prev_on_object):
-        prev_on_object = curr_on_object
-        return True
-    else:
-        return False
+    bpy.context.collection.objects.link(new_object)
+    new_object.hide_set(True)
 
 
 # 打磨功能模块左侧按钮的加厚操作
@@ -206,10 +70,10 @@ class Thickening(bpy.types.Operator):
 
         if not is_copy:
             is_copy = True
-            copy_object(context)
+            copy_object()
         if not is_modifier:
             is_modifier = True
-            bpy.ops.object.modifier_apply(modifier="jiahou")
+            bpy.ops.object.modifier_apply(modifier="jiahou", single_user=True)
 
         context.window_manager.modal_handler_add(self)  # 进入modal模式
         return {'RUNNING_MODAL'}
@@ -281,10 +145,10 @@ class Thickening(bpy.types.Operator):
                     # bpy.ops.mesh.select_all(action='DESELECT')
 
                     # 获取活动对象
-                    active_obj = bpy.context.active_object
-                    name = bpy.context.object.name
-                    copyname = name + ".001"
-                    ori_obj = bpy.data.objects[copyname]
+                    # active_obj = bpy.context.active_object
+                    # name = bpy.context.object.name
+                    # copyname = name + ".001"
+                    ori_obj = bpy.data.objects["damofuzhi"]
                     orime = ori_obj.data
                     oribm = bmesh.new()
                     oribm.from_mesh(orime)
@@ -313,7 +177,6 @@ class Thickening(bpy.types.Operator):
                                 index = 0
                                 bm.faces.ensure_lookup_table()
                                 oribm.faces.ensure_lookup_table()
-                                bm.faces[fidx].material_index = 1
                                 for v in bm.faces[fidx].verts:
                                     vec = v.co - co
                                     between = vec.dot(vec)
@@ -483,10 +346,10 @@ class Thinning(bpy.types.Operator):
 
         if not is_copy:
             is_copy = True
-            copy_object(context)
+            copy_object()
         if not is_modifier:
             is_modifier = True
-            bpy.ops.object.modifier_apply(modifier="jiahou")
+            bpy.ops.object.modifier_apply(modifier="jiahou", single_user=True)
 
         context.window_manager.modal_handler_add(self)  # 进入modal模式
         return {'RUNNING_MODAL'}
@@ -559,10 +422,10 @@ class Thinning(bpy.types.Operator):
                     # bpy.ops.mesh.select_all(action='DESELECT')
 
                     # 获取活动对象
-                    active_obj = bpy.context.active_object
-                    name = bpy.context.object.name
-                    copyname = name + ".001"
-                    ori_obj = bpy.data.objects[copyname]
+                    # active_obj = bpy.context.active_object
+                    # name = bpy.context.object.name
+                    # copyname = name + ".001"
+                    ori_obj = bpy.data.objects["damofuzhi"]
                     orime = ori_obj.data
                     oribm = bmesh.new()
                     oribm.from_mesh(orime)
@@ -591,7 +454,6 @@ class Thinning(bpy.types.Operator):
                                 index = 0
                                 bm.faces.ensure_lookup_table()
                                 oribm.faces.ensure_lookup_table()
-                                bm.faces[fidx].material_index = 1
                                 for v in bm.faces[fidx].verts:
                                     vec = v.co - co
                                     between = vec.dot(vec)
@@ -764,10 +626,10 @@ class Smooth(bpy.types.Operator):
 
         if not is_copy:
             is_copy = True
-            copy_object(context)
+            copy_object()
         if not is_modifier:
             is_modifier = True
-            bpy.ops.object.modifier_apply(modifier="jiahou")
+            bpy.ops.object.modifier_apply(modifier="jiahou", single_user=True)
 
         context.window_manager.modal_handler_add(self)  # 进入modal模式
         return {'RUNNING_MODAL'}
@@ -839,10 +701,10 @@ class Smooth(bpy.types.Operator):
                     # bpy.ops.mesh.select_all(action='DESELECT')
 
                     # 获取活动对象
-                    active_obj = bpy.context.active_object
-                    name = bpy.context.object.name
-                    copyname = name + ".001"
-                    ori_obj = bpy.data.objects[copyname]
+                    # active_obj = bpy.context.active_object
+                    # name = bpy.context.object.name
+                    # copyname = name + ".001"
+                    ori_obj = bpy.data.objects["damofuzhi"]
                     orime = ori_obj.data
                     oribm = bmesh.new()
                     oribm.from_mesh(orime)
@@ -871,7 +733,6 @@ class Smooth(bpy.types.Operator):
                                 index = 0
                                 bm.faces.ensure_lookup_table()
                                 oribm.faces.ensure_lookup_table()
-                                bm.faces[fidx].material_index = 1
                                 for v in bm.faces[fidx].verts:
                                     vec = v.co - co
                                     between = vec.dot(vec)
@@ -922,38 +783,6 @@ class Smooth(bpy.types.Operator):
                                         disvec_color)
                                     if flag_color > 0:
                                         thinkness *= -1
-
-                                    # 厚度限制
-                                    if (context.scene.localLaHouDu):
-                                        maxHoudu = context.scene.maxLaHouDu
-                                        minHoudu = context.scene.minLaHouDu
-                                        if (thinkness > maxHoudu or thinkness < minHoudu):
-                                            # print("原坐标：",oribm.verts[index_color].co)
-                                            # print("现坐标：",bm.verts[index_color].co)
-                                            # 应该绘制的厚度
-                                            if thinkness > maxHoudu:
-                                                lenth = maxHoudu
-                                            elif thinkness < minHoudu:
-                                                lenth = minHoudu
-                                            # print("实际厚度：",thinkness)
-                                            # print("理论厚度：",lenth)
-                                            # 根据厚度修改坐标
-                                            bm.verts[index_color].co = oribm.verts[index_color].co + \
-                                                disvec_color.normalized()*lenth
-                                            # print("原坐标：",oribm.verts[index_color].co)
-                                            # print("现坐标：",bm.verts[index_color].co)
-                                            disvec_color = oribm.verts[index_color].co - \
-                                                bm.verts[index_color].co
-                                            dis_color = disvec_color.dot(
-                                                disvec_color)
-                                            thinkness = round(
-                                                math.sqrt(dis_color), 2)
-                                            origin_veccol = oribm.verts[index_color].normal
-                                            flag_color = origin_veccol.dot(
-                                                disvec_color)
-                                            if flag_color > 0:
-                                                thinkness *= -1
-                                            # print("修改后的厚度：",thinkness)
 
                                     color = round(thinkness / 0.8, 2)
                                     if color >= 1:
@@ -1019,8 +848,8 @@ class Damo_Reset(bpy.types.Operator):
             var = 4
             active_obj = bpy.context.active_object
             name = bpy.context.object.name
-            copyname = name + ".001"
-            ori_obj = bpy.data.objects[copyname]
+            # copyname = name + ".001"
+            ori_obj = bpy.data.objects["damofuzhi"]
             bpy.data.objects.remove(active_obj, do_unlink=True)
             ori_obj.name = name
             ori_obj.hide_set(False)
@@ -1030,6 +859,12 @@ class Damo_Reset(bpy.types.Operator):
                     bpy.context.view_layer.objects.active = i
                     i.select_set(state=True)
             is_copy = False
+            is_modifier = False
+            md = bpy.context.active_object.modifiers.new("jiahou", "SOLIDIFY")
+            md.use_rim_only = True
+            md.use_quality_normals = True
+            md.offset = 1
+            md.thickness = context.scene.laHouDU
             # bpy.ops.geometry.color_attribute_add()
             # active_obj = bpy.context.active_object
             # me = active_obj.data
@@ -1044,7 +879,8 @@ class Damo_Reset(bpy.types.Operator):
             # bm.to_mesh(me)
             # bm.free()
         else:
-            bpy.ops.object.modifier_remove(modifier="jiahou")
+            # bpy.ops.object.modifier_remove(modifier="jiahou")
+            pass
 
         return {'FINISHED'}
 
