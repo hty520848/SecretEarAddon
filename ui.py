@@ -32,8 +32,8 @@ class huier_PT_damo(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         layout.scale_x = 1.2
-        layout.use_property_split = True
-        layout.use_property_decorate = False
+        # layout.use_property_split = True
+        # layout.use_property_decorate = False
         # flow = layout.grid_flow(row_major=True, columns=0, even_columns=False, even_rows=False, align=True)
         col = layout.column()
         col.prop(context.scene, 'laHouDU', text="蜡厚度")

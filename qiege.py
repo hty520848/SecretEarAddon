@@ -66,36 +66,80 @@ def initPlane():
     # for collection in scene.collection.children:
     #     if collection.name == "MyCollection":
     #         bpy.context.view_layer.active_layer_collection =  bpy.context.view_layer.layer_collection.children[collection.name]
+
     global a
     a = 2
-    # 新增立方体
-    bpy.ops.mesh.primitive_cube_add(enter_editmode=True,
-                                    align='WORLD',
-                                    location=(11.8, -9, 14.2),
-                                    rotation=(0.0, 0.0, -2.26),
-                                    scale=(6.05, 6.05, 6.05))
-    bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type='FACE')
-
-    # 选择平面
-    bpy.ops.object.mode_set(mode='OBJECT')
-    plane = bpy.context.active_object
-
-    # 删除多余的平面
-    # bpy.context.view_layer.objects.active = circle
-    bm = bmesh.new()
-    bm.from_mesh(plane.data)
-    bm.faces.ensure_lookup_table()
-    bm.faces[0].select = True
-    bm.faces[1].select = True
-    bm.faces[2].select = True
-    bm.faces[3].select = False
-    bm.faces[4].select = False
-    bm.faces[5].select = True
-    bm.to_mesh(plane.data)
-    bm.free()
+    
+    # 获取右耳的网格数据
+    for i in bpy.context.visible_objects:
+        if i.name == "右耳":
+            bpy.context.view_layer.objects.active = i
+            i.select_set(state=True)
+    obj = bpy.context.active_object
     bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.delete(type='FACE')
+    mesh = bmesh.from_edit_mesh(obj.data)
+    mesh.free()
+
+    # #记录z坐标最大的顶点
+    # zmax = -666
+    # index = -1
+    # mesh.verts.ensure_lookup_table()
+    # for vert in mesh.verts:
+    #     if(vert.co.z >= zmax):
+    #         zmax = vert.co.z
+    #         index = vert.index
+    # coord = mesh.verts[index].co
+   
     bpy.ops.object.mode_set(mode='OBJECT')
+    #新增平面
+    bpy.ops.mesh.primitive_plane_add(size=2, enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.merge(type='CENTER')
+    bpy.ops.mesh.delete(type='VERT')
+    
+    #添加顶点
+    obj = bpy.context.active_object
+    bpy.ops.object.mode_set(mode='EDIT')
+    mesh = bmesh.from_edit_mesh(obj.data)
+
+    verts = [ mesh.verts.new((9.6618, -11.6400, 12.7087)),
+              mesh.verts.new((8.1530, -14.2894, 11.0310)),
+              mesh.verts.new((11.6051, -10.3907, 11.7511)),
+              mesh.verts.new((8.0488, -10.7594, 14.0301))]
+    mesh.faces.new(verts[:3])
+    mesh.faces.new(verts[1:3]+[verts[0]])
+
+    bmesh.update_edit_mesh(obj.data)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    # # 新增立方体
+    # bpy.ops.mesh.primitive_cube_add(enter_editmode=True,
+    #                                 align='WORLD',
+    #                                 location=(11.8, -9, 14.2),
+    #                                 rotation=(0.0, 0.0, -2.26),
+    #                                 scale=(6.05, 6.05, 6.05))
+    # bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type='FACE')
+
+    # # 选择平面
+    # bpy.ops.object.mode_set(mode='OBJECT')
+    # plane = bpy.context.active_object
+
+    # # 删除多余的平面
+    # # bpy.context.view_layer.objects.active = circle
+    # bm = bmesh.new()
+    # bm.from_mesh(plane.data)
+    # bm.faces.ensure_lookup_table()
+    # bm.faces[0].select = True
+    # bm.faces[1].select = True
+    # bm.faces[2].select = True
+    # bm.faces[3].select = False
+    # bm.faces[4].select = False
+    # bm.faces[5].select = True
+    # bm.to_mesh(plane.data)
+    # bm.free()
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.mesh.delete(type='FACE')
+    # bpy.ops.object.mode_set(mode='OBJECT')
     # #分离平面
     # bm2 = bmesh.new()
     # bm2.from_mesh(plane.data)
@@ -109,59 +153,63 @@ def initPlane():
     # bpy.ops.object.mode_set(mode='OBJECT')
 
     # 应用变换
-    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    # bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
     # 为模型添加布尔修改器
-    obj_main = bpy.data.objects['右耳']
-    bool_modifier = obj_main.modifiers.new(
-        name="step cut", type='BOOLEAN')
-    # 设置布尔修饰符作用对象
-    # bool_modifier.operand_type = 'COLLECTION'
-    bool_modifier.operation = 'DIFFERENCE'
-    bool_modifier.object = plane
-    # bool_modifier.collection = bpy.data.collections['MyCollection']
+    # obj_main = bpy.data.objects['右耳']
+    # bool_modifier = obj_main.modifiers.new(
+    #     name="step cut", type='BOOLEAN')
+    # # 设置布尔修饰符作用对象
+    # # bool_modifier.operand_type = 'COLLECTION'
+    # bool_modifier.operation = 'DIFFERENCE'
+    # bool_modifier.object = plane
+    # # bool_modifier.collection = bpy.data.collections['MyCollection']
 
-    # TODO: 添加圆柱体在平面上
-    bm1 = bmesh.new()
-    bm1.from_mesh(plane.data)
-    bm1.faces.ensure_lookup_table()
-    x = 0
-    y = 0
-    z = 0
-    for vert in bm1.faces[0].verts:
-        x += vert.co.x
-        y += vert.co.y
-        z += vert.co.z
-    bpy.ops.mesh.primitive_cylinder_add(enter_editmode=False, align='WORLD',
-                                        location=(x/4, y/4, z/4-3),
-                                        scale=(0.5, 0.5, 1),
-                                        rotation=(1.57, 0.0, -2.26))
-    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    # bm1 = bmesh.new()
+    # bm1.from_mesh(plane.data)
+    # bm1.faces.ensure_lookup_table()
+    # x = 0
+    # y = 0
+    # z = 0
+    # for vert in bm1.faces[0].verts:
+    #     x += vert.co.x
+    #     y += vert.co.y
+    #     z += vert.co.z
+    # bpy.ops.mesh.primitive_cylinder_add(enter_editmode=False, align='WORLD',
+    #                                     location=(x/4, y/4, z/4-3),
+    #                                     scale=(0.5, 0.5, 1),
+    #                                     rotation=(1.57, 0.0, -2.26))
+    # bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    # bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
 
-    bm2 = bmesh.new()
-    bm2.from_mesh(plane.data)
-    bm2.faces.ensure_lookup_table()
-    x = 0
-    y = 0
-    z = 0
-    for vert in bm2.faces[1].verts:
-        x += vert.co.x
-        y += vert.co.y
-        z += vert.co.z
-    bpy.ops.mesh.primitive_cylinder_add(enter_editmode=False, align='WORLD',
-                                        location=(x/4-3, y/4+3, z/4),
-                                        scale=(0.5, 0.5, 1))
-    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    # bm2 = bmesh.new()
+    # bm2.from_mesh(plane.data)
+    # bm2.faces.ensure_lookup_table()
+    # x = 0
+    # y = 0
+    # z = 0
+    # for vert in bm2.faces[1].verts:
+    #     x += vert.co.x
+    #     y += vert.co.y
+    #     z += vert.co.z
+    # bpy.ops.mesh.primitive_cylinder_add(enter_editmode=False, align='WORLD',
+    #                                     location=(x/4-3, y/4+3, z/4),
+    #                                     scale=(0.5, 0.5, 1))
+    # bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    # bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
+    
+    # bpy.ops.object.select_all(action='DESELECT')
 
-    for i in bpy.context.visible_objects:  # 迭代所有可见物体,激活当前物体
-        if i.name == "Cube":
-            bpy.context.view_layer.objects.active = i
-            i.select_set(state=True)
-            i.hide_set(True)
-
-    override = getOverride()
-    with bpy.context.temp_override(**override):
-        bpy.ops.object.stepcut('INVOKE_DEFAULT')
+    # for i in bpy.context.visible_objects:  # 迭代所有可见物体,激活当前物体
+    #     if i.name == "Cube":
+    #         bpy.context.view_layer.objects.active = i
+    #         i.select_set(state=True)
+    #         bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
+    #         i.hide_set(True)
+    
+    # override = getOverride()
+    # with bpy.context.temp_override(**override):
+    #     bpy.ops.object.stepcut('INVOKE_DEFAULT')
 
 # z轴自适应缩放
 
@@ -446,7 +494,6 @@ class Step_Cut(bpy.types.Operator):
             if (a == 2 and (is_mouse_on_which_object(context, event) != -1)):
                 index = is_mouse_on_which_object(context, event)
                 if (index == 0):
-                    # TODO:激活物体
                     bpy.ops.object.select_all(action='DESELECT')
                     for i in bpy.context.visible_objects:  # 迭代所有可见物体,激活当前物体
                         if i.name == "Cylinder":
@@ -471,6 +518,8 @@ class Step_Cut(bpy.types.Operator):
                             rotate_angle_x = (
                                 event.mouse_region_x - op_cls.__initial_mouse_x) * 0.01
                             active_obj.rotation_euler[0] = op_cls.__initial_rotation_x + \
+                                rotate_angle_x
+                            bpy.data.objects["Cube"].rotation_euler[0] = op_cls.__initial_rotation_x + \
                                 rotate_angle_x
                             return {'RUNNING_MODAL'}
                 if (index == 1):
