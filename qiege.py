@@ -91,13 +91,63 @@ def new_sphere(name,loc):
     obj.location = loc # 指定的位置坐标
 
 def new_plane(name):
-     # 创建一个新的网格
     mesh = bpy.data.meshes.new("MyMesh")
     obj = bpy.data.objects.new(name, mesh)
 
     # 在场景中添加新的对象
     scene = bpy.context.scene
     scene.collection.objects.link(obj)
+    
+    for i in bpy.context.visible_objects:
+        if i.name == name:
+            bpy.context.view_layer.objects.active = i
+            i.select_set(state=True)
+    
+    bpy.ops.object.mode_set(mode='EDIT')
+    bm = bmesh.from_edit_mesh(obj.data)
+    # 创建四个顶点
+    verts = [bm.verts.new((0, 0, 0)),
+             bm.verts.new((1, 0, 0)),
+             bm.verts.new((1, 1, 0)),
+             bm.verts.new((0, 1, 0))]
+
+    # 创建两个面
+    bm.faces.new(verts[:3])
+    bm.faces.new(verts[1:])
+
+    # 更新网格数据
+    bmesh.update_edit_mesh(obj.data)
+
+    # 切换回对象模式
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+def update_plane():
+
+    #获取坐标
+    loc = [bpy.data.objects['mysphere1'].location,
+           bpy.data.objects['mysphere2'].location,
+           bpy.data.objects['mysphere3'].location,
+           bpy.data.objects['mysphere4'].location]
+
+    # 获取网格数据
+    obj = bpy.data.objects['myplane']
+    mesh = obj.data
+    if mesh.vertices:
+        for i in (0,4):
+            vertex = mesh.vertices[i]
+            vertex.co = loc[i]
+    
+    mesh.verts.ensure_lookup_table()
+    dis = (mesh.verts[1].co - mesh.verts[2].co).normalized()
+    mesh.verts[1].co += dis*10
+    mesh.verts[2].co -= dis*10
+    dis2 = (mesh.verts[0].co-(mesh.verts[1].co + mesh.verts[2].co)/2).normalized()
+    mesh.verts[0].co += dis2*10
+    dis3 = (mesh.verts[3].co-(mesh.verts[1].co + mesh.verts[2].co)/2).normalized()
+    mesh.verts[3].co += dis3*10
+
+    #更新网格数据
+    mesh.update()
 
 def initPlane():
     # # 创建一个新的集合
@@ -221,6 +271,13 @@ def initPlane():
             bpy.context.view_layer.objects.active = i
             i.hide_select = True
     bpy.ops.object.select_all(action='DESELECT')
+
+    plane = bpy.data.objects['myplane']
+    obj_main = bpy.data.objects['右耳']
+    bool_modifier = obj_main.modifiers.new(
+        name="step cut", type='BOOLEAN')
+    bool_modifier.operation = 'DIFFERENCE'
+    bool_modifier.object = plane
 
     #调用调整按钮
     override = getOverride()

@@ -58,14 +58,47 @@ def initialTransparency():
     bpy.data.materials['Blue2'].blend_method = "BLEND"
     bpy.data.materials["Blue2"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
 
-def new_plane(name):
-     # 创建一个新的网格
-    mesh = bpy.data.meshes.new("MyMesh")
-    obj = bpy.data.objects.new(name, mesh)
+def update_plane():
 
-    # 在场景中添加新的对象
-    scene = bpy.context.scene
-    scene.collection.objects.link(obj)
+    #获取坐标
+    loc = [bpy.data.objects['mysphere1'].location,
+           bpy.data.objects['mysphere2'].location,
+           bpy.data.objects['mysphere3'].location,
+           bpy.data.objects['mysphere4'].location]
+
+    # 更新位置
+    obj = bpy.data.objects['myplane']
+    bm = obj.data
+    if bm.vertices:
+        for i in range(0,4):
+            vertex = bm.vertices[i]
+            vertex.co = loc[i]
+
+    for i in bpy.context.visible_objects:
+        if i.name == "myplane":
+            bpy.context.view_layer.objects.active = i
+            i.select_set(True)
+    bpy.ops.object.mode_set(mode='EDIT')
+    mesh = bmesh.from_edit_mesh(obj.data)
+
+    mesh.verts.ensure_lookup_table()
+    dis = (mesh.verts[1].co - mesh.verts[2].co).normalized()
+    mesh.verts[1].co += dis*20
+    mesh.verts[2].co -= dis*20
+    dis2 = (mesh.verts[0].co-(mesh.verts[1].co + mesh.verts[2].co)/2).normalized()
+    mesh.verts[0].co += dis2*20
+    dis3 = (mesh.verts[3].co-(mesh.verts[1].co + mesh.verts[2].co)/2).normalized()
+    mesh.verts[3].co += dis3*20
+
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=True)
+
+    # 更新网格数据
+    bmesh.update_edit_mesh(obj.data)
+
+    # 切换回对象模式
+    bpy.ops.object.mode_set(mode='OBJECT')
+
 
 class InitialColor(bpy.types.Operator):
     bl_idname = "obj.initialcolor"
@@ -92,62 +125,7 @@ class InitialColor(bpy.types.Operator):
 
         # initialModelColor()
 
-        obj = bpy.data.objects['myplane']
-        bpy.data.objects.remove(obj, do_unlink=True)
-        new_plane('myplane')
-        loc1 = bpy.data.objects['mysphere1'].location
-        loc2 = bpy.data.objects['mysphere2'].location
-        loc3 = bpy.data.objects['mysphere3'].location
-        loc4 = bpy.data.objects['mysphere4'].location
-        print(loc1)
-
-        # 创建一个新的网格
-        obj = bpy.data.objects['myplane']
-        bpy.ops.object.select_all(action='DESELECT')
-        for i in bpy.context.visible_objects:
-            if i.name == "myplane":
-                bpy.context.view_layer.objects.active = i
-                i.select_set(state=True)
-    
-        # 切换到编辑模式
-        bpy.ops.object.mode_set(mode='EDIT')
-
-        # 获取编辑模式下的网格数据
-        mesh = bmesh.from_edit_mesh(obj.data)
-
-        # 创建四个顶点
-        verts = [mesh.verts.new(loc1),
-                 mesh.verts.new(loc2),
-                 mesh.verts.new(loc3),
-                 mesh.verts.new(loc4)]
-
-        # 创建两个面
-        mesh.faces.new(verts[:3])
-        mesh.faces.new(verts[1:])
-        
-        #增加面的大小
-        mesh.verts.ensure_lookup_table()
-        dis = (mesh.verts[1].co - mesh.verts[2].co).normalized()
-        mesh.verts[1].co += dis*10
-        mesh.verts[2].co -= dis*10
-        dis2 = (mesh.verts[0].co-(mesh.verts[1].co + mesh.verts[2].co)/2).normalized()
-        mesh.verts[0].co += dis2*10
-        dis3 = (mesh.verts[3].co-(mesh.verts[1].co + mesh.verts[2].co)/2).normalized()
-        mesh.verts[3].co += dis3*10
-        
-        # 更新网格数据
-        bmesh.update_edit_mesh(obj.data)
-
-        # 切换回对象模式
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-        # 添加修改器
-        plane = bpy.data.objects['myplane']
-        obj_main = bpy.data.objects['右耳']
-        bool_modifier = obj_main.modifiers.new(
-            name="step cut", type='BOOLEAN')
-        bool_modifier.operation = 'DIFFERENCE'
-        bool_modifier.object = plane
+        update_plane()
 
         return {'FINISHED'}
 
