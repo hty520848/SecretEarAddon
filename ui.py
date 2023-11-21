@@ -813,7 +813,7 @@ class CustomPanelTestButton(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         col = layout.column()
-        col.operator("obj.initialcolor", text="初始化模型颜色")
+        col.operator("obj.initialcolor", text="测试用例")
         # col.operator("obj.initialtransparency",text="透明")
         # col.operator("obj.localreset",text="重置")
         # col.operator("obj.addarea",text="扩大区域")

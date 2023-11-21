@@ -51,6 +51,53 @@ def initCircle():
     with bpy.context.temp_override(**override):
         bpy.ops.object.circlecut('INVOKE_DEFAULT')
 
+def new_sphere(name,loc):
+     # 创建一个新的网格
+    mesh = bpy.data.meshes.new("MyMesh")
+    obj = bpy.data.objects.new(name, mesh)
+
+    # 在场景中添加新的对象
+    scene = bpy.context.scene
+    scene.collection.objects.link(obj)
+
+    # 切换到编辑模式
+    #bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.select_all(action='DESELECT')
+    for i in bpy.context.visible_objects:
+        if i.name == name:
+            bpy.context.view_layer.objects.active = i
+            i.select_set(state=True)
+    obj = bpy.context.active_object
+    bpy.ops.object.mode_set(mode='EDIT')
+
+    # 获取编辑模式下的网格数据
+    bm = bmesh.from_edit_mesh(obj.data)
+
+    # 设置圆球的参数
+    radius = 0.1  # 半径
+    segments = 32  # 分段数
+
+    # 在指定位置生成圆球
+    bmesh.ops.create_uvsphere(bm, u_segments = segments, v_segments = segments, 
+                              radius = radius * 2)
+
+    # 更新网格数据
+    bmesh.update_edit_mesh(obj.data)
+
+    # 切换回对象模式
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    # 设置圆球的位置
+    obj.location = loc # 指定的位置坐标
+
+def new_plane(name):
+     # 创建一个新的网格
+    mesh = bpy.data.meshes.new("MyMesh")
+    obj = bpy.data.objects.new(name, mesh)
+
+    # 在场景中添加新的对象
+    scene = bpy.context.scene
+    scene.collection.objects.link(obj)
 
 def initPlane():
     # # 创建一个新的集合
@@ -70,15 +117,15 @@ def initPlane():
     global a
     a = 2
     
-    # 获取右耳的网格数据
-    for i in bpy.context.visible_objects:
-        if i.name == "右耳":
-            bpy.context.view_layer.objects.active = i
-            i.select_set(state=True)
-    obj = bpy.context.active_object
-    bpy.ops.object.mode_set(mode='EDIT')
-    mesh = bmesh.from_edit_mesh(obj.data)
-    mesh.free()
+    # # 获取右耳的网格数据
+    # for i in bpy.context.visible_objects:
+    #     if i.name == "右耳":
+    #         bpy.context.view_layer.objects.active = i
+    #         i.select_set(state=True)
+    # obj = bpy.context.active_object
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # mesh = bmesh.from_edit_mesh(obj.data)
+    # mesh.free()
 
     # #记录z坐标最大的顶点
     # zmax = -666
@@ -90,27 +137,104 @@ def initPlane():
     #         index = vert.index
     # coord = mesh.verts[index].co
    
-    bpy.ops.object.mode_set(mode='OBJECT')
-    #新增平面
-    bpy.ops.mesh.primitive_plane_add(size=2, enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.merge(type='CENTER')
-    bpy.ops.mesh.delete(type='VERT')
+    # bpy.ops.object.mode_set(mode='OBJECT')
+    # #新增平面
+    # bpy.ops.mesh.primitive_plane_add(size=2, enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.mesh.merge(type='CENTER')
+    # bpy.ops.mesh.delete(type='VERT')
     
-    #添加顶点
-    obj = bpy.context.active_object
-    bpy.ops.object.mode_set(mode='EDIT')
-    mesh = bmesh.from_edit_mesh(obj.data)
+    # #添加顶点
+    # obj = bpy.context.active_object
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # mesh = bmesh.from_edit_mesh(obj.data)
 
-    verts = [ mesh.verts.new((9.6618, -11.6400, 12.7087)),
-              mesh.verts.new((8.1530, -14.2894, 11.0310)),
-              mesh.verts.new((11.6051, -10.3907, 11.7511)),
-              mesh.verts.new((8.0488, -10.7594, 14.0301))]
-    mesh.faces.new(verts[:3])
-    mesh.faces.new(verts[1:3]+[verts[0]])
+    # # 创建一个新的网格
+    # mesh = bpy.data.meshes.new("MyMesh")
+    # obj = bpy.data.objects.new("MySphere", mesh)
 
-    bmesh.update_edit_mesh(obj.data)
-    bpy.ops.object.mode_set(mode='OBJECT')
+    # # 在场景中添加新的对象
+    # scene = bpy.context.scene
+    # scene.collection.objects.link(obj)
+
+    # # 切换到编辑模式
+    # #bpy.context.view_layer.objects.active = obj
+    # bpy.ops.object.select_all(action='DESELECT')
+    # for i in bpy.context.visible_objects:
+    #     if i.name == "MySphere":
+    #         bpy.context.view_layer.objects.active = i
+    #         i.select_set(state=True)
+    # obj = bpy.context.active_object
+    # bpy.ops.object.mode_set(mode='EDIT')
+
+    # # 获取编辑模式下的网格数据
+    # bm = bmesh.from_edit_mesh(obj.data)
+
+    # # 设置圆球的参数
+    # radius = 1.0  # 半径
+    # segments = 32  # 分段数
+
+    # # 在指定位置生成圆球
+    # bmesh.ops.create_uvsphere(bm, u_segments=segments, v_segments=segments, diameter=radius * 2)
+
+    # # 更新网格数据
+    # bmesh.update_edit_mesh(obj.data)
+
+    # # 切换回对象模式
+    # bpy.ops.object.mode_set(mode='OBJECT')
+
+    # # 设置圆球的位置
+    # obj.location = (10.2596, -13.2613, 10.6814)  # 指定的位置坐标
+
+    # # 创建四个顶点
+    # verts = [ bm.verts.new((10.2596, -13.2613, 10.6814)),
+    #           bm.verts.new((8.1530, -14.2894, 11.0310)),
+    #           bm.verts.new((11.6051, -10.3907, 11.7511)),
+    #           bm.verts.new((8.0488, -10.7594, 14.0301))]
+
+    # # 创建两个面
+    # bm.faces.new(verts[:3])
+    # bm.faces.new(verts[1:])
+
+    # # 更新网格数据
+    # bmesh.update_edit_mesh(obj.data)
+
+    # # 切换回对象模式
+    # bpy.ops.object.mode_set(mode='OBJECT')
+
+    #新建圆球
+    new_sphere('mysphere1',(10.2596, -13.2613, 10.6814))
+    new_sphere('mysphere2',(8.1530, -14.2894, 11.0310))
+    new_sphere('mysphere3',(11.6051, -10.3907, 11.7511))
+    new_sphere('mysphere4',(8.0488, -10.7594, 14.0301))
+    new_plane('myplane')
+
+    #开启吸附
+    bpy.context.scene.tool_settings.use_snap = True
+    bpy.context.scene.tool_settings.snap_elements = {'FACE'}
+    bpy.context.scene.tool_settings.snap_target = 'CENTER' 
+    bpy.context.scene.tool_settings.use_snap_align_rotation = True
+    bpy.context.scene.tool_settings.use_snap_backface_culling = True
+
+    for i in bpy.context.visible_objects:
+        if i.name == "右耳":
+            bpy.context.view_layer.objects.active = i
+            i.hide_select = True
+    bpy.ops.object.select_all(action='DESELECT')
+
+    #调用调整按钮
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        bpy.ops.wm.tool_set_by_id(name="builtin.select")
+    
+
+    # verts = [ mesh.verts.new((10.2596, -13.2613, 10.6814)),
+    #           mesh.verts.new((8.1530, -14.2894, 11.0310)),
+    #           mesh.verts.new((11.6051, -10.3907, 11.7511)),
+    #           mesh.verts.new((8.0488, -10.7594, 14.0301))]
+    # mesh.faces.new(verts[0:3])
+    # mesh.faces.new(verts[1:])
+
 
     # # 新增立方体
     # bpy.ops.mesh.primitive_cube_add(enter_editmode=True,
