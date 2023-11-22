@@ -74,12 +74,8 @@ def update_plane():
             vertex = bm.vertices[i]
             vertex.co = loc[i]
 
-    for i in bpy.context.visible_objects:
-        if i.name == "myplane":
-            bpy.context.view_layer.objects.active = i
-            i.select_set(True)
-    bpy.ops.object.mode_set(mode='EDIT')
-    mesh = bmesh.from_edit_mesh(obj.data)
+    mesh = bmesh.new()
+    mesh.from_mesh(bm)
 
     mesh.verts.ensure_lookup_table()
     dis = (mesh.verts[1].co - mesh.verts[2].co).normalized()
@@ -90,14 +86,15 @@ def update_plane():
     dis3 = (mesh.verts[3].co-(mesh.verts[1].co + mesh.verts[2].co)/2).normalized()
     mesh.verts[3].co += dis3*20
 
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.normals_make_consistent(inside=True)
-
     # 更新网格数据
-    bmesh.update_edit_mesh(obj.data)
-
-    # 切换回对象模式
-    bpy.ops.object.mode_set(mode='OBJECT')
+    mesh.to_mesh(bm)
+    mesh.free()
+    
+    # #翻转法线
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.mesh.select_all(action='SELECT')
+    # bpy.ops.mesh.normals_make_consistent(inside=True)
+    # bpy.ops.object.mode_set(mode='OBJECT')
 
 
 class InitialColor(bpy.types.Operator):

@@ -51,8 +51,9 @@ def initCircle():
     with bpy.context.temp_override(**override):
         bpy.ops.object.circlecut('INVOKE_DEFAULT')
 
-def new_sphere(name,loc):
-     # 创建一个新的网格
+
+def new_sphere(name, loc):
+    # 创建一个新的网格
     mesh = bpy.data.meshes.new("MyMesh")
     obj = bpy.data.objects.new(name, mesh)
 
@@ -61,7 +62,7 @@ def new_sphere(name,loc):
     scene.collection.objects.link(obj)
 
     # 切换到编辑模式
-    #bpy.context.view_layer.objects.active = obj
+    # bpy.context.view_layer.objects.active = obj
     bpy.ops.object.select_all(action='DESELECT')
     for i in bpy.context.visible_objects:
         if i.name == name:
@@ -78,8 +79,8 @@ def new_sphere(name,loc):
     segments = 32  # 分段数
 
     # 在指定位置生成圆球
-    bmesh.ops.create_uvsphere(bm, u_segments = segments, v_segments = segments, 
-                              radius = radius * 2)
+    bmesh.ops.create_uvsphere(bm, u_segments=segments, v_segments=segments,
+                              radius=radius * 2)
 
     # 更新网格数据
     bmesh.update_edit_mesh(obj.data)
@@ -88,7 +89,8 @@ def new_sphere(name,loc):
     bpy.ops.object.mode_set(mode='OBJECT')
 
     # 设置圆球的位置
-    obj.location = loc # 指定的位置坐标
+    obj.location = loc  # 指定的位置坐标
+
 
 def new_plane(name):
     mesh = bpy.data.meshes.new("MyMesh")
@@ -97,12 +99,13 @@ def new_plane(name):
     # 在场景中添加新的对象
     scene = bpy.context.scene
     scene.collection.objects.link(obj)
-    
+
+    bpy.ops.object.select_all(action='DESELECT')
     for i in bpy.context.visible_objects:
         if i.name == name:
             bpy.context.view_layer.objects.active = i
             i.select_set(state=True)
-    
+
     bpy.ops.object.mode_set(mode='EDIT')
     bm = bmesh.from_edit_mesh(obj.data)
     # 创建四个顶点
@@ -115,39 +118,56 @@ def new_plane(name):
     bm.faces.new(verts[:3])
     bm.faces.new(verts[1:])
 
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=True)
+
     # 更新网格数据
     bmesh.update_edit_mesh(obj.data)
 
     # 切换回对象模式
     bpy.ops.object.mode_set(mode='OBJECT')
 
+    object = bpy.context.active_object    
+    # bool_modifier = object.modifiers.new(
+    #     name="smooth", type='BEVEL')
+    # bool_modifier.segments = 6
+    object.hide_set(True)
+
+
 def update_plane():
 
-    #获取坐标
+    # 获取坐标
     loc = [bpy.data.objects['mysphere1'].location,
            bpy.data.objects['mysphere2'].location,
            bpy.data.objects['mysphere3'].location,
            bpy.data.objects['mysphere4'].location]
 
-    # 获取网格数据
+    # 更新位置
     obj = bpy.data.objects['myplane']
-    mesh = obj.data
-    if mesh.vertices:
-        for i in (0,4):
-            vertex = mesh.vertices[i]
+    bm = obj.data
+    if bm.vertices:
+        for i in range(0, 4):
+            vertex = bm.vertices[i]
             vertex.co = loc[i]
-    
+
+    mesh = bmesh.new()
+    mesh.from_mesh(bm)
+
     mesh.verts.ensure_lookup_table()
     dis = (mesh.verts[1].co - mesh.verts[2].co).normalized()
-    mesh.verts[1].co += dis*10
-    mesh.verts[2].co -= dis*10
-    dis2 = (mesh.verts[0].co-(mesh.verts[1].co + mesh.verts[2].co)/2).normalized()
-    mesh.verts[0].co += dis2*10
-    dis3 = (mesh.verts[3].co-(mesh.verts[1].co + mesh.verts[2].co)/2).normalized()
-    mesh.verts[3].co += dis3*10
+    mesh.verts[1].co += dis*20
+    mesh.verts[2].co -= dis*20
+    dis2 = (mesh.verts[0].co-(mesh.verts[1].co +
+            mesh.verts[2].co)/2).normalized()
+    mesh.verts[0].co += dis2*20
+    dis3 = (mesh.verts[3].co-(mesh.verts[1].co +
+            mesh.verts[2].co)/2).normalized()
+    mesh.verts[3].co += dis3*20
 
-    #更新网格数据
-    mesh.update()
+    # 更新网格数据
+    mesh.to_mesh(bm)
+    mesh.free()
+
 
 def initPlane():
     # # 创建一个新的集合
@@ -166,7 +186,7 @@ def initPlane():
 
     global a
     a = 2
-    
+
     # # 获取右耳的网格数据
     # for i in bpy.context.visible_objects:
     #     if i.name == "右耳":
@@ -186,14 +206,14 @@ def initPlane():
     #         zmax = vert.co.z
     #         index = vert.index
     # coord = mesh.verts[index].co
-   
+
     # bpy.ops.object.mode_set(mode='OBJECT')
     # #新增平面
     # bpy.ops.mesh.primitive_plane_add(size=2, enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
     # bpy.ops.object.mode_set(mode='EDIT')
     # bpy.ops.mesh.merge(type='CENTER')
     # bpy.ops.mesh.delete(type='VERT')
-    
+
     # #添加顶点
     # obj = bpy.context.active_object
     # bpy.ops.object.mode_set(mode='EDIT')
@@ -209,7 +229,7 @@ def initPlane():
 
     # # 切换到编辑模式
     # #bpy.context.view_layer.objects.active = obj
-    # bpy.ops.object.select_all(action='DESELECT')
+    #
     # for i in bpy.context.visible_objects:
     #     if i.name == "MySphere":
     #         bpy.context.view_layer.objects.active = i
@@ -252,23 +272,29 @@ def initPlane():
     # # 切换回对象模式
     # bpy.ops.object.mode_set(mode='OBJECT')
 
-    #新建圆球
-    new_sphere('mysphere1',(10.2596, -13.2613, 10.6814))
-    new_sphere('mysphere2',(8.1530, -14.2894, 11.0310))
-    new_sphere('mysphere3',(11.6051, -10.3907, 11.7511))
-    new_sphere('mysphere4',(8.0488, -10.7594, 14.0301))
+    # 新建圆球
+    new_sphere('mysphere1', (10.2596, -13.2613, 10.6814))
+    new_sphere('mysphere2', (8.1530, -14.2894, 11.0310))
+    new_sphere('mysphere3', (11.6051, -10.3907, 11.7511))
+    new_sphere('mysphere4', (8.0488, -10.7594, 14.0301))
     new_plane('myplane')
 
-    #开启吸附
+    # 开启吸附
     bpy.context.scene.tool_settings.use_snap = True
     bpy.context.scene.tool_settings.snap_elements = {'FACE'}
-    bpy.context.scene.tool_settings.snap_target = 'CENTER' 
+    bpy.context.scene.tool_settings.snap_target = 'CENTER'
     bpy.context.scene.tool_settings.use_snap_align_rotation = True
     bpy.context.scene.tool_settings.use_snap_backface_culling = True
 
     for i in bpy.context.visible_objects:
         if i.name == "右耳":
             bpy.context.view_layer.objects.active = i
+            # active_obj = bpy.context.active_object
+            # # 复制物体
+            # mesh = active_obj.data
+            # new_object = bpy.data.objects.new(name="qiegefuzhi", object_data=mesh)
+            # # 将复制的物体加入到场景集合中
+            # bpy.context.collection.objects.link(new_object)
             i.hide_select = True
     bpy.ops.object.select_all(action='DESELECT')
 
@@ -279,11 +305,11 @@ def initPlane():
     bool_modifier.operation = 'DIFFERENCE'
     bool_modifier.object = plane
 
-    #调用调整按钮
+    # 调用调整按钮
     override = getOverride()
     with bpy.context.temp_override(**override):
         bpy.ops.wm.tool_set_by_id(name="builtin.select")
-    
+        bpy.ops.object.stepcut('INVOKE_DEFAULT')
 
     # verts = [ mesh.verts.new((10.2596, -13.2613, 10.6814)),
     #           mesh.verts.new((8.1530, -14.2894, 11.0310)),
@@ -291,7 +317,6 @@ def initPlane():
     #           mesh.verts.new((8.0488, -10.7594, 14.0301))]
     # mesh.faces.new(verts[0:3])
     # mesh.faces.new(verts[1:])
-
 
     # # 新增立方体
     # bpy.ops.mesh.primitive_cube_add(enter_editmode=True,
@@ -378,7 +403,7 @@ def initPlane():
     #                                     scale=(0.5, 0.5, 1))
     # bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     # bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
-    
+
     # bpy.ops.object.select_all(action='DESELECT')
 
     # for i in bpy.context.visible_objects:  # 迭代所有可见物体,激活当前物体
@@ -387,7 +412,7 @@ def initPlane():
     #         i.select_set(state=True)
     #         bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
     #         i.hide_set(True)
-    
+
     # override = getOverride()
     # with bpy.context.temp_override(**override):
     #     bpy.ops.object.stepcut('INVOKE_DEFAULT')
@@ -399,9 +424,9 @@ def scaleCircle():
     global old_radius
     global scale_ratio
     # 获取圆环的z坐标
-    obj_circle = bpy.data.objects['Circle']
-    z_circle = obj_circle.location[2]
-    print('圆环的z坐标', z_circle)
+    obj = bpy.data.objects['Circle']
+    jobj = obj.location[2]
+    print('圆环的z坐标', jobj)
 
     # 获取目标物体的编辑模式网格
     obj_main = bpy.data.objects['右耳']
@@ -411,7 +436,7 @@ def scaleCircle():
 
     # 选取Z坐标相等的顶点
     selected_verts = [v for v in bm.verts if round(v.co.z, 2) < round(
-        z_circle, 2) + 0.1 and round(v.co.z, 2) > round(z_circle, 2) - 0.1]
+        jobj, 2) + 0.1 and round(v.co.z, 2) > round(jobj, 2) - 0.1]
 
     if selected_verts:
         # 计算平面的几何中心
@@ -438,13 +463,13 @@ def scaleCircle():
     print("缩放比例:", scale_ratio)
 
     # 缩放圆环大小
-    obj_circle.scale[0] = scale_ratio+0.2
-    obj_circle.scale[1] = scale_ratio+0.2
-    obj_circle.scale[2] = scale_ratio+0.2
+    obj.scale[0] = scale_ratio+0.2
+    obj.scale[1] = scale_ratio+0.2
+    obj.scale[2] = scale_ratio+0.2
 
     # 移动圆环到几何中心
-    obj_circle.location[0] = round(center.x, 2)
-    obj_circle.location[1] = round(center.y, 2)
+    obj.location[0] = round(center.x, 2)
+    obj.location[1] = round(center.y, 2)
 
     bm.free()
 
@@ -484,8 +509,8 @@ def quitCut():
     global a
     a = 2
     if (bpy.data.objects['Circle']):
-        obj_circle = bpy.data.objects['Circle']
-        bpy.data.objects.remove(obj_circle, do_unlink=True)
+        obj = bpy.data.objects['Circle']
+        bpy.data.objects.remove(obj, do_unlink=True)
 
 
 def quitStepCut():
@@ -496,12 +521,24 @@ def quitStepCut():
     bpy.ops.object.modifier_remove(modifier='step cut', report=False)
     global a
     a = 1
-    if (bpy.data.objects['Cube']):
-        obj_circle = bpy.data.objects['Cube']
-        bpy.data.objects.remove(obj_circle, do_unlink=True)
+    if (bpy.data.objects['mysphere1']):
+        obj = bpy.data.objects['mysphere1']
+        bpy.data.objects.remove(obj, do_unlink=True)
+    if (bpy.data.objects['mysphere2']):
+        obj = bpy.data.objects['mysphere2']
+        bpy.data.objects.remove(obj, do_unlink=True)
+    if (bpy.data.objects['mysphere3']):
+        obj = bpy.data.objects['mysphere3']
+        bpy.data.objects.remove(obj, do_unlink=True)
+    if (bpy.data.objects['mysphere4']):
+        obj = bpy.data.objects['mysphere4']
+        bpy.data.objects.remove(obj, do_unlink=True)
+    if (bpy.data.objects['myplane']):
+        obj = bpy.data.objects['myplane']
+        bpy.data.objects.remove(obj, do_unlink=True)
     # if (bpy.data.objects['Cube.001']):
-    #     obj_circle = bpy.data.objects['Cube']
-    #     bpy.data.objects.remove(obj_circle, do_unlink=True)
+    #     obj = bpy.data.objects['Cube']
+    #     bpy.data.objects.remove(obj, do_unlink=True)
 
     # # 获取要删除的集合
     # collection = bpy.data.collections.get("MyCollection")
@@ -586,7 +623,7 @@ class Circle_Cut(bpy.types.Operator):
                             rotate_angle_x
                         return {'RUNNING_MODAL'}
                     elif op_cls.__right_mouse_down:
-                        obj_circle = bpy.data.objects['Circle']
+                        obj = bpy.data.objects['Circle']
                         op_cls.__now_mouse_y = event.mouse_region_y
                         op_cls.__now_mouse_x = event.mouse_region_x
                         print(event.mouse_prev_x)
@@ -599,12 +636,12 @@ class Circle_Cut(bpy.types.Operator):
                         # 法线方向
                         # print(active_obj.name)
                         # print(active_obj.location[2])
-                        normal = obj_circle.data.polygons[0].normal
-                        obj_circle.location += normal*dis
+                        normal = obj.data.polygons[0].normal
+                        obj.location += normal*dis
                         # if(op_cls.__now_mouse_y > op_cls.__initial_mouse_y) or (op_cls.__now_mouse_x > op_cls.__initial_mouse_x):
-                        #     obj_circle.location += normal*dis
+                        #     obj.location += normal*dis
                         # else:
-                        #     obj_circle.location -= normal*dis
+                        #     obj.location -= normal*dis
 
                         scaleCircle()
             else:
@@ -637,28 +674,15 @@ class Step_Cut(bpy.types.Operator):
     bl_idname = "object.stepcut"
     bl_label = "阶梯切割"
 
-    __initial_rotation_x = None  # 初始x轴旋转角度
-    __left_mouse_down = False  # 按下右键未松开时，旋转圆环角度
-    __right_mouse_down = False  # 按下右键未松开时，圆环上下移动
-    __now_mouse_x = None  # 鼠标移动时的位置
-    __now_mouse_y = None
-    __initial_mouse_x = None  # 点击鼠标右键的初始位置
-    __initial_mouse_y = None
+    __timer = None
 
     def invoke(self, context, event):
         op_cls = Step_Cut
         print('invoke')
-        op_cls.__initial_rotation_x = None
-        op_cls.__left_mouse_down = False
-        op_cls.__right_mouse_down = False
-        op_cls.__now_mouse_x = None
-        op_cls.__now_mouse_y = None
-        op_cls.__initial_mouse_x = None
-        op_cls.__initial_mouse_y = None
-
         global a
         a = 2
-
+        op_cls.__timer = context.window_manager.event_timer_add(
+            0.5, window=context.window)
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
 
@@ -672,104 +696,18 @@ class Step_Cut(bpy.types.Operator):
         global a
         if gcontext == 'VIEW_LAYER':
             # 鼠标是否在圆环上
-            if (a == 2 and (is_mouse_on_which_object(context, event) != -1)):
-                index = is_mouse_on_which_object(context, event)
-                if (index == 0):
-                    bpy.ops.object.select_all(action='DESELECT')
-                    for i in bpy.context.visible_objects:  # 迭代所有可见物体,激活当前物体
-                        if i.name == "Cylinder":
-                            bpy.context.view_layer.objects.active = i
-                            i.select_set(state=True)
-                    active_obj = bpy.data.objects['Cylinder']
-                    if event.type == 'LEFTMOUSE':
-                        if event.value == 'PRESS':
-                            op_cls.__left_mouse_down = True
-                            op_cls.__initial_rotation_x = active_obj.rotation_euler[0]
-                            op_cls.__initial_mouse_x = event.mouse_region_x
-                        # 取消
-                        elif event.value == 'RELEASE':
-                            op_cls.__left_mouse_down = False
-                            op_cls.__initial_rotation_x = None
-                            op_cls.__initial_mouse_x = None
-                        return {'RUNNING_MODAL'}
-                    elif event.type == 'MOUSEMOVE':
-                        # 左键按住旋转
-                        if op_cls.__left_mouse_down:
-                            # x轴旋转角度
-                            rotate_angle_x = (
-                                event.mouse_region_x - op_cls.__initial_mouse_x) * 0.01
-                            active_obj.rotation_euler[0] = op_cls.__initial_rotation_x + \
-                                rotate_angle_x
-                            bpy.data.objects["Cube"].rotation_euler[0] = op_cls.__initial_rotation_x + \
-                                rotate_angle_x
-                            return {'RUNNING_MODAL'}
-                if (index == 1):
-                    bpy.ops.object.select_all(action='DESELECT')
-                    for i in bpy.context.visible_objects:  # 迭代所有可见物体,激活当前物体
-                        if i.name == "Cylinder.001":
-                            bpy.context.view_layer.objects.active = i
-                            i.select_set(state=True)
-                    active_obj = bpy.data.objects['Cylinder.001']
-                    return {'RUNNING_MODAL'}
-                    # if event.type == 'LEFTMOUSE':
-                    #     if event.value == 'PRESS':
-                    #         op_cls.__left_mouse_down = True
-                    #         op_cls.__initial_rotation_x = active_obj.rotation_euler[0]
-                    #         op_cls.__initial_mouse_x = event.mouse_region_x
-                    #     # 取消
-                    #     elif event.value == 'RELEASE':
-                    #         op_cls.__left_mouse_down = False
-                    #         op_cls.__initial_rotation_x = None
-                    #         op_cls.__initial_mouse_x = None
-                    #     return {'RUNNING_MODAL'}
+            if (a == 2):
 
-                    # elif event.type == 'RIGHTMOUSE':
-                    #     if event.value == 'PRESS':
-                    #         print('右键press')
-                    #         op_cls.__right_mouse_down = True
-                    #         op_cls.__initial_mouse_x = event.mouse_region_x
-                    #         op_cls.__initial_mouse_y = event.mouse_region_y
-                    #     elif event.value == 'RELEASE':
-                    #         print('右键release')
-                    #         op_cls.__right_mouse_down = False
-                    #     return {'RUNNING_MODAL'}
+                if event.type == 'TIMER':
+                    update_plane()
 
-                    # elif event.type == 'MOUSEMOVE':
-                    #     # 左键按住旋转
-                    #     if op_cls.__left_mouse_down:
-                    #         # x轴旋转角度
-                    #         rotate_angle_x = (
-                    #             event.mouse_region_x - op_cls.__initial_mouse_x) * 0.01
-                    #         active_obj.rotation_euler[0] = op_cls.__initial_rotation_x + \
-                    #             rotate_angle_x
-                    #         return {'RUNNING_MODAL'}
-                    #     elif op_cls.__right_mouse_down:
-                    #         obj_circle = bpy.data.objects['Circle']
-                    #         op_cls.__now_mouse_y = event.mouse_region_y
-                    #         op_cls.__now_mouse_x = event.mouse_region_x
-                    #         print(event.mouse_prev_x)
-                    #         print(event.mouse_x)
-                    #         # dis = int(sqrt(fabs(op_cls.__now_mouse_y-op_cls.__initial_mouse_y)*fabs(op_cls.__now_mouse_y-op_cls.__initial_mouse_y)+fabs(op_cls.__now_mouse_x-op_cls.__initial_mouse_x)*fabs(op_cls.__now_mouse_x-op_cls.__initial_mouse_x)))
-                    #         dis = (op_cls.__now_mouse_y -
-                    #             op_cls.__initial_mouse_y)*0.01
-                    #         # dis = 0.1
-                    #         print('移动的距离', dis)
-                    #         # 法线方向
-                    #         # print(active_obj.name)
-                    #         # print(active_obj.location[2])
-                    #         normal = obj_circle.data.polygons[0].normal
-                    #         obj_circle.location += normal*dis
-                    #         # if(op_cls.__now_mouse_y > op_cls.__initial_mouse_y) or (op_cls.__now_mouse_x > op_cls.__initial_mouse_x):
-                    #         #     obj_circle.location += normal*dis
-                    #         # else:
-                    #         #     obj_circle.location -= normal*dis
+                return {'PASS_THROUGH'}
 
             else:
-                # print('不在圆环上')
-                pass
-            return {'PASS_THROUGH'}
-        else:
-            return {'FINISHED'}
+                context.window_manager.event_timer_remove(op_cls.__timer)
+                op_cls.__timer = None
+                return {'FINISHED'}
+
 # 监听回调函数
 
 
