@@ -5,7 +5,7 @@ import mathutils
 import bmesh
 from mathutils import Vector
 from .damo import *
-from .jiahou import initialModelColor, initialTransparency
+
 # 当前的context
 gcontext = ''
 
@@ -176,6 +176,53 @@ def update_plane():
     mesh.to_mesh(bm)
     mesh.free()
 
+def newMaterial(id):
+
+    mat = bpy.data.materials.get(id)
+
+    if mat is None:
+        mat = bpy.data.materials.new(name=id)
+
+    mat.use_nodes = True
+
+    if mat.node_tree:
+        mat.node_tree.links.clear()
+        mat.node_tree.nodes.clear()
+
+    return mat
+
+def newShader(id):
+
+    mat = newMaterial(id)
+
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    output = nodes.new(type='ShaderNodeOutputMaterial')
+
+    shader = nodes.new(type='ShaderNodeBsdfPrincipled')
+    color = nodes.new(type="ShaderNodeVertexColor")
+
+    links.new(color.outputs[0], nodes["Principled BSDF"].inputs[0])
+    links.new(shader.outputs[0], output.inputs[0])
+
+    return mat
+
+def initialModelColor(name):
+    mat = newShader("Yellow")  # 初始化模型颜色
+    obj = bpy.data.objects[name]
+    obj.data.materials.clear()
+    obj.data.materials.append(mat)
+    return mat
+
+def initialTransparency(name):
+    mat = newShader("Yellow2")
+    obj = bpy.data.objects[name]
+    obj.data.materials.clear()
+    obj.data.materials.append(mat)
+    bpy.data.materials['Yellow2'].blend_method = "BLEND"
+    # bpy.data.materials["Yellow2"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5  #3.6
+    bpy.data.materials["Yellow2"].node_tree.nodes["Principled BSDF"].inputs[4].default_value = 0.5     #4.0
+    return mat
 
 def initPlane():
     # # 创建一个新的集合
@@ -281,6 +328,7 @@ def initPlane():
     # bpy.ops.object.mode_set(mode='OBJECT')
 
     # 新建圆球
+    #TODO:圆球的材质和位置
     new_sphere('mysphere1', (10.2596, -13.2613, 10.6814))
     new_sphere('mysphere2', (8.1530, -14.2894, 11.0310))
     new_sphere('mysphere3', (11.6051, -10.3907, 11.7511))
@@ -304,17 +352,21 @@ def initPlane():
             scene = bpy.context.scene
             scene.collection.objects.link(obj_copy)
             obj.hide_select = True
+            obj_copy.hide_select = True
 
-    initialModelColor()
-    initialTransparency()
+    mat1 = initialModelColor("右耳")
+    mat2 = initialTransparency("右耳.001")
     bpy.ops.object.select_all(action='DESELECT')
 
     plane = bpy.data.objects['myplane']
+    plane.data.materials.append(mat2)
     obj_main = bpy.data.objects['右耳']
     bool_modifier = obj_main.modifiers.new(
         name="step cut", type='BOOLEAN')
     bool_modifier.operation = 'DIFFERENCE'
     bool_modifier.object = plane
+    bool_modifier.material_mode = 'TRANSFER'
+
 
     # 调用调整按钮
     override = getOverride()
@@ -698,6 +750,7 @@ class Step_Cut(bpy.types.Operator):
         op_cls.__timer = context.window_manager.event_timer_add(
             0.5, window=context.window)
         context.window_manager.modal_handler_add(self)
+        update_plane()
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):

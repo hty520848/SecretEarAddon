@@ -56,7 +56,8 @@ def initialTransparency():
     #bpy.context.space_data.shading.type = 'MATERIAL'
     # 模型材料透明度
     bpy.data.materials['Yellow2'].blend_method = "BLEND"
-    bpy.data.materials["Yellow2"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
+    # bpy.data.materials["Yellow2"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
+    bpy.data.materials["Yellow2"].node_tree.nodes["Principled BSDF"].inputs[4].default_value = 0.5
 
 def update_plane():
 
