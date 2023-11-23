@@ -38,25 +38,25 @@ def newShader(id):
 
 
 def initialModelColor():
-    mat = newShader("Blue1")  # 初始化模型颜色
-    obj = bpy.context.active_object
+    mat = newShader("Yellow")  # 初始化模型颜色
+    obj = bpy.data.objects['右耳']
     obj.data.materials.clear()
     obj.data.materials.append(mat)
-    bpy.context.space_data.shading.type = 'MATERIAL'
+    #bpy.context.space_data.shading.type = 'MATERIAL'
     # bpy.context.scene.world.use_nodes = False  # 初始化背景颜色
     # bpy.context.space_data.shading.background_type = 'WORLD'
     # bpy.context.scene.world.color = (0.787, 0.871, 1)
 
 
 def initialTransparency():
-    mat = newShader("Blue2")
-    obj = bpy.context.active_object
+    mat = newShader("Yellow2")
+    obj = bpy.data.objects['右耳.001']
     obj.data.materials.clear()
     obj.data.materials.append(mat)
-    bpy.context.space_data.shading.type = 'MATERIAL'
+    #bpy.context.space_data.shading.type = 'MATERIAL'
     # 模型材料透明度
-    bpy.data.materials['Blue2'].blend_method = "BLEND"
-    bpy.data.materials["Blue2"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
+    bpy.data.materials['Yellow2'].blend_method = "BLEND"
+    bpy.data.materials["Yellow2"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
 
 def update_plane():
 

@@ -5,9 +5,10 @@ import mathutils
 import bmesh
 from mathutils import Vector
 from .damo import *
-
+from .jiahou import initialModelColor, initialTransparency
 # 当前的context
 gcontext = ''
+
 
 flag = 0
 old_radius = 8.0
@@ -127,11 +128,18 @@ def new_plane(name):
     # 切换回对象模式
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    object = bpy.context.active_object    
-    # bool_modifier = object.modifiers.new(
-    #     name="smooth", type='BEVEL')
-    # bool_modifier.segments = 6
+    object = bpy.context.active_object
+    bm = bmesh.new()
+    bm.from_mesh(object.data)
+    bm.faces.ensure_lookup_table()
+    bm.faces[1].normal_flip()
     object.hide_set(True)
+
+    bool_modifier = object.modifiers.new(
+        name="smooth", type='BEVEL')
+    bool_modifier.segments = 16
+    bool_modifier.width = 0.4
+    bool_modifier.limit_method = 'NONE'
 
 
 def update_plane():
@@ -289,13 +297,16 @@ def initPlane():
     for i in bpy.context.visible_objects:
         if i.name == "右耳":
             bpy.context.view_layer.objects.active = i
-            # active_obj = bpy.context.active_object
-            # # 复制物体
-            # mesh = active_obj.data
-            # new_object = bpy.data.objects.new(name="qiegefuzhi", object_data=mesh)
-            # # 将复制的物体加入到场景集合中
-            # bpy.context.collection.objects.link(new_object)
-            i.hide_select = True
+            obj = bpy.context.active_object
+            obj_copy = obj.copy()
+            obj_copy.data = obj.data.copy()
+            obj_copy.animation_data_clear()
+            scene = bpy.context.scene
+            scene.collection.objects.link(obj_copy)
+            obj.hide_select = True
+
+    initialModelColor()
+    initialTransparency()
     bpy.ops.object.select_all(action='DESELECT')
 
     plane = bpy.data.objects['myplane']
@@ -536,6 +547,9 @@ def quitStepCut():
     if (bpy.data.objects['myplane']):
         obj = bpy.data.objects['myplane']
         bpy.data.objects.remove(obj, do_unlink=True)
+    if (bpy.data.objects['右耳.001']):
+        obj = bpy.data.objects['myplane']
+        bpy.data.objects.remove(obj, do_unlink=True)
     # if (bpy.data.objects['Cube.001']):
     #     obj = bpy.data.objects['Cube']
     #     bpy.data.objects.remove(obj, do_unlink=True)
@@ -696,17 +710,22 @@ class Step_Cut(bpy.types.Operator):
         global a
         if gcontext == 'VIEW_LAYER':
             # 鼠标是否在圆环上
-            if (a == 2):
+            if (a == 2 and is_mouse_on_which_object(context, event) != 5):
 
                 if event.type == 'TIMER':
                     update_plane()
 
                 return {'PASS_THROUGH'}
 
-            else:
+            elif (a == 1):
                 context.window_manager.event_timer_remove(op_cls.__timer)
                 op_cls.__timer = None
                 return {'FINISHED'}
+            else:
+                return {'PASS_THROUGH'}
+
+        else:
+            return {'PASS_THROUGH'}
 
 # 监听回调函数
 

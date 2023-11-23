@@ -175,10 +175,12 @@ def is_changed(context, event):
 
 
 def is_mouse_on_which_object(context, event):
-    cylinder = bpy.data.objects["Cylinder"]
-    cylinder2 = bpy.data.objects["Cylinder.001"]
+    sphere1 = bpy.data.objects["mysphere1"]
+    sphere2 = bpy.data.objects["mysphere2"]
+    sphere3 = bpy.data.objects["mysphere3"]
+    sphere4 = bpy.data.objects["mysphere4"]
 
-    is_on_object = 2  # 初始化变量
+    is_on_object = 5  # 初始化变量
 
     if context.area:
         context.area.tag_redraw()
@@ -206,14 +208,14 @@ def is_mouse_on_which_object(context, event):
     end = ray_orig + ray_dir
 
     # 确定光线和对象的相交
-    mwi = cylinder.matrix_world.inverted()
+    mwi = sphere1.matrix_world.inverted()
     mwi_start = mwi @ start
     mwi_end = mwi @ end
     mwi_dir = mwi_end - mwi_start
 
-    if cylinder.type == 'MESH':
-        if (cylinder.mode == 'OBJECT'):
-            mesh = cylinder.data
+    if sphere1.type == 'MESH':
+        if (sphere1.mode == 'OBJECT'):
+            mesh = sphere1.data
             bm = bmesh.new()
             bm.from_mesh(mesh)
             tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
@@ -221,17 +223,17 @@ def is_mouse_on_which_object(context, event):
             _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
 
             if fidx is not None:
-                is_on_object = 0  # 如果发生交叉，将变量设为0
+                is_on_object = 1  
                 return is_on_object
-
-    mwi2 = cylinder2.matrix_world.inverted()
+    
+    mwi2 = sphere2.matrix_world.inverted()
     mwi_start2 = mwi2 @ start
     mwi_end2 = mwi2 @ end
     mwi_dir2 = mwi_end2 - mwi_start2
 
-    if cylinder2.type == 'MESH':
-        if (cylinder2.mode == 'OBJECT'):
-            mesh = cylinder2.data
+    if sphere2.type == 'MESH':
+        if (sphere2.mode == 'OBJECT'):
+            mesh = sphere2.data
             bm = bmesh.new()
             bm.from_mesh(mesh)
             tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
@@ -239,7 +241,43 @@ def is_mouse_on_which_object(context, event):
             _, _, fidx, _ = tree.ray_cast(mwi_start2, mwi_dir2, 2000.0)
 
             if fidx is not None:
-                is_on_object = 1
+                is_on_object = 2
+                return is_on_object
+
+    mwi3 = sphere3.matrix_world.inverted()
+    mwi_start3 = mwi3 @ start
+    mwi_end3 = mwi3 @ end
+    mwi_dir3 = mwi_end3 - mwi_start3
+
+    if sphere3.type == 'MESH':
+        if (sphere3.mode == 'OBJECT'):
+            mesh = sphere3.data
+            bm = bmesh.new()
+            bm.from_mesh(mesh)
+            tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
+
+            _, _, fidx, _ = tree.ray_cast(mwi_start3, mwi_dir3, 2000.0)
+
+            if fidx is not None:
+                is_on_object = 3
+                return is_on_object
+            
+    mwi4 = sphere4.matrix_world.inverted()
+    mwi_start4 = mwi4 @ start
+    mwi_end4 = mwi4 @ end
+    mwi_dir4 = mwi_end4 - mwi_start4
+
+    if sphere4.type == 'MESH':
+        if (sphere4.mode == 'OBJECT'):
+            mesh = sphere4.data
+            bm = bmesh.new()
+            bm.from_mesh(mesh)
+            tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
+
+            _, _, fidx, _ = tree.ray_cast(mwi_start4, mwi_dir4, 2000.0)
+
+            if fidx is not None:
+                is_on_object = 4
                 return is_on_object
 
     return is_on_object
