@@ -819,6 +819,8 @@ def msgbus_callback(*args):
             flag == False
             if (a == 1):
                 quitCut()
+            if(a == 2):
+                quitStepCut()
     print(f'Current Tab: {current_tab}')
 
 
