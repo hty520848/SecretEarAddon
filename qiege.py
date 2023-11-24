@@ -176,6 +176,7 @@ def update_plane():
     mesh.to_mesh(bm)
     mesh.free()
 
+
 def newMaterial(id):
 
     mat = bpy.data.materials.get(id)
@@ -190,6 +191,7 @@ def newMaterial(id):
         mat.node_tree.nodes.clear()
 
     return mat
+
 
 def newShader(id):
 
@@ -207,6 +209,7 @@ def newShader(id):
 
     return mat
 
+
 def initialModelColor(name):
     mat = newShader("Yellow")  # 初始化模型颜色
     obj = bpy.data.objects[name]
@@ -214,15 +217,19 @@ def initialModelColor(name):
     obj.data.materials.append(mat)
     return mat
 
+
 def initialTransparency(name):
     mat = newShader("Yellow2")
     obj = bpy.data.objects[name]
     obj.data.materials.clear()
     obj.data.materials.append(mat)
     bpy.data.materials['Yellow2'].blend_method = "BLEND"
-    # bpy.data.materials["Yellow2"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5  #3.6
-    bpy.data.materials["Yellow2"].node_tree.nodes["Principled BSDF"].inputs[4].default_value = 0.5     #4.0
+    # 3.6
+    bpy.data.materials["Yellow2"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
+    # 4.0
+    # bpy.data.materials["Yellow2"].node_tree.nodes["Principled BSDF"].inputs[4].default_value = 0.5
     return mat
+
 
 def initPlane():
     # # 创建一个新的集合
@@ -328,12 +335,22 @@ def initPlane():
     # bpy.ops.object.mode_set(mode='OBJECT')
 
     # 新建圆球
-    #TODO:圆球的材质和位置
-    new_sphere('mysphere1', (10.2596, -13.2613, 10.6814))
-    new_sphere('mysphere2', (8.1530, -14.2894, 11.0310))
-    new_sphere('mysphere3', (11.6051, -10.3907, 11.7511))
-    new_sphere('mysphere4', (8.0488, -10.7594, 14.0301))
+    # new_sphere('mysphere1', (10.2596, -13.2613, 10.6814))
+    # new_sphere('mysphere2', (8.1530, -14.2894, 11.0310))
+    # new_sphere('mysphere3', (11.6051, -10.3907, 11.7511))
+    # new_sphere('mysphere4', (8.0488, -10.7594, 14.0301))
+    new_sphere('mysphere1', (10.290, -8.958, 6.600))
+    new_sphere('mysphere2', (5.266, -9.473, 6.613))
+    new_sphere('mysphere3', (11.282, -2.077, 6.607))
+    new_sphere('mysphere4', (8.107, -6.029, 13.345))
     new_plane('myplane')
+
+    red_material = bpy.data.materials.new(name="Red")
+    red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+    bpy.data.objects['mysphere1'].data.materials.append(red_material)
+    bpy.data.objects['mysphere2'].data.materials.append(red_material)
+    bpy.data.objects['mysphere3'].data.materials.append(red_material)
+    bpy.data.objects['mysphere4'].data.materials.append(red_material)
 
     # 开启吸附
     bpy.context.scene.tool_settings.use_snap = True
@@ -367,7 +384,6 @@ def initPlane():
     bool_modifier.object = plane
     bool_modifier.material_mode = 'TRANSFER'
 
-
     # 调用调整按钮
     override = getOverride()
     with bpy.context.temp_override(**override):
@@ -382,11 +398,13 @@ def initPlane():
     # mesh.faces.new(verts[1:])
 
     # # 新增立方体
-    # bpy.ops.mesh.primitive_cube_add(enter_editmode=True,
+    # import bpy
+
+    # bpy.ops.mesh.primitive_cube_add(enter_editmode=False,
     #                                 align='WORLD',
-    #                                 location=(11.8, -9, 14.2),
+    #                                 location=(13.4, -10.5, 13.6),
     #                                 rotation=(0.0, 0.0, -2.26),
-    #                                 scale=(6.05, 6.05, 6.05))
+    #                                 scale=(7, 7, 7))
     # bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type='FACE')
 
     # # 选择平面
