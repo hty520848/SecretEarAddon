@@ -177,40 +177,6 @@ def update_plane():
     mesh.to_mesh(bm)
     mesh.free()
 
-
-def newMaterial(id):
-
-    mat = bpy.data.materials.get(id)
-
-    if mat is None:
-        mat = bpy.data.materials.new(name=id)
-
-    mat.use_nodes = True
-
-    if mat.node_tree:
-        mat.node_tree.links.clear()
-        mat.node_tree.nodes.clear()
-
-    return mat
-
-
-def newShader(id):
-
-    mat = newMaterial(id)
-
-    nodes = mat.node_tree.nodes
-    links = mat.node_tree.links
-    output = nodes.new(type='ShaderNodeOutputMaterial')
-
-    shader = nodes.new(type='ShaderNodeBsdfPrincipled')
-    color = nodes.new(type="ShaderNodeVertexColor")
-
-    links.new(color.outputs[0], nodes["Principled BSDF"].inputs[0])
-    links.new(shader.outputs[0], output.inputs[0])
-
-    return mat
-
-
 def initialModelColor():
     yellow_material = bpy.data.materials.new(name="yellow")
     yellow_material.use_nodes = True
@@ -226,120 +192,18 @@ def initialTransparency():
         1.0, 0.319, 0.133, 1.0)
     yellow_material.blend_method = "BLEND"
     # 3.6
-    # yellow_material.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
+    yellow_material.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
     # 4.0
     yellow_material.node_tree.nodes["Principled BSDF"].inputs[4].default_value = 0.5
-    bpy.data.objects['右耳.001'].data.materials.append(yellow_material)
+    # bpy.data.objects['右耳.001'].data.materials.append(yellow_material)
 
 
 def initPlane():
-    # # 创建一个新的集合
-    # collection = bpy.data.collections.new("MyCollection")
-
-    # # 将新的集合添加到场景中
-    # bpy.context.scene.collection.children.link(collection)
-
-    # # 获取当前场景
-    # scene = bpy.context.scene
-
-    # # 遍历场景中的所有集合
-    # for collection in scene.collection.children:
-    #     if collection.name == "MyCollection":
-    #         bpy.context.view_layer.active_layer_collection =  bpy.context.view_layer.layer_collection.children[collection.name]
 
     global a
     a = 2
 
-    # # 获取右耳的网格数据
-    # for i in bpy.context.visible_objects:
-    #     if i.name == "右耳":
-    #         bpy.context.view_layer.objects.active = i
-    #         i.select_set(state=True)
-    # obj = bpy.context.active_object
-    # bpy.ops.object.mode_set(mode='EDIT')
-    # mesh = bmesh.from_edit_mesh(obj.data)
-    # mesh.free()
-
-    # #记录z坐标最大的顶点
-    # zmax = -666
-    # index = -1
-    # mesh.verts.ensure_lookup_table()
-    # for vert in mesh.verts:
-    #     if(vert.co.z >= zmax):
-    #         zmax = vert.co.z
-    #         index = vert.index
-    # coord = mesh.verts[index].co
-
-    # bpy.ops.object.mode_set(mode='OBJECT')
-    # #新增平面
-    # bpy.ops.mesh.primitive_plane_add(size=2, enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
-    # bpy.ops.object.mode_set(mode='EDIT')
-    # bpy.ops.mesh.merge(type='CENTER')
-    # bpy.ops.mesh.delete(type='VERT')
-
-    # #添加顶点
-    # obj = bpy.context.active_object
-    # bpy.ops.object.mode_set(mode='EDIT')
-    # mesh = bmesh.from_edit_mesh(obj.data)
-
-    # # 创建一个新的网格
-    # mesh = bpy.data.meshes.new("MyMesh")
-    # obj = bpy.data.objects.new("MySphere", mesh)
-
-    # # 在场景中添加新的对象
-    # scene = bpy.context.scene
-    # scene.collection.objects.link(obj)
-
-    # # 切换到编辑模式
-    # #bpy.context.view_layer.objects.active = obj
-    #
-    # for i in bpy.context.visible_objects:
-    #     if i.name == "MySphere":
-    #         bpy.context.view_layer.objects.active = i
-    #         i.select_set(state=True)
-    # obj = bpy.context.active_object
-    # bpy.ops.object.mode_set(mode='EDIT')
-
-    # # 获取编辑模式下的网格数据
-    # bm = bmesh.from_edit_mesh(obj.data)
-
-    # # 设置圆球的参数
-    # radius = 1.0  # 半径
-    # segments = 32  # 分段数
-
-    # # 在指定位置生成圆球
-    # bmesh.ops.create_uvsphere(bm, u_segments=segments, v_segments=segments, diameter=radius * 2)
-
-    # # 更新网格数据
-    # bmesh.update_edit_mesh(obj.data)
-
-    # # 切换回对象模式
-    # bpy.ops.object.mode_set(mode='OBJECT')
-
-    # # 设置圆球的位置
-    # obj.location = (10.2596, -13.2613, 10.6814)  # 指定的位置坐标
-
-    # # 创建四个顶点
-    # verts = [ bm.verts.new((10.2596, -13.2613, 10.6814)),
-    #           bm.verts.new((8.1530, -14.2894, 11.0310)),
-    #           bm.verts.new((11.6051, -10.3907, 11.7511)),
-    #           bm.verts.new((8.0488, -10.7594, 14.0301))]
-
-    # # 创建两个面
-    # bm.faces.new(verts[:3])
-    # bm.faces.new(verts[1:])
-
-    # # 更新网格数据
-    # bmesh.update_edit_mesh(obj.data)
-
-    # # 切换回对象模式
-    # bpy.ops.object.mode_set(mode='OBJECT')
-
     # 新建圆球
-    # new_sphere('mysphere1', (10.2596, -13.2613, 10.6814))
-    # new_sphere('mysphere2', (8.1530, -14.2894, 11.0310))
-    # new_sphere('mysphere3', (11.6051, -10.3907, 11.7511))
-    # new_sphere('mysphere4', (8.0488, -10.7594, 14.0301))
     new_sphere('mysphere1', (10.290, -8.958, 6.600))
     new_sphere('mysphere2', (5.266, -9.473, 6.613))
     new_sphere('mysphere3', (11.282, -2.077, 6.607))
@@ -393,116 +257,8 @@ def initPlane():
         bpy.ops.wm.tool_set_by_id(name="builtin.select")
         bpy.ops.object.stepcut('INVOKE_DEFAULT')
 
-    # verts = [ mesh.verts.new((10.2596, -13.2613, 10.6814)),
-    #           mesh.verts.new((8.1530, -14.2894, 11.0310)),
-    #           mesh.verts.new((11.6051, -10.3907, 11.7511)),
-    #           mesh.verts.new((8.0488, -10.7594, 14.0301))]
-    # mesh.faces.new(verts[0:3])
-    # mesh.faces.new(verts[1:])
-
-    # # 新增立方体
-    # import bpy
-
-    # bpy.ops.mesh.primitive_cube_add(enter_editmode=False,
-    #                                 align='WORLD',
-    #                                 location=(13.4, -10.5, 13.6),
-    #                                 rotation=(0.0, 0.0, -2.26),
-    #                                 scale=(7, 7, 7))
-    # bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type='FACE')
-
-    # # 选择平面
-    # bpy.ops.object.mode_set(mode='OBJECT')
-    # plane = bpy.context.active_object
-
-    # # 删除多余的平面
-    # # bpy.context.view_layer.objects.active = circle
-    # bm = bmesh.new()
-    # bm.from_mesh(plane.data)
-    # bm.faces.ensure_lookup_table()
-    # bm.faces[0].select = True
-    # bm.faces[1].select = True
-    # bm.faces[2].select = True
-    # bm.faces[3].select = False
-    # bm.faces[4].select = False
-    # bm.faces[5].select = True
-    # bm.to_mesh(plane.data)
-    # bm.free()
-    # bpy.ops.object.mode_set(mode='EDIT')
-    # bpy.ops.mesh.delete(type='FACE')
-    # bpy.ops.object.mode_set(mode='OBJECT')
-    # #分离平面
-    # bm2 = bmesh.new()
-    # bm2.from_mesh(plane.data)
-    # bm2.faces.ensure_lookup_table()
-    # bm2.faces[0].select = True
-    # bm2.faces[1].select = False
-    # bm2.to_mesh(plane.data)
-    # bm2.free()
-    # bpy.ops.object.mode_set(mode='EDIT')
-    # bpy.ops.mesh.separate(type='SELECTED')
-    # bpy.ops.object.mode_set(mode='OBJECT')
-
-    # 应用变换
-    # bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-
-    # 为模型添加布尔修改器
-    # obj_main = bpy.data.objects['右耳']
-    # bool_modifier = obj_main.modifiers.new(
-    #     name="step cut", type='BOOLEAN')
-    # # 设置布尔修饰符作用对象
-    # # bool_modifier.operand_type = 'COLLECTION'
-    # bool_modifier.operation = 'DIFFERENCE'
-    # bool_modifier.object = plane
-    # # bool_modifier.collection = bpy.data.collections['MyCollection']
-
-    # bm1 = bmesh.new()
-    # bm1.from_mesh(plane.data)
-    # bm1.faces.ensure_lookup_table()
-    # x = 0
-    # y = 0
-    # z = 0
-    # for vert in bm1.faces[0].verts:
-    #     x += vert.co.x
-    #     y += vert.co.y
-    #     z += vert.co.z
-    # bpy.ops.mesh.primitive_cylinder_add(enter_editmode=False, align='WORLD',
-    #                                     location=(x/4, y/4, z/4-3),
-    #                                     scale=(0.5, 0.5, 1),
-    #                                     rotation=(1.57, 0.0, -2.26))
-    # bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-    # bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
-
-    # bm2 = bmesh.new()
-    # bm2.from_mesh(plane.data)
-    # bm2.faces.ensure_lookup_table()
-    # x = 0
-    # y = 0
-    # z = 0
-    # for vert in bm2.faces[1].verts:
-    #     x += vert.co.x
-    #     y += vert.co.y
-    #     z += vert.co.z
-    # bpy.ops.mesh.primitive_cylinder_add(enter_editmode=False, align='WORLD',
-    #                                     location=(x/4-3, y/4+3, z/4),
-    #                                     scale=(0.5, 0.5, 1))
-    # bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-    # bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
-
-    # bpy.ops.object.select_all(action='DESELECT')
-
-    # for i in bpy.context.visible_objects:  # 迭代所有可见物体,激活当前物体
-    #     if i.name == "Cube":
-    #         bpy.context.view_layer.objects.active = i
-    #         i.select_set(state=True)
-    #         bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
-    #         i.hide_set(True)
-
-    # override = getOverride()
-    # with bpy.context.temp_override(**override):
-    #     bpy.ops.object.stepcut('INVOKE_DEFAULT')
 
 # z轴自适应缩放
-
 
 def scaleCircle():
     global old_radius
@@ -623,16 +379,6 @@ def quitStepCut():
     if (bpy.data.objects['右耳.001']):
         obj = bpy.data.objects['右耳.001']
         bpy.data.objects.remove(obj, do_unlink=True)
-    # if (bpy.data.objects['Cube.001']):
-    #     obj = bpy.data.objects['Cube']
-    #     bpy.data.objects.remove(obj, do_unlink=True)
-
-    # # 获取要删除的集合
-    # collection = bpy.data.collections.get("MyCollection")
-
-    # # 如果集合存在，则删除它
-    # if collection:
-    #     bpy.data.collections.remove(collection)
 
 
 class Circle_Cut(bpy.types.Operator):
@@ -845,6 +591,38 @@ class Finish_Cut(bpy.types.Operator):
             a = 3
 
         return {'FINISHED'}
+    
+class Reset_Cut(bpy.types.Operator):
+    bl_idname = "object.resetcut"
+    bl_label = "完成重置"
+
+    def invoke(self, context, event):
+        print('invoke')
+        self.excute(context)
+        return {'FINISHED'}
+
+    def excute(self, context):
+        global a
+        if (a == 1):
+            for i in bpy.context.visible_objects:
+                if i.name == "右耳":
+                    bpy.context.view_layer.objects.active = i
+                    bpy.ops.object.modifier_remove(modifier="Boolean Modifier")
+            bpy.data.objects.remove(bpy.data.objects['Circle'], do_unlink=True)
+            initCircle()
+            a = 4
+
+        if (a == 2):
+            # 回到原来的位置
+            bpy.data.objects['mysphere1'].location = (10.290, -8.958, 6.600) 
+            bpy.data.objects['mysphere2'].location = (5.266, -9.473, 6.613)
+            bpy.data.objects['mysphere3'].location = (11.282, -2.077, 6.607)
+            bpy.data.objects['mysphere4'].location = (8.107, -6.029, 13.345)
+            update_plane()
+            bpy.ops.mesh.select_all(action='DESELECT')
+            a = 4
+
+        return {'FINISHED'}
 
 
 class qiegeTool(WorkSpaceTool):
@@ -866,6 +644,24 @@ class qiegeTool(WorkSpaceTool):
     def draw_settings(context, layout, tool):
         pass
 
+class qiegeTool2(WorkSpaceTool):
+    bl_space_type = 'VIEW_3D'
+    bl_context_mode = 'OBJECT'
+
+    # The prefix of the idname should be your add-on name.
+    bl_idname = "my_tool.resetcut"
+    bl_label = "重置切割"
+    bl_description = (
+        "点击完成重置操作"
+    )
+    bl_icon = "ops.mesh.inset"
+    bl_widget = None
+    bl_keymap = (
+        ("object.resetcut", {"type": 'MOUSEMOVE', "value": 'ANY'}, {}),
+    )
+
+    def draw_settings(context, layout, tool):
+        pass
 
 # 监听回调函数
 def msgbus_callback(*args):
@@ -884,6 +680,7 @@ def msgbus_callback(*args):
     else:
         if (flag):
             flag == False
+            # TODO:测试用
             # if (a == 1):
             #     quitCut()
             # if (a == 2):
@@ -909,13 +706,42 @@ def register():
     bpy.utils.register_class(Circle_Cut)
     bpy.utils.register_class(Step_Cut)
     bpy.utils.register_class(Finish_Cut)
+    bpy.utils.register_class(Reset_Cut)
 
     bpy.utils.register_tool(qiegeTool, separator=True, group=False)
-
+    bpy.utils.register_tool(qiegeTool2, separator=True, group=False, after={qiegeTool.bl_idname})
 
 def unregister():
     bpy.utils.unregister_class(Circle_Cut)
     bpy.utils.unregister_class(Step_Cut)
     bpy.utils.unregister_class(Finish_Cut)
+    bpy.utils.unregister_class(Reset_Cut)
 
     bpy.utils.unregister_tool(qiegeTool)
+    bpy.utils.unregister_tool(qiegeTool2)
+
+
+
+
+
+
+    # # 创建一个新的集合
+    # collection = bpy.data.collections.new("MyCollection")
+
+    # # 将新的集合添加到场景中
+    # bpy.context.scene.collection.children.link(collection)
+
+    # # 获取当前场景
+    # scene = bpy.context.scene
+
+    # # 遍历场景中的所有集合
+    # for collection in scene.collection.children:
+    #     if collection.name == "MyCollection":
+    #         bpy.context.view_layer.active_layer_collection =  bpy.context.view_layer.layer_collection.children[collection.name]
+
+    # # 获取要删除的集合
+    # collection = bpy.data.collections.get("MyCollection")
+
+    # # 如果集合存在，则删除它
+    # if collection:
+    #     bpy.data.collections.remove(collection)

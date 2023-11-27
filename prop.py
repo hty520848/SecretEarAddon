@@ -13,7 +13,7 @@ def My_Properties():
         name="laHouDU", min=-2.0, max=2.0, step=1,
         description="调整蜡厚度的大小", update=Houdu)
     bpy.types.Scene.localLaHouDu = bpy.props.BoolProperty(
-        name="localLaHouDu", default=False)
+        name="localLaHouDu", default=True)
     bpy.types.Scene.maxLaHouDu = bpy.props.FloatProperty(
         name="maxLaHouDu", min=-1.0, max=1.0, step=1, description="最大蜡厚度的值")
     bpy.types.Scene.minLaHouDu = bpy.props.FloatProperty(
@@ -28,6 +28,7 @@ def My_Properties():
         name="bianKuangKuanDu", min=-1.0, max=1.0)
 
     # 点面切割属性
+    # TODO:面板UI以及默认值的问题
     bpy.types.Scene.qieGeTypeEnum = bpy.props.EnumProperty(
         name="qieGeTypeEnum",
         description='this is option',
@@ -39,7 +40,7 @@ def My_Properties():
     bpy.types.Scene.sheRuPianYi = bpy.props.FloatProperty(
         name="sheRuPianYi", min=-1.0, max=1.0)
     bpy.types.Scene.waiBianYuanSheRuPianYi = bpy.props.FloatProperty(
-        name="waiBianYuanSheRuPianYi", min=-1.0, max=1.0)
+        name="waiBianYuanSheRuPianYi", min=-1.0, max=1.0, update = qiegesmooth, default = 0.4)
     bpy.types.Scene.neiBianYuanSheRuPianYi = bpy.props.FloatProperty(
         name="neiBianYuanSheRuPianYi", min=-1.0, max=1.0)
 
@@ -272,6 +273,10 @@ def qiegeenum(self, context):
         quitCut()
         initPlane()
 
+def qiegesmooth(self, context):
+    bl_description = "选择平滑偏移值"
+    pianyi = bpy.context.scene.waiBianYuanSheRuPianYi
+    bpy.data.objects["myplane"].modifiers["smooth"].thickness = pianyi
 
 # 回调函数，根据绑定的属性值更改选中区域的厚度
 
