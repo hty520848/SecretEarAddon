@@ -4,6 +4,7 @@ from bpy_extras import view3d_utils
 import mathutils
 import bmesh
 from mathutils import Vector
+from bpy.types import WorkSpaceTool
 from .damo import *
 
 # 当前的context
@@ -137,7 +138,7 @@ def new_plane(name):
 
     bool_modifier = object.modifiers.new(
         name="smooth", type='BEVEL')
-    bool_modifier.segments = 16
+    bool_modifier.segments = 32
     bool_modifier.width = 0.4
     bool_modifier.limit_method = 'NONE'
 
@@ -210,25 +211,25 @@ def newShader(id):
     return mat
 
 
-def initialModelColor(name):
-    mat = newShader("Yellow")  # 初始化模型颜色
-    obj = bpy.data.objects[name]
-    obj.data.materials.clear()
-    obj.data.materials.append(mat)
-    return mat
+def initialModelColor():
+    yellow_material = bpy.data.materials.new(name="yellow")
+    yellow_material.use_nodes = True
+    bpy.data.materials["yellow"].node_tree.nodes["Principled BSDF"].inputs[0].default_value = (
+        1.0, 0.319, 0.133, 1.0)
+    bpy.data.objects['右耳'].data.materials.append(yellow_material)
 
 
-def initialTransparency(name):
-    mat = newShader("Yellow2")
-    obj = bpy.data.objects[name]
-    obj.data.materials.clear()
-    obj.data.materials.append(mat)
-    bpy.data.materials['Yellow2'].blend_method = "BLEND"
+def initialTransparency():
+    yellow_material = bpy.data.materials.new(name="yellow2")
+    yellow_material.use_nodes = True
+    bpy.data.materials["yellow2"].node_tree.nodes["Principled BSDF"].inputs[0].default_value = (
+        1.0, 0.319, 0.133, 1.0)
+    yellow_material.blend_method = "BLEND"
     # 3.6
-    bpy.data.materials["Yellow2"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
+    # yellow_material.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
     # 4.0
-    # bpy.data.materials["Yellow2"].node_tree.nodes["Principled BSDF"].inputs[4].default_value = 0.5
-    return mat
+    yellow_material.node_tree.nodes["Principled BSDF"].inputs[4].default_value = 0.5
+    bpy.data.objects['右耳.001'].data.materials.append(yellow_material)
 
 
 def initPlane():
@@ -371,18 +372,20 @@ def initPlane():
             obj.hide_select = True
             obj_copy.hide_select = True
 
-    mat1 = initialModelColor("右耳")
-    mat2 = initialTransparency("右耳.001")
+    initialModelColor()
+    initialTransparency()
     bpy.ops.object.select_all(action='DESELECT')
 
     plane = bpy.data.objects['myplane']
-    plane.data.materials.append(mat2)
+    # plane.data.materials.append(mat2)
     obj_main = bpy.data.objects['右耳']
     bool_modifier = obj_main.modifiers.new(
         name="step cut", type='BOOLEAN')
     bool_modifier.operation = 'DIFFERENCE'
     bool_modifier.object = plane
-    bool_modifier.material_mode = 'TRANSFER'
+    # bool_modifier2 = obj_main.modifiers.new(
+    #     name="Remesh", type='REMESH')
+    # bool_modifier2.mode = 'VOXEL'
 
     # 调用调整按钮
     override = getOverride()
@@ -618,7 +621,7 @@ def quitStepCut():
         obj = bpy.data.objects['myplane']
         bpy.data.objects.remove(obj, do_unlink=True)
     if (bpy.data.objects['右耳.001']):
-        obj = bpy.data.objects['myplane']
+        obj = bpy.data.objects['右耳.001']
         bpy.data.objects.remove(obj, do_unlink=True)
     # if (bpy.data.objects['Cube.001']):
     #     obj = bpy.data.objects['Cube']
@@ -798,9 +801,73 @@ class Step_Cut(bpy.types.Operator):
         else:
             return {'PASS_THROUGH'}
 
+
+class Finish_Cut(bpy.types.Operator):
+    bl_idname = "object.finishcut"
+    bl_label = "完成切割"
+
+    def invoke(self, context, event):
+        self.excute(context)
+        return {'FINISHED'}
+
+    def excute(self, context):
+        global a
+        if (a == 1):
+            for i in bpy.context.visible_objects:
+                if i.name == "右耳":
+                    bpy.context.view_layer.objects.active = i
+                    bpy.ops.object.modifier_apply(modifier="Boolean Modifier")
+            bpy.data.objects.remove(bpy.data.objects['Circle'], do_unlink=True)
+            a = 3
+
+        if (a == 2):
+            for i in bpy.context.visible_objects:
+                if i.name == "右耳":
+                    bpy.context.view_layer.objects.active = i
+                    bpy.ops.object.modifier_apply(modifier="step cut")
+            for i in bpy.context.visible_objects:
+                if i.name == "myplane":
+                    i.hide_set(False)
+                    bpy.context.view_layer.objects.active = i
+                    bpy.ops.object.modifier_apply(modifier="smooth")
+            bpy.data.objects.remove(
+                bpy.data.objects['mysphere1'], do_unlink=True)
+            bpy.data.objects.remove(
+                bpy.data.objects['mysphere2'], do_unlink=True)
+            bpy.data.objects.remove(
+                bpy.data.objects['mysphere3'], do_unlink=True)
+            bpy.data.objects.remove(
+                bpy.data.objects['mysphere4'], do_unlink=True)
+            bpy.data.objects.remove(
+                bpy.data.objects['myplane'], do_unlink=True)
+            bpy.data.objects.remove(bpy.data.objects['右耳.001'], do_unlink=True)
+            # bpy.ops.object.modifier_apply(modifier="Remesh")
+            a = 3
+
+        return {'FINISHED'}
+
+
+class qiegeTool(WorkSpaceTool):
+    bl_space_type = 'VIEW_3D'
+    bl_context_mode = 'OBJECT'
+
+    # The prefix of the idname should be your add-on name.
+    bl_idname = "my_tool.finishcut"
+    bl_label = "完成"
+    bl_description = (
+        "点击完成切割操作"
+    )
+    bl_icon = "ops.mesh.inset"
+    bl_widget = None
+    bl_keymap = (
+        ("object.finishcut", {"type": 'MOUSEMOVE', "value": 'ANY'}, {}),
+    )
+
+    def draw_settings(context, layout, tool):
+        pass
+
+
 # 监听回调函数
-
-
 def msgbus_callback(*args):
     global gcontext
     global flag
@@ -817,10 +884,10 @@ def msgbus_callback(*args):
     else:
         if (flag):
             flag == False
-            if (a == 1):
-                quitCut()
-            if(a == 2):
-                quitStepCut()
+            # if (a == 1):
+            #     quitCut()
+            # if (a == 2):
+            #     quitStepCut()
     print(f'Current Tab: {current_tab}')
 
 
@@ -841,8 +908,14 @@ bpy.msgbus.subscribe_rna(
 def register():
     bpy.utils.register_class(Circle_Cut)
     bpy.utils.register_class(Step_Cut)
+    bpy.utils.register_class(Finish_Cut)
+
+    bpy.utils.register_tool(qiegeTool, separator=True, group=False)
 
 
 def unregister():
     bpy.utils.unregister_class(Circle_Cut)
     bpy.utils.unregister_class(Step_Cut)
+    bpy.utils.unregister_class(Finish_Cut)
+
+    bpy.utils.unregister_tool(qiegeTool)

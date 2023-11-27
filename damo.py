@@ -1066,32 +1066,34 @@ _classes = [
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
-    bpy.utils.register_tool(MyTool, separator=True, group=False)
-    bpy.utils.register_tool(MyTool3, separator=True,
-                            group=False, after={MyTool.bl_idname})
-    bpy.utils.register_tool(MyTool5, separator=True,
-                            group=False, after={MyTool3.bl_idname})
-    bpy.utils.register_tool(MyTool7, separator=True,
-                            group=False, after={MyTool5.bl_idname})
 
-    bpy.utils.register_tool(MyTool2, separator=True, group=False)
-    bpy.utils.register_tool(MyTool4, separator=True,
-                            group=False, after={MyTool2.bl_idname})
-    bpy.utils.register_tool(MyTool6, separator=True,
-                            group=False, after={MyTool4.bl_idname})
-    bpy.utils.register_tool(MyTool8, separator=True,
-                            group=False, after={MyTool6.bl_idname})
+    # bpy.utils.register_tool(MyTool, separator=True, group=False)
+    # bpy.utils.register_tool(MyTool3, separator=True,
+    #                         group=False, after={MyTool.bl_idname})
+    # bpy.utils.register_tool(MyTool5, separator=True,
+    #                         group=False, after={MyTool3.bl_idname})
+    # bpy.utils.register_tool(MyTool7, separator=True,
+    #                         group=False, after={MyTool5.bl_idname})
+
+    # bpy.utils.register_tool(MyTool2, separator=True, group=False)
+    # bpy.utils.register_tool(MyTool4, separator=True,
+    #                         group=False, after={MyTool2.bl_idname})
+    # bpy.utils.register_tool(MyTool6, separator=True,
+    #                         group=False, after={MyTool4.bl_idname})
+    # bpy.utils.register_tool(MyTool8, separator=True,
+    #                         group=False, after={MyTool6.bl_idname})
 
 
 def unregister():
     for cls in _classes:
         bpy.utils.unregister_class(cls)
-    bpy.utils.unregister_tool(MyTool)
-    bpy.utils.unregister_tool(MyTool3)
-    bpy.utils.unregister_tool(MyTool5)
-    bpy.utils.unregister_tool(MyTool7)
 
-    bpy.utils.unregister_tool(MyTool2)
-    bpy.utils.unregister_tool(MyTool4)
-    bpy.utils.unregister_tool(MyTool6)
-    bpy.utils.unregister_tool(MyTool8)
+    # bpy.utils.unregister_tool(MyTool)
+    # bpy.utils.unregister_tool(MyTool3)
+    # bpy.utils.unregister_tool(MyTool5)
+    # bpy.utils.unregister_tool(MyTool7)
+
+    # bpy.utils.unregister_tool(MyTool2)
+    # bpy.utils.unregister_tool(MyTool4)
+    # bpy.utils.unregister_tool(MyTool6)
+    # bpy.utils.unregister_tool(MyTool8)

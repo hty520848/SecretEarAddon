@@ -855,8 +855,8 @@ _classes = [
     # TOPBAR_MT_editor_menus,
     TOPBAR_MT_screteEarFile,
     TOPBAR_MT_huierFile,
-    TOPBAR_MT_file,
-    TOPBAR_MT_edit,
+    # TOPBAR_MT_file,
+    # TOPBAR_MT_edit,
     CustomPanelTestButton,
     OT_ImportFile
 ]
