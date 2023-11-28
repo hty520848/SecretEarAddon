@@ -474,9 +474,9 @@ def initialTransparency():
         1.0, 0.319, 0.133, 1.0)
     yellow_material_t.blend_method = "BLEND"
     # 3.6
-    yellow_material_t.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
+    # yellow_material_t.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
     # 4.0
-    # yellow_material.node_tree.nodes["Principled BSDF"].inputs[4].default_value = 0.5
+    yellow_material_t.node_tree.nodes["Principled BSDF"].inputs[4].default_value = 0.5
 
 
 def initPlane():
@@ -777,7 +777,6 @@ class Circle_Cut(bpy.types.Operator):
                             rotate_angle_y
 
                         # getRadius()
-
                         return {'RUNNING_MODAL'}
                     elif op_cls.__right_mouse_down:
                         obj_circle = bpy.data.objects['Circle']
@@ -795,8 +794,9 @@ class Circle_Cut(bpy.types.Operator):
                             obj_circle.location += normal*dis
                             # getRadius()
                         return {'RUNNING_MODAL'}
-
+    
                 return {'PASS_THROUGH'}
+                # return {'RUNNING_MODAL'}
 
             elif (a == 2):
                 return {'FINISHED'}
@@ -843,6 +843,7 @@ class Step_Cut(bpy.types.Operator):
                     update_plane()
 
                 return {'PASS_THROUGH'}
+                # return {'RUNNING_MODAL'}
 
             elif (a == 1):
                 context.window_manager.event_timer_remove(op_cls.__timer)
