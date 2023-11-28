@@ -10,44 +10,326 @@ from .damo import *
 # 当前的context
 gcontext = ''
 
-
 flag = 0
 old_radius = 8.0
 scale_ratio = 1
+zmax = 0
+zmin = 0
 
 a = 1
+
+# 复制初始模型，并赋予透明材质
+
+
+def copyModel():
+    # 获取当前选中的物体
+    obj_ori = bpy.data.objects['右耳']
+    # 复制物体用于对比突出加厚的预览效果
+    obj_all = bpy.data.objects
+    copy_compare = True  # 判断是否复制当前物体作为透明的参照,不存在参照物体时默认会复制一份新的参照物体
+    for selected_obj in obj_all:
+        if (selected_obj.name == "右耳compare"):
+            copy_compare = False  # 当存在参照物体时便不再复制新的物体
+            # break
+    if (copy_compare):  # 复制一份物体作为透明的参照
+        # bpy.context.view_layer.objects.active = obj_ori
+        # obj_ori.select_set(True)
+        # bpy.ops.object.duplicate(linked=False, mode='TRANSLATION')
+        # obj_dup = bpy.context.active_object
+        # obj_dup.name = obj_ori.name+"compare"
+        active_obj = bpy.context.active_object
+        duplicate_obj = active_obj.copy()
+        duplicate_obj.data = active_obj.data.copy()
+        duplicate_obj.name = active_obj.name+"compare"
+        duplicate_obj.animation_data_clear()
+        # 将复制的物体加入到场景集合中
+        scene = bpy.context.scene
+        scene.collection.objects.link(duplicate_obj)
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.context.view_layer.objects.active = duplicate_obj
+        duplicate_obj.select_set(True)
+        # 将当前激活的物体变透明
+        # initialTransparency()
+        bpy.data.objects['右耳compare'].data.materials.append(
+            bpy.data.materials['yellow2'])
+
+# 计算点到平面的距离
+
+
+def distance_to_plane(plane_normal, plane_point, point):
+    return round(abs(plane_normal.dot(point - plane_point)), 4)
+
+# 根据点到平面的距离，计算移动的长度
+
+
+def displacement(distance):
+    dis = 0.75*(distance-2)*(distance-2)
+    return dis
+
+# 平滑边缘
+
+
+def smooth():
+
+    obj_ori = bpy.data.objects['右耳compare']
+    obj_main = bpy.data.objects['右耳']
+    obj_circle = bpy.data.objects['Circle']
+    # 从透明对比物体 获取原始网格数据
+    orime = obj_ori.data
+    oribm = bmesh.new()
+    oribm.from_mesh(orime)
+    # 应用原始网格数据
+    oribm.to_mesh(obj_main.data)
+    # 不存在，则添加
+    if not obj_main.modifiers:
+        bool_modifier = obj_main.modifiers.new(
+            name="Boolean Modifier", type='BOOLEAN')
+        bool_modifier.operation = 'DIFFERENCE'
+        bool_modifier.object = obj_circle
+
+    # 应用修改器
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = obj_main
+    obj_main.select_set(True)
+    bpy.ops.object.make_single_user(
+        object=True, obdata=True, material=False, animation=False, obdata_animation=False)
+    bpy.ops.object.modifier_apply(modifier="Boolean Modifier")
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = obj_circle
+    obj_circle.select_set(True)
+
+    bm = bmesh.new()
+    bm.from_mesh(obj_main.data)
+    # z_circle = obj_circle.location.z
+    # selected_vert = [v for v in bm.verts if round(v.co.z, 2)  == round(z_circle,2)]
+    # # 圆环中心
+    # center = sum((v.co for v in selected_vert), Vector()) / len(selected_vert)
+    # 圆环平面法向量和平面上一点
+    plane_normal = obj_circle.matrix_world.to_3x3(
+    ) @ obj_circle.data.polygons[0].normal
+    plane_point = obj_circle.location.copy()
+    # 平滑操作
+    for vert in bm.verts:
+        point = vert.co
+        distance = distance_to_plane(plane_normal, plane_point, point)
+        if distance <= 2:
+            move = displacement(distance)
+            to_center = vert.co - plane_point
+            # 计算径向位移的增量
+            movement = to_center.normalized() * move
+            vert.co -= movement
+
+    bm.to_mesh(obj_main.data)
+    bm.free()
+
+
+# 获取模型的Z坐标范围
+def getModelZ():
+    global zmax, zmin
+    # 获取目标物体的编辑模式网格
+    obj_main = bpy.data.objects['右耳']
+    bpy.context.view_layer.objects.active = obj_main
+    bpy.ops.object.mode_set(mode='EDIT')
+    bm = bmesh.from_edit_mesh(obj_main.data)
+
+    # 初始化最大距离为负无穷大
+    z_max = float('-inf')
+    z_min = float('inf')
+
+    # 遍历的每个顶点并计算距离
+    for vertex in bm.verts:
+        z_max = max(z_max, vertex.co.z)
+        z_min = min(z_min, vertex.co.z)
+
+    zmax = z_max
+    zmin = z_min
+    # 切换回对象模式
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+# 获取截面半径
+
+
+def getRadius():
+    global old_radius, scale_ratio
+
+    # 翻转圆环法线
+    obj_circle = bpy.data.objects['Circle']
+    active_obj = bpy.data.objects['右耳compare']
+    duplicate_obj = active_obj.copy()
+    duplicate_obj.data = active_obj.data.copy()
+    duplicate_obj.name = active_obj.name+"intersect"
+    duplicate_obj.animation_data_clear()
+    # 将复制的物体加入到场景集合中
+    scene = bpy.context.scene
+    scene.collection.objects.link(duplicate_obj)
+
+    bpy.context.view_layer.objects.active = duplicate_obj
+    # 添加修改器,获取交面
+
+    # 返回对象模式
+    bpy.ops.object.mode_set(mode='OBJECT')
+    duplicate_obj.modifiers.new(name="Boolean Intersect", type='BOOLEAN')
+    duplicate_obj.modifiers[0].operation = 'INTERSECT'
+    duplicate_obj.modifiers[0].object = obj_circle
+    bpy.ops.object.modifier_apply(modifier='Boolean Intersect')
+
+    rbm = bmesh.new()
+    rbm.from_mesh(duplicate_obj.data)
+
+    # 获取截面上的点
+    plane_normal = obj_circle.matrix_world.to_3x3(
+    ) @ obj_circle.data.polygons[0].normal
+    plane_point = obj_circle.location.copy()
+    plane_verts = []
+    for v in rbm.verts:
+        if distance_to_plane(plane_normal, plane_point, v.co) == 0:
+            plane_verts.append(v)
+    print(len(plane_verts))
+    # if len(plane_verts) == 0:
+    #     print('空')
+    #     return False
+
+    center = sum((v.co for v in plane_verts), Vector()) / len(plane_verts)
+
+    # 初始化最大距离为负无穷大
+    max_distance = float('-inf')
+
+    # 遍历的每个顶点并计算距离
+    for vertex in rbm.verts:
+        distance = (vertex.co - center).length
+        # print('center',center)
+        max_distance = max(max_distance, distance)
+
+    radius = round(max_distance, 2)
+    radius = radius+2
+    # rbm.free()
+
+    # 删除复制的物体
+    bpy.data.objects.remove(duplicate_obj, do_unlink=True)
+
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = obj_circle
+    obj_circle.select_set(True)
+    # 缩放圆环及调整位置
+    obj_circle.location = center
+    scale_ratio = round(radius/old_radius, 3)
+    print('缩放比例', scale_ratio)
+    old_radius = radius
+    obj_circle.scale = (scale_ratio, scale_ratio, scale_ratio)
+
+    smooth()
+
 # 初始化
 
 
 def initCircle():
-    global old_radius
-    # 新增圆环
+    global old_radius, scale_ratio
+    global zmax, zmin
+
+    copyModel()
+    getModelZ()
+
+    initZ = round(zmax*0.8, 2)
+    # 获取目标物体的编辑模式网格
+    obj_main = bpy.data.objects['右耳']
+    obj_main.data.materials.clear()
+    obj_main.data.materials.append(bpy.data.materials['yellow'])
+    # bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = obj_main
+    # obj_main.select_set(True)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bm = bmesh.from_edit_mesh(obj_main.data)
+    # 选取Z坐标相等的顶点
+    selected_verts = [v for v in bm.verts if round(v.co.z, 2) < round(
+        initZ, 2) + 0.1 and round(v.co.z, 2) > round(initZ, 2) - 0.1]
+    if selected_verts:
+        # 计算平面的几何中心
+        center = sum((v.co for v in selected_verts),
+                     Vector()) / len(selected_verts)
+        # 输出几何中心坐标
+        print("Geometry Center:", center)
+
+    # 初始化最大距离为负无穷大
+    max_distance = float('-inf')
+    # 遍历的每个顶点并计算距离
+    for vertex in selected_verts:
+        distance = (vertex.co - center).length
+        max_distance = max(max_distance, distance)
+    print('初始半径', max_distance/cos(math.radians(30)))
+    old_radius = max_distance/cos(math.radians(30))
+    old_radius = old_radius
+    print('初始半径', old_radius)
+
+    # bm.free()
+
+    # 切换回对象模式
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    # 初始化圆环
     bpy.ops.mesh.primitive_circle_add(vertices=32, radius=old_radius, fill_type='NGON', calc_uvs=True, enter_editmode=False,
-                                      align='WORLD', location=(8.0, -6.6, 11), rotation=(0.0, 0.0, 0.0), scale=(0.0, 0.0, 0.0))
+                                      align='WORLD', location=(center.x, center.y, initZ), rotation=(0.6, 0.0, 0.0), scale=(0.0, 0.0, 0.0))
+    # 将圆环设为透明
+    obj = bpy.context.active_object
+    obj.data.materials.clear()
+    obj.data.materials.append(bpy.data.materials['yellow2'])
+    # 初始化环体
+    bpy.ops.mesh.primitive_torus_add(align='WORLD', location=(
+        center.x, center.y, initZ), rotation=(0.6, 0, 0), major_radius=old_radius, minor_radius=0.4)
+    # 设置环体颜色
+    # mat = bpy.data.materials.new('Torus')
+    # mat.diffuse_color = (1, 0.29,0.176,1)
+    obj = bpy.context.active_object
+    obj.data.materials.clear()
+    obj.data.materials.append(bpy.data.materials['yellow'])
+    # obj.data.materials.clear()
+    # obj.data.materials.append(mat)
+
+    # 合并圆环和环体
+    object1 = bpy.data.objects.get("Circle")
+    object2 = bpy.data.objects.get("Torus")
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = object2
+    object2.select_set(True)
+    bpy.context.view_layer.objects.active = object1
+    object1.select_set(True)
+    bpy.ops.object.join()
+
+    # radius,c = getRadius()
+    # object1.location = c
 
     # 选择圆环
-    circle = bpy.context.active_object
-    # 设置圆环显示为线框
-    circle.display_type = 'WIRE'
-
+    obj_circle = bpy.data.objects['Circle']
     # 进入编辑模式
-    # bpy.context.view_layer.objects.active = circle
+    bpy.context.view_layer.objects.active = obj_circle
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-
     # 翻转圆环法线
     bpy.ops.mesh.flip_normals(only_clnors=False)
 
     # 返回对象模式
     bpy.ops.object.mode_set(mode='OBJECT')
-
     # 为模型添加布尔修改器
     obj_main = bpy.data.objects['右耳']
     bool_modifier = obj_main.modifiers.new(
         name="Boolean Modifier", type='BOOLEAN')
     # 设置布尔修饰符作用对象
     bool_modifier.operation = 'DIFFERENCE'
-    bool_modifier.object = circle
+    bool_modifier.object = obj_circle
+
+    # getRadius()
+
+    # 应用修改器
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = obj_main
+    obj_main.select_set(True)
+    bpy.ops.object.make_single_user(
+        object=True, obdata=True, material=False, animation=False, obdata_animation=False)
+    bpy.ops.object.modifier_apply(modifier="Boolean Modifier")
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = object1
+    object1.select_set(True)
+
+    smooth()
 
     override = getOverride()
     with bpy.context.temp_override(**override):
@@ -139,7 +421,7 @@ def new_plane(name):
     bool_modifier = object.modifiers.new(
         name="smooth", type='BEVEL')
     bool_modifier.segments = 32
-    bool_modifier.width = 0.4
+    bool_modifier.width = bpy.context.scene.qiegewaiBianYuan
     bool_modifier.limit_method = 'NONE'
 
 
@@ -177,25 +459,24 @@ def update_plane():
     mesh.to_mesh(bm)
     mesh.free()
 
+
 def initialModelColor():
     yellow_material = bpy.data.materials.new(name="yellow")
     yellow_material.use_nodes = True
     bpy.data.materials["yellow"].node_tree.nodes["Principled BSDF"].inputs[0].default_value = (
         1.0, 0.319, 0.133, 1.0)
-    bpy.data.objects['右耳'].data.materials.append(yellow_material)
 
 
 def initialTransparency():
-    yellow_material = bpy.data.materials.new(name="yellow2")
-    yellow_material.use_nodes = True
+    yellow_material_t = bpy.data.materials.new(name="yellow2")
+    yellow_material_t.use_nodes = True
     bpy.data.materials["yellow2"].node_tree.nodes["Principled BSDF"].inputs[0].default_value = (
         1.0, 0.319, 0.133, 1.0)
-    yellow_material.blend_method = "BLEND"
+    yellow_material_t.blend_method = "BLEND"
     # 3.6
-    yellow_material.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
+    yellow_material_t.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
     # 4.0
-    yellow_material.node_tree.nodes["Principled BSDF"].inputs[4].default_value = 0.5
-    # bpy.data.objects['右耳.001'].data.materials.append(yellow_material)
+    # yellow_material.node_tree.nodes["Principled BSDF"].inputs[4].default_value = 0.5
 
 
 def initPlane():
@@ -236,8 +517,9 @@ def initPlane():
             obj.hide_select = True
             obj_copy.hide_select = True
 
-    initialModelColor()
-    initialTransparency()
+    bpy.data.objects['右耳'].data.materials.append(bpy.data.materials['yellow'])
+    bpy.data.objects['右耳.001'].data.materials.append(
+        bpy.data.materials['yellow2'])
     bpy.ops.object.select_all(action='DESELECT')
 
     plane = bpy.data.objects['myplane']
@@ -264,9 +546,9 @@ def scaleCircle():
     global old_radius
     global scale_ratio
     # 获取圆环的z坐标
-    obj = bpy.data.objects['Circle']
-    jobj = obj.location[2]
-    print('圆环的z坐标', jobj)
+    obj_circle = bpy.data.objects['Circle']
+    z_circle = obj_circle.location[2]
+    # print('圆环的z坐标',z_circle)
 
     # 获取目标物体的编辑模式网格
     obj_main = bpy.data.objects['右耳']
@@ -276,14 +558,12 @@ def scaleCircle():
 
     # 选取Z坐标相等的顶点
     selected_verts = [v for v in bm.verts if round(v.co.z, 2) < round(
-        jobj, 2) + 0.1 and round(v.co.z, 2) > round(jobj, 2) - 0.1]
+        z_circle, 2) + 0.1 and round(v.co.z, 2) > round(z_circle, 2) - 0.1]
 
     if selected_verts:
         # 计算平面的几何中心
         center = sum((v.co for v in selected_verts),
                      Vector()) / len(selected_verts)
-        # 输出几何中心坐标
-        print("Geometry Center:", center)
 
     # 初始化最大距离为负无穷大
     max_distance = float('-inf')
@@ -299,17 +579,15 @@ def scaleCircle():
     # 缩放比例
     scale_ratio *= round(max_distance/old_radius, 5)
     old_radius = max_distance
-    print('半径', old_radius)
-    print("缩放比例:", scale_ratio)
 
     # 缩放圆环大小
-    obj.scale[0] = scale_ratio+0.2
-    obj.scale[1] = scale_ratio+0.2
-    obj.scale[2] = scale_ratio+0.2
+    obj_circle.scale[0] = scale_ratio+0.1
+    obj_circle.scale[1] = scale_ratio+0.1
+    obj_circle.scale[2] = scale_ratio+0.1
 
     # 移动圆环到几何中心
-    obj.location[0] = round(center.x, 2)
-    obj.location[1] = round(center.y, 2)
+    obj_circle.location[0] = round(center.x, 2)
+    obj_circle.location[1] = round(center.y, 2)
 
     bm.free()
 
@@ -341,26 +619,33 @@ def getOverride():
 
 # 退出操作
 def quitCut():
-    for i in bpy.context.visible_objects:  # 迭代所有可见物体,激活当前物体
-        if i.name == "右耳":
-            bpy.context.view_layer.objects.active = i
-            i.select_set(state=True)
-    bpy.ops.object.modifier_remove(modifier='Boolean Modifier', report=False)
     global a
     a = 2
-    if (bpy.data.objects['Circle']):
-        obj = bpy.data.objects['Circle']
-        bpy.data.objects.remove(obj, do_unlink=True)
+    all_objs = bpy.data.objects
+    for selected_obj in all_objs:  # 删除用于对比的未被激活的模型
+        if (selected_obj.name != "右耳compare"):
+            bpy.data.objects.remove(selected_obj, do_unlink=True)
+    bpy.ops.outliner.orphans_purge(
+        do_local_ids=True, do_linked_ids=True, do_recursive=False)
+    bpy.ops.object.select_all(action='DESELECT')
+    obj = bpy.data.objects["右耳compare"]
+    obj.hide_set(False)
+    bpy.context.view_layer.objects.active = obj
+    obj.name = '右耳'
+    obj.data.materials.clear()
+    # bpy.ops.object.modifier_remove(modifier='Boolean Modifier', report=False)
 
 
 def quitStepCut():
+    global a
+    a = 1
+
     for i in bpy.context.visible_objects:  # 迭代所有可见物体,激活当前物体
         if i.name == "右耳":
             bpy.context.view_layer.objects.active = i
             i.select_set(state=True)
     bpy.ops.object.modifier_remove(modifier='step cut', report=False)
-    global a
-    a = 1
+    bpy.data.objects['右耳'].data.materials.clear()
     if (bpy.data.objects['mysphere1']):
         obj = bpy.data.objects['mysphere1']
         bpy.data.objects.remove(obj, do_unlink=True)
@@ -379,6 +664,8 @@ def quitStepCut():
     if (bpy.data.objects['右耳.001']):
         obj = bpy.data.objects['右耳.001']
         bpy.data.objects.remove(obj, do_unlink=True)
+    bpy.ops.outliner.orphans_purge(
+        do_local_ids=True, do_linked_ids=True, do_recursive=False)
 
 
 class Circle_Cut(bpy.types.Operator):
@@ -386,64 +673,94 @@ class Circle_Cut(bpy.types.Operator):
     bl_label = "圆环切割"
 
     __initial_rotation_x = None  # 初始x轴旋转角度
+    __initial_rotation_y = None
     __left_mouse_down = False  # 按下右键未松开时，旋转圆环角度
     __right_mouse_down = False  # 按下右键未松开时，圆环上下移动
     __now_mouse_x = None  # 鼠标移动时的位置
     __now_mouse_y = None
     __initial_mouse_x = None  # 点击鼠标右键的初始位置
     __initial_mouse_y = None
+    __initial_circle_loc = None
 
     def invoke(self, context, event):
         op_cls = Circle_Cut
+
+        global a
+        a = 1
+
+        # copyModel(context)
+        # initCircle()
+
         print('invoke')
+
         op_cls.__initial_rotation_x = None
+        op_cls.__initial_rotation_y = None
         op_cls.__left_mouse_down = False
         op_cls.__right_mouse_down = False
         op_cls.__now_mouse_x = None
         op_cls.__now_mouse_y = None
         op_cls.__initial_mouse_x = None
         op_cls.__initial_mouse_y = None
-
-        global a
-        a = 1
+        op_cls.__initial_circle_loc = None
 
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
+        global gcontext
+        global old_radius
+        global scale_ratio
         op_cls = Circle_Cut
+        # active_obj = bpy.data.objects['Circle']
+
+        # bpy.ops.object.select_all(action='DESELECT')
+        # bpy.context.view_layer.objects.active = active_obj
+        # active_obj.select_set(True)
 
         if context.area:
             context.area.tag_redraw()
 
-        global gcontext
-        global a
-        if gcontext == 'VIEW_LAYER':
+        if gcontext == 'SCENE':
             # 鼠标是否在圆环上
             if (a == 1 and is_mouse_on_object(context, event)):
-                active_obj = bpy.data.objects['Circle']
                 # print('在圆环上')
+                active_obj = bpy.data.objects['Circle']
+
+                bpy.ops.object.select_all(action='DESELECT')
+                bpy.context.view_layer.objects.active = active_obj
+                active_obj.select_set(True)
+
                 if event.type == 'LEFTMOUSE':
                     if event.value == 'PRESS':
                         op_cls.__left_mouse_down = True
                         op_cls.__initial_rotation_x = active_obj.rotation_euler[0]
+                        op_cls.__initial_rotation_y = active_obj.rotation_euler[1]
                         op_cls.__initial_mouse_x = event.mouse_region_x
+                        op_cls.__initial_mouse_y = event.mouse_region_y
                     # 取消
                     elif event.value == 'RELEASE':
+
+                        getRadius()
+
                         op_cls.__left_mouse_down = False
                         op_cls.__initial_rotation_x = None
+                        op_cls.__initial_rotation_y = None
                         op_cls.__initial_mouse_x = None
+                        op_cls.__initial_mouse_y = None
+
                     return {'RUNNING_MODAL'}
 
                 elif event.type == 'RIGHTMOUSE':
                     if event.value == 'PRESS':
-                        print('右键press')
                         op_cls.__right_mouse_down = True
                         op_cls.__initial_mouse_x = event.mouse_region_x
                         op_cls.__initial_mouse_y = event.mouse_region_y
                     elif event.value == 'RELEASE':
-                        print('右键release')
                         op_cls.__right_mouse_down = False
+                        op_cls.__initial_mouse_x = None
+                        op_cls.__initial_mouse_y = None
+
+                        getRadius()
                     return {'RUNNING_MODAL'}
 
                 elif event.type == 'MOUSEMOVE':
@@ -452,55 +769,45 @@ class Circle_Cut(bpy.types.Operator):
                         # x轴旋转角度
                         rotate_angle_x = (
                             event.mouse_region_x - op_cls.__initial_mouse_x) * 0.01
+                        rotate_angle_y = (
+                            event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01
                         active_obj.rotation_euler[0] = op_cls.__initial_rotation_x + \
                             rotate_angle_x
+                        active_obj.rotation_euler[1] = op_cls.__initial_rotation_y + \
+                            rotate_angle_y
+
+                        # getRadius()
+
                         return {'RUNNING_MODAL'}
                     elif op_cls.__right_mouse_down:
-                        obj = bpy.data.objects['Circle']
+                        obj_circle = bpy.data.objects['Circle']
                         op_cls.__now_mouse_y = event.mouse_region_y
                         op_cls.__now_mouse_x = event.mouse_region_x
-                        print(event.mouse_prev_x)
-                        print(event.mouse_x)
-                        # dis = int(sqrt(fabs(op_cls.__now_mouse_y-op_cls.__initial_mouse_y)*fabs(op_cls.__now_mouse_y-op_cls.__initial_mouse_y)+fabs(op_cls.__now_mouse_x-op_cls.__initial_mouse_x)*fabs(op_cls.__now_mouse_x-op_cls.__initial_mouse_x)))
-                        dis = (op_cls.__now_mouse_y -
-                               op_cls.__initial_mouse_y)*0.01
-                        # dis = 0.1
-                        print('移动的距离', dis)
-                        # 法线方向
-                        # print(active_obj.name)
-                        # print(active_obj.location[2])
-                        normal = obj.data.polygons[0].normal
-                        obj.location += normal*dis
-                        # if(op_cls.__now_mouse_y > op_cls.__initial_mouse_y) or (op_cls.__now_mouse_x > op_cls.__initial_mouse_x):
-                        #     obj.location += normal*dis
-                        # else:
-                        #     obj.location -= normal*dis
+                        dis = 0.1
+                        # 平面法线方向
+                        normal = obj_circle.matrix_world.to_3x3(
+                        ) @ obj_circle.data.polygons[0].normal
+                        if (op_cls.__now_mouse_y > op_cls.__initial_mouse_y) or (op_cls.__now_mouse_x > op_cls.__initial_mouse_x):
+                            # print('上移')
+                            obj_circle.location -= normal*dis
+                        else:
+                            # print('下移')
+                            obj_circle.location += normal*dis
+                            # getRadius()
+                        return {'RUNNING_MODAL'}
 
-                        scaleCircle()
+                return {'PASS_THROUGH'}
+
+            elif (a == 2):
+                return {'FINISHED'}
+
             else:
-                # print('不在圆环上')
-                pass
-            return {'PASS_THROUGH'}
+                return {'PASS_THROUGH'}
+                # return {'FINISHED'}
+
         else:
-            return {'FINISHED'}
-
-    def cast_ray(self, context, event):
-
-        # cast ray from mouse location, return data from ray
-        scene = context.scene
-        region = context.region
-        rv3d = context.region_data
-        print('rv3d', rv3d)
-        print('area', region.type)
-        coord = event.mouse_region_x, event.mouse_region_y
-        viewlayer = context.view_layer.depsgraph
-        # get the ray from the viewport and mouse
-        view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
-        ray_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
-
-        hit, location, normal, index, object, matrix = scene.ray_cast(
-            viewlayer, ray_origin, view_vector)
-        return hit, location, normal, index, object, matrix
+            return {'PASS_THROUGH'}
+            # return {'FINISHED'}
 
 
 class Step_Cut(bpy.types.Operator):
@@ -528,7 +835,7 @@ class Step_Cut(bpy.types.Operator):
 
         global gcontext
         global a
-        if gcontext == 'VIEW_LAYER':
+        if gcontext == 'SCENE':
             # 鼠标是否在圆环上
             if (a == 2 and is_mouse_on_which_object(context, event) != 5):
 
@@ -559,11 +866,11 @@ class Finish_Cut(bpy.types.Operator):
     def excute(self, context):
         global a
         if (a == 1):
-            for i in bpy.context.visible_objects:
-                if i.name == "右耳":
-                    bpy.context.view_layer.objects.active = i
-                    bpy.ops.object.modifier_apply(modifier="Boolean Modifier")
+            bpy.data.objects.remove(
+                bpy.data.objects['右耳compare'], do_unlink=True)
             bpy.data.objects.remove(bpy.data.objects['Circle'], do_unlink=True)
+            bpy.ops.outliner.orphans_purge(
+                do_local_ids=True, do_linked_ids=True, do_recursive=False)
             a = 3
 
         if (a == 2):
@@ -587,14 +894,17 @@ class Finish_Cut(bpy.types.Operator):
             bpy.data.objects.remove(
                 bpy.data.objects['myplane'], do_unlink=True)
             bpy.data.objects.remove(bpy.data.objects['右耳.001'], do_unlink=True)
+            bpy.ops.outliner.orphans_purge(
+                do_local_ids=True, do_linked_ids=True, do_recursive=False)
             # bpy.ops.object.modifier_apply(modifier="Remesh")
             a = 3
 
         return {'FINISHED'}
-    
+
+
 class Reset_Cut(bpy.types.Operator):
     bl_idname = "object.resetcut"
-    bl_label = "完成重置"
+    bl_label = "重置切割"
 
     def invoke(self, context, event):
         print('invoke')
@@ -604,22 +914,29 @@ class Reset_Cut(bpy.types.Operator):
     def excute(self, context):
         global a
         if (a == 1):
-            for i in bpy.context.visible_objects:
-                if i.name == "右耳":
-                    bpy.context.view_layer.objects.active = i
-                    bpy.ops.object.modifier_remove(modifier="Boolean Modifier")
-            bpy.data.objects.remove(bpy.data.objects['Circle'], do_unlink=True)
+            all_objs = bpy.data.objects
+            for selected_obj in all_objs:  # 删除用于对比的未被激活的模型
+                if (selected_obj.name != "右耳compare"):
+                    bpy.data.objects.remove(selected_obj, do_unlink=True)
+            bpy.ops.outliner.orphans_purge(
+                do_local_ids=True, do_linked_ids=True, do_recursive=False)
+            bpy.ops.object.select_all(action='DESELECT')
+            obj = bpy.data.objects["右耳compare"]
+            obj.hide_set(False)
+            bpy.context.view_layer.objects.active = obj
+            obj.name = '右耳'
+            obj.data.materials.clear()
             initCircle()
             a = 4
 
         if (a == 2):
             # 回到原来的位置
-            bpy.data.objects['mysphere1'].location = (10.290, -8.958, 6.600) 
+            bpy.data.objects['mysphere1'].location = (10.290, -8.958, 6.600)
             bpy.data.objects['mysphere2'].location = (5.266, -9.473, 6.613)
             bpy.data.objects['mysphere3'].location = (11.282, -2.077, 6.607)
             bpy.data.objects['mysphere4'].location = (8.107, -6.029, 13.345)
             update_plane()
-            bpy.ops.mesh.select_all(action='DESELECT')
+            # bpy.ops.mesh.select_all(action='DESELECT')
             a = 4
 
         return {'FINISHED'}
@@ -644,6 +961,7 @@ class qiegeTool(WorkSpaceTool):
     def draw_settings(context, layout, tool):
         pass
 
+
 class qiegeTool2(WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
     bl_context_mode = 'OBJECT'
@@ -664,19 +982,20 @@ class qiegeTool2(WorkSpaceTool):
         pass
 
 # 监听回调函数
+
+
 def msgbus_callback(*args):
     global gcontext
     global flag
     global a
     current_tab = bpy.context.screen.areas[0].spaces.active.context
     gcontext = current_tab
-    if (current_tab == 'VIEW_LAYER'):
+    if (current_tab == 'SCENE'):
+        initialModelColor()
+        initialTransparency()
         flag = True
-        if flag:
+        if (flag):
             initCircle()
-        # override = getOverride()
-        # with bpy.context.temp_override(**override):
-        #     bpy.ops.object.circlecut('INVOKE_DEFAULT')
     else:
         if (flag):
             flag == False
@@ -709,7 +1028,9 @@ def register():
     bpy.utils.register_class(Reset_Cut)
 
     bpy.utils.register_tool(qiegeTool, separator=True, group=False)
-    bpy.utils.register_tool(qiegeTool2, separator=True, group=False, after={qiegeTool.bl_idname})
+    bpy.utils.register_tool(qiegeTool2, separator=True,
+                            group=False, after={qiegeTool.bl_idname})
+
 
 def unregister():
     bpy.utils.unregister_class(Circle_Cut)
@@ -719,11 +1040,6 @@ def unregister():
 
     bpy.utils.unregister_tool(qiegeTool)
     bpy.utils.unregister_tool(qiegeTool2)
-
-
-
-
-
 
     # # 创建一个新的集合
     # collection = bpy.data.collections.new("MyCollection")

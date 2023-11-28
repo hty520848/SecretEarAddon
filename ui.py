@@ -31,16 +31,19 @@ class huier_PT_damo(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.scale_x = 1.2
+        # layout.scale_x = 1.2
         # layout.use_property_split = True
         # layout.use_property_decorate = False
         # flow = layout.grid_flow(row_major=True, columns=0, even_columns=False, even_rows=False, align=True)
+        layout.separator()
         col = layout.column()
         col.prop(context.scene, 'laHouDU', text="蜡厚度")
+        col.separator()
         col.prop(context.scene, 'localLaHouDu', text="局部蜡厚度限制")
         col = layout.column()
         col.active = context.scene.localLaHouDu
         col.prop(context.scene, 'maxLaHouDu', text="最大蜡厚度")
+        col.separator()
         col.prop(context.scene, 'minLaHouDu', text="最小蜡厚度")
 
         # box = layout.box()
@@ -71,17 +74,35 @@ class CustomPanelLocalOrGlobalJiaHou(bpy.types.Panel):
         layout.separator()
         col = layout.column(align=True)
         col.prop(context.scene, 'bianKuangKuanDu', text="边框宽度")
-        # col = layout.column(align=True)
-        # col.operator("object.rightmouse", text="鼠标行为")
 
+# 局部或整体加厚面板2
+
+
+class CustomPanelLocalOrGlobalJiaHou2(bpy.types.Panel):
+    bl_label = "局部或整体加厚"
+    bl_idname = "CustomPanelLocalOrGlobalJiaHou2"
+    bl_space_type = "PROPERTIES"
+    bl_region_type = "WINDOW"
+    bl_context = "view_layer"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.separator()
+        col = layout.column(align=True)
+        col.prop(context.scene, 'pianYiZhi', text="偏移值")
+        layout.separator()
+        col = layout.column(align=True)
+        col.prop(context.scene, 'bianKuangKuanDu', text="边框宽度")
 
 # 点面切割
+
+
 class CustomPanelDianMianQieGe(bpy.types.Panel):
     bl_label = "选择工具"
     bl_idname = "CustomPanelDianMianQieGe"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "view_layer"
+    bl_context = "scene"
     bl_options = {'HIDE_HEADER'}
 
     def draw(self, context):
@@ -96,31 +117,41 @@ class CustomPanelPlantCut(bpy.types.Panel):
     bl_idname = "CustomPanelPlantCut"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "view_layer"
+    bl_context = "scene"
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.qieGeTypeEnum == 'OP1'
 
     def draw(self, context):
         layout = self.layout
         layout.separator()
+        # layout.active = (context.scene.qieGeTypeEnum == 'OP1')
         col = layout.column(align=True)
-        col.prop(context.scene, 'sheRuPianYi', text="舍入偏移")
+        col.prop(context.scene, 'qiegesheRuPianYi', text="舍入偏移")
         layout.separator()
 
 
 class CustomPanelStepCut(bpy.types.Panel):
-    bl_label = "step vent 阶梯状切割"
+    bl_label = "step vent阶梯状切割"
     bl_idname = "CustomPanelStepCut"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "view_layer"
+    bl_context = "scene"
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.qieGeTypeEnum == 'OP2'
 
     def draw(self, context):
         layout = self.layout
         layout.separator()
+        # layout.active = (context.scene.qieGeTypeEnum == 'OP2')
         col = layout.column(align=True)
-        col.prop(context.scene, 'waiBianYuanSheRuPianYi', text="外边缘平滑偏移")
+        col.prop(context.scene, 'qiegewaiBianYuan', text="外边缘平滑偏移")
         layout.separator()
         col = layout.column(align=True)
-        col.prop(context.scene, 'neiBianYuanSheRuPianYi', text="内边缘平滑偏移")
+        col.prop(context.scene, 'qiegeneiBianYuan', text="内边缘平滑偏移")
 
 
 # 创建模具
@@ -129,7 +160,7 @@ class CustomPaneChuangJianMuJu(bpy.types.Panel):
     bl_idname = "CustomPaneChuangJianMuJu"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "scene"
+    bl_context = "world"
     bl_options = {'HIDE_HEADER'}
 
     def draw(self, context):
@@ -153,7 +184,7 @@ class CustomPanelMuJuHouDu(bpy.types.Panel):
     bl_idname = "CustomPanelMuJuHouDu"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "scene"
+    bl_context = "world"
 
     def draw(self, context):
         layout = self.layout
@@ -199,7 +230,7 @@ class CustomPanelMianBanAndDianZiSheBei(bpy.types.Panel):
     bl_idname = "CustomPanelMianBanAndDianZiSheBei"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "scene"
+    bl_context = "world"
 
     def draw(self, context):
         layout = self.layout
@@ -234,7 +265,7 @@ class CustomPanelShangBuQieGeMianBan(bpy.types.Panel):
     bl_idname = "CustomPanelShangBuQieGeMianBan"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "scene"
+    bl_context = "world"
 
     def draw(self, context):
         layout = self.layout
@@ -251,7 +282,7 @@ class CustomPanelKongQiangMianBan(bpy.types.Panel):
     bl_idname = "CustomPanelKongQiangMianBan"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "scene"
+    bl_context = "world"
 
     def draw(self, context):
         layout = self.layout
@@ -271,7 +302,7 @@ class CustomPanelYingErMoCanShu(bpy.types.Panel):
     bl_idname = "CustomPanelYingErMoCanShu"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "scene"
+    bl_context = "world"
 
     def draw(self, context):
         layout = self.layout
@@ -294,7 +325,7 @@ class CustomPanelTongQiKong1(bpy.types.Panel):
     bl_idname = "CustomPanelTongFengKou"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "scene"
+    bl_context = "world"
 
     def draw(self, context):
         layout = self.layout
@@ -318,7 +349,7 @@ class CustomPanelChuanShenKong1(bpy.types.Panel):
     bl_idname = "CustomPanelChuanShenKong1"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "world"
+    bl_context = "collection"
     bl_options = {'HIDE_HEADER'}
 
     def draw(self, context):
@@ -336,7 +367,7 @@ class CustomPanelChuanShenKong2(bpy.types.Panel):
     bl_idname = "CustomPanelChuanShenKong2"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "world"
+    bl_context = "collection"
 
     def draw(self, context):
         layout = self.layout
@@ -357,7 +388,7 @@ class CustomPanelTongQiKong(bpy.types.Panel):
     bl_idname = "CustomPanelTongQiKong"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "collection"
+    bl_context = "object"
 
     def draw(self, context):
         layout = self.layout
@@ -372,7 +403,7 @@ class CustomPanelErMoFuJian(bpy.types.Panel):
     bl_idname = "CustomPanelErMoFuJian"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "object"
+    bl_context = "modifier"
 
     def draw(self, context):
         layout = self.layout
@@ -390,7 +421,7 @@ class CustomPanelNumber(bpy.types.Panel):
     bl_idname = "CustomPanelNumber"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "modifier"
+    bl_context = "particle"
 
     def draw(self, context):
         layout = self.layout
@@ -411,7 +442,7 @@ class CustomPanelRuanErMoHouDu(bpy.types.Panel):
     bl_idname = "CustomPanelRuanErMoHouDu"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "particle"
+    bl_context = "physics"
 
     def draw(self, context):
         layout = self.layout
@@ -432,7 +463,7 @@ class CustomPanelZhiCheng(bpy.types.Panel):
     bl_idname = "CustomPanelZhiCheng"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "physics"
+    bl_context = "constraint"
 
     def draw(self, context):
         layout = self.layout
@@ -450,7 +481,7 @@ class CustomPanelPaiQiKong(bpy.types.Panel):
     bl_idname = "CustomPanelPaiQiKong"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "constraint"
+    bl_context = "data"
 
     def draw(self, context):
         layout = self.layout
@@ -468,7 +499,7 @@ class CustomPanelHouQiDaMo(bpy.types.Panel):
     bl_idname = "CustomPanelHouQiDaMo"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "data"
+    bl_context = "material"
 
     def draw(self, context):
         layout = self.layout
@@ -828,6 +859,7 @@ _classes = [
     # VIEW3D_HT_header,
     huier_PT_damo,
     CustomPanelLocalOrGlobalJiaHou,
+    CustomPanelLocalOrGlobalJiaHou2,
     CustomPanelDianMianQieGe,
     CustomPanelPlantCut,
     CustomPanelStepCut,

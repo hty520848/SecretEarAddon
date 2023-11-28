@@ -23,27 +23,30 @@ def My_Properties():
 
     # 局部或整体加厚    偏移值，边框宽度
     bpy.types.Scene.pianYiZhi = bpy.props.FloatProperty(
-        name="pianYiZhi", update=localOrGlobalJiaHou)
+        name="pianYiZhi")
     bpy.types.Scene.bianKuangKuanDu = bpy.props.FloatProperty(
         name="bianKuangKuanDu", min=-1.0, max=1.0)
 
     # 点面切割属性
-    # TODO:面板UI以及默认值的问题
+    # TODO:面板UI
     bpy.types.Scene.qieGeTypeEnum = bpy.props.EnumProperty(
-        name="qieGeTypeEnum",
+        name="",
         description='this is option',
         items=[
             ('OP1', '平面切割', ''),
             ('OP2', '阶梯状切割', '')],
         update=qiegeenum
     )
-    bpy.types.Scene.sheRuPianYi = bpy.props.FloatProperty(
-        name="sheRuPianYi", min=-1.0, max=1.0)
-    bpy.types.Scene.waiBianYuanSheRuPianYi = bpy.props.FloatProperty(
-        name="waiBianYuanSheRuPianYi", min=-1.0, max=1.0, update = qiegesmooth, default = 0.4)
-    bpy.types.Scene.neiBianYuanSheRuPianYi = bpy.props.FloatProperty(
-        name="neiBianYuanSheRuPianYi", min=-1.0, max=1.0)
+    bpy.types.Scene.qiegesheRuPianYi = bpy.props.FloatProperty(
+        name="sheRuPianYi", min=-1.0, max=1.0,step=1)
+    
+    bpy.types.Scene.qiegewaiBianYuan = bpy.props.FloatProperty(
+        name="qiegewaiBianYuan", min=-1.0, max=1.0,
+        step=1, update=qiegesmooth, default=0.4)
+    bpy.types.Scene.qiegeneiBianYuan = bpy.props.FloatProperty(
+        name="qiegeneiBianYuan", min=-1.0, max=1.0,step=1)
 
+    #TODO:属性名字的问题
     # 创建模具属性
     bpy.types.Scene.muJuTypeEnum = bpy.props.EnumProperty(
         name="muJuTypeEnum",
@@ -273,19 +276,11 @@ def qiegeenum(self, context):
         quitCut()
         initPlane()
 
+
 def qiegesmooth(self, context):
-    bl_description = "选择平滑偏移值"
-    pianyi = bpy.context.scene.waiBianYuanSheRuPianYi
-    bpy.data.objects["myplane"].modifiers["smooth"].thickness = pianyi
-
-# 回调函数，根据绑定的属性值更改选中区域的厚度
-
-
-def localOrGlobalJiaHou(self, context):
-    bl_description = "所选区域增加的厚度"
-    thickness = context.scene.pianYiZhi
-    bpy.data.objects["Mesh"].modifiers["geometry_extract_solidify"].thickness = thickness
-
+    bl_description = "阶梯状平滑偏移值"
+    pianyi = bpy.context.scene.qiegewaiBianYuan
+    bpy.data.objects["myplane"].modifiers["smooth"].width = pianyi
 
 def register():
     My_Properties()
