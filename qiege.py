@@ -848,8 +848,10 @@ class Step_Cut(bpy.types.Operator):
     __left_mouse_down = False  # 按下右键未松开时，旋转圆环角度
     __now_mouse_x = None  # 鼠标移动时的位置
     __now_mouse_y = None
-    __initial_mouse_x = None  # 点击鼠标右键的初始位置
+    __initial_mouse_x = None  # 点击鼠标左键的初始位置
     __initial_mouse_y = None
+    region = None
+    space = None
 
     def invoke(self, context, event):
         op_cls = Step_Cut
@@ -866,6 +868,10 @@ class Step_Cut(bpy.types.Operator):
         context.window_manager.modal_handler_add(self)
         bpy.context.view_layer.objects.active = bpy.data.objects["右耳"]
         bpy.context.object.data.use_auto_smooth = True
+        op_cls.region, op_cls.space = get_region_and_space(
+        context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
+        )
+
         # override = getOverride()
         # with bpy.context.temp_override(**override):
         #     bpy.ops.wm.tool_set_by_id(name="builtin.select")
@@ -909,11 +915,11 @@ class Step_Cut(bpy.types.Operator):
                             active_obj.select_set(True)
                             mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
                             ray_orig = view3d_utils.region_2d_to_origin_3d(
-                                region,
-                                space.region_3d,
+                                op_cls.region,
+                                op_cls.space.region_3d,
                                 mv
                             )
-                            active_obj.loc = 
+                            active_obj.location = ray_orig
 
                 return {'RUNNING_MODAL'}
 
