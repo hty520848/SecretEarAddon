@@ -564,7 +564,7 @@ def initPlane():
     # 调用调整按钮
     override = getOverride("VIEW_3D")
     with bpy.context.temp_override(**override):
-        # bpy.ops.wm.tool_set_by_id(name="builtin.select")
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         bpy.ops.object.stepcut('INVOKE_DEFAULT')
 
 
@@ -863,9 +863,7 @@ class Step_Cut(bpy.types.Operator):
             context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
         )
 
-        # override = getOverride()
-        # with bpy.context.temp_override(**override):
-        #     bpy.ops.wm.tool_set_by_id(name="builtin.select")
+        bpy.ops.wm.tool_set_by_id(name="builtin.select")
         update_plane()
         return {'RUNNING_MODAL'}
 
@@ -879,49 +877,53 @@ class Step_Cut(bpy.types.Operator):
         global a
         if gcontext == 'SCENE':
 
+            # 鼠标在圆球上
             if (a == 2 and is_mouse_on_which_object(context, event) != 5):
-                # 鼠标在圆球上
+                if (is_changed_stepcut(context, event)):
+                    print('changed')
+                    bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                
                 if (event.type == 'TIMER'):
                     update_plane()
                     return {'RUNNING_MODAL'}
+                # if (is_mouse_on_which_object(context, event) == 1):
+                #     bpy.ops.object.select_all(action='DESELECT')
+                #     bpy.context.view_layer.objects.active = bpy.data.objects["mysphere1"]
+                #     active_obj = bpy.context.active_object
+                #     active_obj.select_set(True)
 
-                if (is_mouse_on_which_object(context, event) == 1):
-                    bpy.ops.object.select_all(action='DESELECT')
-                    bpy.context.view_layer.objects.active = bpy.data.objects["mysphere1"]
-                    active_obj = bpy.context.active_object
-                    active_obj.select_set(True)
 
-                elif (is_mouse_on_which_object(context, event) == 2):
-                    bpy.ops.object.select_all(action='DESELECT')
-                    bpy.context.view_layer.objects.active = bpy.data.objects["mysphere2"]
-                    active_obj = bpy.context.active_object
-                    active_obj.select_set(True)
+                # elif (is_mouse_on_which_object(context, event) == 2):
+                #     bpy.ops.object.select_all(action='DESELECT')
+                #     bpy.context.view_layer.objects.active = bpy.data.objects["mysphere2"]
+                #     active_obj = bpy.context.active_object
+                #     active_obj.select_set(True)
 
-                elif (is_mouse_on_which_object(context, event) == 3):
-                    bpy.ops.object.select_all(action='DESELECT')
-                    bpy.context.view_layer.objects.active = bpy.data.objects["mysphere3"]
-                    active_obj = bpy.context.active_object
-                    active_obj.select_set(True)
+                # elif (is_mouse_on_which_object(context, event) == 3):
+                #     bpy.ops.object.select_all(action='DESELECT')
+                #     bpy.context.view_layer.objects.active = bpy.data.objects["mysphere3"]
+                #     active_obj = bpy.context.active_object
+                #     active_obj.select_set(True)
 
-                elif (is_mouse_on_which_object(context, event) == 4):
-                    bpy.ops.object.select_all(action='DESELECT')
-                    bpy.context.view_layer.objects.active = bpy.data.objects["mysphere4"]
-                    active_obj = bpy.context.active_object
-                    active_obj.select_set(True)
+                # elif (is_mouse_on_which_object(context, event) == 4):
+                #     bpy.ops.object.select_all(action='DESELECT')
+                #     bpy.context.view_layer.objects.active = bpy.data.objects["mysphere4"]
+                #     active_obj = bpy.context.active_object
+                #     active_obj.select_set(True)
 
-                if event.type == 'LEFTMOUSE':
-                    if event.value == 'PRESS':
-                        op_cls.__left_mouse_down = True
-                    elif event.value == 'RELEASE':
-                        op_cls.__left_mouse_down = False
-                    return {'RUNNING_MODAL'}
+                # if event.type == 'LEFTMOUSE':
+                #     if event.value == 'PRESS':
+                #         op_cls.__left_mouse_down = True
+                #     elif event.value == 'RELEASE':
+                #         op_cls.__left_mouse_down = False
+                #     return {'RUNNING_MODAL'}
 
-                elif event.type == 'MOUSEMOVE':
-                    if op_cls.__left_mouse_down:
-                        if (cal_co(context, event) != -1):
-                            bpy.context.active_object.location = cal_co(
-                                context, event)
-                        return {'RUNNING_MODAL'}
+                # elif event.type == 'MOUSEMOVE':
+                #     if op_cls.__left_mouse_down:
+                #         if (cal_co(context, event) != -1):
+                #             bpy.context.active_object.location = cal_co(
+                #                 context, event)
+                #         return {'RUNNING_MODAL'}
 
                 return {'PASS_THROUGH'}
 
@@ -929,6 +931,9 @@ class Step_Cut(bpy.types.Operator):
                 context.window_manager.event_timer_remove(op_cls.__timer)
                 op_cls.__timer = None
                 return {'FINISHED'}
+            
+            elif (is_changed_stepcut(context, event)):
+                bpy.ops.wm.tool_set_by_id(name="builtin.select")
 
             return {'PASS_THROUGH'}
 

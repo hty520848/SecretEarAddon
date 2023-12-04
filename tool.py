@@ -5,6 +5,11 @@ import bpy_extras
 from bpy_extras import view3d_utils
 import bmesh
 
+prev_on_object = False
+
+prev_on_object_stepcut = 5
+
+
 font_info = {
     "font_id": 0,
     "handler": None,
@@ -326,3 +331,14 @@ def cal_co(context, event):
         return co
     else:
         return -1
+
+def is_changed_stepcut(context, event):
+   
+    curr_on_object_stepcut = is_mouse_on_which_object(context, event)  # 当前鼠标在哪个物体上
+    global prev_on_object_stepcut  # 之前鼠标在那个物体上
+
+    if (curr_on_object_stepcut != prev_on_object_stepcut):
+        prev_on_object_stepcut = curr_on_object_stepcut
+        return True
+    else:
+        return False
