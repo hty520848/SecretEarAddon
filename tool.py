@@ -223,9 +223,9 @@ def is_mouse_on_which_object(context, event):
             _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
 
             if fidx is not None:
-                is_on_object = 1  
+                is_on_object = 1
                 return is_on_object
-    
+
     mwi2 = sphere2.matrix_world.inverted()
     mwi_start2 = mwi2 @ start
     mwi_end2 = mwi2 @ end
@@ -261,7 +261,7 @@ def is_mouse_on_which_object(context, event):
             if fidx is not None:
                 is_on_object = 3
                 return is_on_object
-            
+
     mwi4 = sphere4.matrix_world.inverted()
     mwi_start4 = mwi4 @ start
     mwi_end4 = mwi4 @ end
@@ -281,3 +281,48 @@ def is_mouse_on_which_object(context, event):
                 return is_on_object
 
     return is_on_object
+
+
+def cal_co(context, event):
+
+    active_obj = bpy.data.objects['右耳.001']
+
+    # 获取鼠标光标的区域坐标
+    mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
+
+    # 获取信息和空间信息
+    region, space = get_region_and_space(
+        context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
+    )
+
+    ray_dir = view3d_utils.region_2d_to_vector_3d(
+        region,
+        space.region_3d,
+        mv
+    )
+    ray_orig = view3d_utils.region_2d_to_origin_3d(
+        region,
+        space.region_3d,
+        mv
+    )
+
+    start = ray_orig
+    end = ray_orig + ray_dir
+
+    # 确定光线和对象的相交
+    mwi = active_obj.matrix_world.inverted()
+    mwi_start = mwi @ start
+    mwi_end = mwi @ end
+    mwi_dir = mwi_end - mwi_start
+
+    mesh = active_obj.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
+
+    co, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
+
+    if fidx is not None:
+        return co
+    else:
+        return -1

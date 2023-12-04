@@ -343,7 +343,7 @@ def initCircle():
 
     smooth()
 
-    override = getOverride()
+    override = getOverride("VIEW_3D")
     with bpy.context.temp_override(**override):
         bpy.ops.object.circlecut('INVOKE_DEFAULT')
 
@@ -371,7 +371,7 @@ def new_sphere(name, loc):
     bm = bmesh.from_edit_mesh(obj.data)
 
     # 设置圆球的参数
-    radius = 0.1  # 半径
+    radius = 0.15  # 半径
     segments = 32  # 分段数
 
     # 在指定位置生成圆球
@@ -562,7 +562,7 @@ def initPlane():
     # bool_modifier2.mode = 'VOXEL'
 
     # 调用调整按钮
-    override = getOverride()
+    override = getOverride("VIEW_3D")
     with bpy.context.temp_override(**override):
         # bpy.ops.wm.tool_set_by_id(name="builtin.select")
         bpy.ops.object.stepcut('INVOKE_DEFAULT')
@@ -625,9 +625,10 @@ def scaleCircle():
 # 获取VIEW_3D区域的上下文
 
 
-def getOverride():
+def getOverride(area):
     # change this to use the correct Area Type context you want to process in
-    area_type = 'VIEW_3D'
+    # area_type = 'VIEW_3D'
+    area_type = area
     areas = [
         area for area in bpy.context.window.screen.areas if area.type == area_type]
 
@@ -845,13 +846,7 @@ class Step_Cut(bpy.types.Operator):
 
     __timer = None
 
-    __left_mouse_down = False  # 按下右键未松开时，旋转圆环角度
-    __now_mouse_x = None  # 鼠标移动时的位置
-    __now_mouse_y = None
-    __initial_mouse_x = None  # 点击鼠标左键的初始位置
-    __initial_mouse_y = None
-    region = None
-    space = None
+    __left_mouse_down = False
 
     def invoke(self, context, event):
         op_cls = Step_Cut
@@ -859,17 +854,13 @@ class Step_Cut(bpy.types.Operator):
         global a
         a = 2
         op_cls.__left_mouse_down = False
-        op_cls.__now_mouse_x = None
-        op_cls.__now_mouse_y = None
-        op_cls.__initial_mouse_x = None
-        op_cls.__initial_mouse_y = None
         op_cls.__timer = context.window_manager.event_timer_add(
             0.5, window=context.window)
         context.window_manager.modal_handler_add(self)
         bpy.context.view_layer.objects.active = bpy.data.objects["右耳"]
         bpy.context.object.data.use_auto_smooth = True
         op_cls.region, op_cls.space = get_region_and_space(
-        context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
+            context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
         )
 
         # override = getOverride()
@@ -888,40 +879,51 @@ class Step_Cut(bpy.types.Operator):
         global a
         if gcontext == 'SCENE':
 
-            # 鼠标在圆球上
             if (a == 2 and is_mouse_on_which_object(context, event) != 5):
-                if event.type == 'TIMER':
+                # 鼠标在圆球上
+                if (event.type == 'TIMER'):
                     update_plane()
                     return {'RUNNING_MODAL'}
+
+                if (is_mouse_on_which_object(context, event) == 1):
+                    bpy.ops.object.select_all(action='DESELECT')
+                    bpy.context.view_layer.objects.active = bpy.data.objects["mysphere1"]
+                    active_obj = bpy.context.active_object
+                    active_obj.select_set(True)
+
+                elif (is_mouse_on_which_object(context, event) == 2):
+                    bpy.ops.object.select_all(action='DESELECT')
+                    bpy.context.view_layer.objects.active = bpy.data.objects["mysphere2"]
+                    active_obj = bpy.context.active_object
+                    active_obj.select_set(True)
+
+                elif (is_mouse_on_which_object(context, event) == 3):
+                    bpy.ops.object.select_all(action='DESELECT')
+                    bpy.context.view_layer.objects.active = bpy.data.objects["mysphere3"]
+                    active_obj = bpy.context.active_object
+                    active_obj.select_set(True)
+
+                elif (is_mouse_on_which_object(context, event) == 4):
+                    bpy.ops.object.select_all(action='DESELECT')
+                    bpy.context.view_layer.objects.active = bpy.data.objects["mysphere4"]
+                    active_obj = bpy.context.active_object
+                    active_obj.select_set(True)
 
                 if event.type == 'LEFTMOUSE':
                     if event.value == 'PRESS':
                         op_cls.__left_mouse_down = True
-                        op_cls.__initial_mouse_x = event.mouse_region_x
-                        op_cls.__initial_mouse_y = event.mouse_region_y
-                    if event.value == 'Release':
+                    elif event.value == 'RELEASE':
                         op_cls.__left_mouse_down = False
-                        op_cls.__initial_mouse_x = None
-                        op_cls.__initial_mouse_y = None
-
                     return {'RUNNING_MODAL'}
 
                 elif event.type == 'MOUSEMOVE':
                     if op_cls.__left_mouse_down:
-                        if(is_mouse_on_which_object(context, event) == 1):
-                            bpy.ops.object.select_all(action='DESELECT')
-                            bpy.context.view_layer.objects.active = bpy.data.objects["mysphere1"]
-                            active_obj = bpy.context.active_object
-                            active_obj.select_set(True)
-                            mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
-                            ray_orig = view3d_utils.region_2d_to_origin_3d(
-                                op_cls.region,
-                                op_cls.space.region_3d,
-                                mv
-                            )
-                            active_obj.location = ray_orig
+                        if (cal_co(context, event) != -1):
+                            bpy.context.active_object.location = cal_co(
+                                context, event)
+                        return {'RUNNING_MODAL'}
 
-                return {'RUNNING_MODAL'}
+                return {'PASS_THROUGH'}
 
             elif (a != 2):
                 context.window_manager.event_timer_remove(op_cls.__timer)
@@ -1067,7 +1069,7 @@ def msgbus_callback(*args):
     global gcontext
     global flag
     global a
-    current_tab = bpy.context.screen.areas[1].spaces.active.context
+    current_tab = bpy.context.screen.areas[0].spaces.active.context
     gcontext = current_tab
     if (current_tab == 'SCENE'):
         initialModelColor()
@@ -1142,4 +1144,3 @@ def unregister():
     # # 如果集合存在，则删除它
     # if collection:
     #     bpy.data.collections.remove(collection)
-

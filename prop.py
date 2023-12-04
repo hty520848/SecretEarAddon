@@ -28,7 +28,6 @@ def My_Properties():
         name="bianKuangKuanDu", min=-1.0, max=1.0)
 
     # 点面切割属性
-    # TODO:面板UI
     bpy.types.Scene.qieGeTypeEnum = bpy.props.EnumProperty(
         name="",
         description='this is option',
@@ -38,15 +37,15 @@ def My_Properties():
         update=qiegeenum
     )
     bpy.types.Scene.qiegesheRuPianYi = bpy.props.FloatProperty(
-        name="sheRuPianYi", min=-1.0, max=1.0,step=1)
-    
+        name="sheRuPianYi", min=-1.0, max=1.0, step=1)
+
     bpy.types.Scene.qiegewaiBianYuan = bpy.props.FloatProperty(
         name="qiegewaiBianYuan", min=-1.0, max=1.0,
         step=1, update=qiegesmooth, default=0.4)
     bpy.types.Scene.qiegeneiBianYuan = bpy.props.FloatProperty(
-        name="qiegeneiBianYuan", min=-1.0, max=1.0,step=1)
+        name="qiegeneiBianYuan", min=-1.0, max=1.0, step=1, update=qiegesmooth2)
 
-    #TODO:属性名字的问题
+    # TODO:属性名字的问题
     # 创建模具属性
     bpy.types.Scene.muJuTypeEnum = bpy.props.EnumProperty(
         name="muJuTypeEnum",
@@ -281,6 +280,21 @@ def qiegesmooth(self, context):
     bl_description = "阶梯状平滑偏移值"
     pianyi = bpy.context.scene.qiegewaiBianYuan
     bpy.data.objects["myplane"].modifiers["smooth"].width = pianyi
+
+
+def qiegesmooth2(self, context):
+    bl_description = "阶梯状平滑偏移值2"
+    bm = bmesh.new()
+    bm.from_mesh(bpy.data.objects["右耳"].data)
+    bm.faces.ensure_lookup_table()
+    bm.faces[-33].select = True
+    mesh = bpy.data.meshes.new("MyMesh")
+    obj = bpy.data.objects.new('test', mesh)
+    bm.to_mesh(obj.data)
+    scene = bpy.context.scene
+    scene.collection.objects.link(obj)
+    bm.free()
+
 
 def register():
     My_Properties()
