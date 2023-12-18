@@ -1,31 +1,45 @@
 import bpy
+import blf
 from .damo import *
+from .jiahou import *
 from .qiege import *
 
+font_info = {
+    "font_id": 0,
+    "handler": None,
+}
 
 flag = True
 
 
 def My_Properties():
+    # 全局变量,多个模块的文件共享该全局变量,各个模式的按钮都会有一个var值,当该按钮处于其对应的值时,会运行其操作符,不再其对应值时,会自动结束该操作符
+    # 默认var值为0,各个操作符都未启动
+    # 打磨模块:       打磨加厚按钮: 1        打磨打薄按钮:  2      打磨平滑按钮:  3       打磨重置按钮:  4
+    # 局部加厚模块:   局部加厚重置: 9        局部加厚扩大区域: 5       局部加厚缩小区域: 6        局部加厚加厚: 7    局部加厚提交: 8
+    # 切割模块:由于切割模式在初始化时会自动进入切割模态,退出时自动退出切割模块,故切割模块未使用该变量
+    bpy.types.Scene.var = bpy.props.IntProperty(
+        name="var", default=0, description="每个模块的按钮都会对应一个var值,用于结束按钮的modal"
+    )
 
     # 打磨操作属性      蜡厚度，局部蜡厚度限制，最大蜡厚度，最小蜡厚度
     bpy.types.Scene.laHouDU = bpy.props.FloatProperty(
-        name="laHouDU", min=-2.0, max=2.0, step=1,
+        name="laHouDU", min=-2.0, max=2.0, step=5,
         description="调整蜡厚度的大小", update=Houdu)
     bpy.types.Scene.localLaHouDu = bpy.props.BoolProperty(
-        name="localLaHouDu", default=True)
+        name="localLaHouDu", default=False)
     bpy.types.Scene.maxLaHouDu = bpy.props.FloatProperty(
         name="maxLaHouDu", min=-1.0, max=1.0, step=1, description="最大蜡厚度的值")
     bpy.types.Scene.minLaHouDu = bpy.props.FloatProperty(
         name="minLaHouDu", min=-1.0, max=1.0, step=1, description="最小蜡厚度的值")
 
-    # bpyabcdefghijklmnopqrstuvwxyzuvwuvwuvwxyz
-
     # 局部或整体加厚    偏移值，边框宽度
-    bpy.types.Scene.pianYiZhi = bpy.props.FloatProperty(
-        name="pianYiZhi")
-    bpy.types.Scene.bianKuangKuanDu = bpy.props.FloatProperty(
-        name="bianKuangKuanDu", min=-1.0, max=1.0)
+    bpy.types.Scene.localThicking_offset = bpy.props.FloatProperty(
+        name="localThicking_offset", min=0, max=3.0, default=0.8, update=LocalThickeningOffsetUpdate)
+    bpy.types.Scene.localThicking_borderWidth = bpy.props.FloatProperty(
+        name="localThicking_borderWidth", min=0, max=3.0, default=0.8, update=LocalThickeningBorderWidthUpdate)
+    bpy.types.Scene.is_thickening_completed = bpy.props.BoolProperty(
+        name="is_thickening_completed")  # 防止局部加厚中的参数更新过快使得加厚参数调用的过于频繁,使得物体发生形变
 
     # 点面切割属性
     bpy.types.Scene.qieGeTypeEnum = bpy.props.EnumProperty(
@@ -37,15 +51,14 @@ def My_Properties():
         update=qiegeenum
     )
     bpy.types.Scene.qiegesheRuPianYi = bpy.props.FloatProperty(
-        name="sheRuPianYi", min=-1.0, max=1.0, step=1)
+        name="sheRuPianYi", min=0.0, max=1.0, step=1, default=0.5, update=sheru)
 
     bpy.types.Scene.qiegewaiBianYuan = bpy.props.FloatProperty(
-        name="qiegewaiBianYuan", min=-1.0, max=1.0,
-        step=1, update=qiegesmooth, default=0.4)
+        name="qiegewaiBianYuan", min=0.1, max=3,
+        step=10)
     bpy.types.Scene.qiegeneiBianYuan = bpy.props.FloatProperty(
-        name="qiegeneiBianYuan", min=-1.0, max=1.0, step=1, update=qiegesmooth2)
+        name="qiegeneiBianYuan", min=0.1, max=3, step=10, update=qiegesmooth2, default=0.4)
 
-    # TODO:属性名字的问题
     # 创建模具属性
     bpy.types.Scene.muJuTypeEnum = bpy.props.EnumProperty(
         name="muJuTypeEnum",
@@ -180,6 +193,8 @@ def My_Properties():
     )
 
     # 编号
+    bpy.types.Scene.labelText = bpy.props.StringProperty(
+        name="labelText", description="Enter label text here")
     bpy.types.Scene.fontSize = bpy.props.FloatProperty(
         name="fontSize", min=-1.0, max=1.0)
     bpy.types.Scene.deep = bpy.props.FloatProperty(
@@ -189,7 +204,7 @@ def My_Properties():
         description='编号的风格',
         items=[
             ('OP1', '内嵌', ''),
-            ('OP2', '外凸', ''),]
+            ('OP2', '外凸', ''), ]
     )
 
     # 软耳模厚度       厚度类型    软耳模厚度
@@ -200,7 +215,7 @@ def My_Properties():
         description='',
         items=[
             ('OP1', '偏移曲面', ''),
-            ('OP2', '无', ''),]
+            ('OP2', '无', ''), ]
     )
 
     # 支撑        支撑类型     偏移
@@ -211,7 +226,7 @@ def My_Properties():
         description='',
         items=[
             ('OP1', '软耳模支撑', ''),
-            ('OP2', '硬耳膜支撑', ''),]
+            ('OP2', '硬耳膜支撑', ''), ]
     )
 
     # 排气孔        排气孔类型     偏移
@@ -221,12 +236,12 @@ def My_Properties():
         name="paiQiKongTypeEnum",
         description='',
         items=[
-            ('OP1', '排气孔', ''),]
+            ('OP1', '排气孔', ''), ]
     )
 
 
 # 添加厚度修改器
-def modify(self, context, thinckness):
+def modify(self, context, thickness):
     global flag
     context1 = bpy.context.space_data.context
     if flag == True and context1 == 'RENDER':
@@ -237,11 +252,9 @@ def modify(self, context, thinckness):
         md.use_quality_normals = True
         md.offset = 1
         md.thickness = context.scene.laHouDU
-        # context.window_manager.modal_handler_add(self)
-        # MyHandleClass.add_handler(draw_callback_px,(None,context.scene.laHouDU))
         return {'RUNNING_MODAL'}
     else:
-        if thinckness < 0:
+        if thickness < 0:
             name = bpy.context.active_object.name
             md = bpy.data.objects[name].modifiers["jiahou"]
             md.use_flip_normals = True
@@ -250,7 +263,6 @@ def modify(self, context, thinckness):
             name = bpy.context.active_object.name
             md = bpy.data.objects[name].modifiers["jiahou"]
             md.use_flip_normals = False
-        # MyHandleClass.remove_handler()
         return {'FINISHED'}
 
 
@@ -265,6 +277,11 @@ def Houdu(self, context):
     # MyHandleClass.add_handler(draw_callback_px, (None, thickness))
 
 
+def sheru(self, context):
+    bl_description = ""
+    smooth()
+
+
 def qiegeenum(self, context):
     bl_description = "选择切割方式"
     enum = bpy.context.scene.qieGeTypeEnum
@@ -276,24 +293,51 @@ def qiegeenum(self, context):
         initPlane()
 
 
-def qiegesmooth(self, context):
-    bl_description = "阶梯状平滑偏移值"
-    pianyi = bpy.context.scene.qiegewaiBianYuan
+def qiegesmooth2(self, context):
+    bl_description = "阶梯切割平滑偏移值2"
+    pianyi = bpy.context.scene.qiegeneiBianYuan
     bpy.data.objects["myplane"].modifiers["smooth"].width = pianyi
 
 
-def qiegesmooth2(self, context):
-    bl_description = "阶梯状平滑偏移值2"
-    bm = bmesh.new()
-    bm.from_mesh(bpy.data.objects["右耳"].data)
-    bm.faces.ensure_lookup_table()
-    bm.faces[-33].select = True
-    mesh = bpy.data.meshes.new("MyMesh")
-    obj = bpy.data.objects.new('test', mesh)
-    bm.to_mesh(obj.data)
-    scene = bpy.context.scene
-    scene.collection.objects.link(obj)
-    bm.free()
+# 回调函数，根据绑定的属性值更改选中区域的厚度
+
+
+def LocalThickeningOffsetUpdate(self, context):
+    bl_description = "更新选中区域中加厚的厚度"
+
+    offset = context.scene.localThicking_offset  # 获取局部加厚面板中的偏移量参数
+    borderWidth = context.scene.localThicking_borderWidth  # 获取局部加厚面板中的边界宽度参数
+    is_thickening_completed = context.scene.is_thickening_completed  # 局部加厚是否已经完成,防止参数更新过快使得模型加厚发生形变
+
+    if (not is_thickening_completed):
+        if (True):  # TODO   当处于加厚未提交时,参数发生变化才会调用加厚函数
+
+            # 根据更新后的参数重新进行加厚
+            context.scene.is_thickening_completed = True
+            thickening_offset_borderwidth(0, 0, True)
+            thickening_offset_borderwidth(offset, borderWidth, False)
+            context.scene.is_thickening_completed = False
+    else:
+        pass
+
+
+def LocalThickeningBorderWidthUpdate(self, context):
+    bl_description = "更新选中区域中的过渡区域"
+
+    offset = context.scene.localThicking_offset  # 获取局部加厚面板中的偏移量参数
+    borderWidth = context.scene.localThicking_borderWidth  # 获取局部加厚面板中的边界宽度参数
+    is_thickening_completed = context.scene.is_thickening_completed  # 局部加厚是否已经完成,防止参数更新过快使得模型加厚发生形变
+
+    if (not is_thickening_completed):
+        if (True):  # TODO   当处于加厚未提交时,参数发生变化才会调用加厚函数
+            # 根据更新后的参数重新进行加厚
+            context.scene.is_thickening_completed = True
+            thickening_offset_borderwidth(0, 0, True)
+            thickening_offset_borderwidth(offset, borderWidth, False)
+            context.scene.is_thickening_completed = False
+
+    else:
+        pass
 
 
 def register():

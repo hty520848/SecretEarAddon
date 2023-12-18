@@ -21,7 +21,7 @@ from bpy_extras import view3d_utils
 
 
 # 打磨面板
-class huier_PT_damo(bpy.types.Panel):
+class HUIER_PT_damo(bpy.types.Panel):
 
     bl_label = "耳样处理"
     bl_idname = "HUIER_PT_damo"
@@ -45,7 +45,8 @@ class huier_PT_damo(bpy.types.Panel):
         col.prop(context.scene, 'maxLaHouDu', text="最大蜡厚度")
         col.separator()
         col.prop(context.scene, 'minLaHouDu', text="最小蜡厚度")
-
+        # col.operator("screen.userpref_show",
+        #               text="Preferences...", icon='PREFERENCES')
         # box = layout.box()
         # box.prop(context.scene, 'laHouDU', text="蜡厚度")
         # lahoudu(self,context,box)
@@ -59,28 +60,29 @@ class huier_PT_damo(bpy.types.Panel):
 
 
 # 局部或整体加厚面板
-class CustomPanelLocalOrGlobalJiaHou(bpy.types.Panel):
-    bl_label = "局部或整体加厚"
-    bl_idname = "CustomPanelLocalOrGlobalJiaHou"
-    bl_space_type = "PROPERTIES"
-    bl_region_type = "WINDOW"
-    bl_context = "output"
 
+
+class HUIER_PT_LocalOrGlobalJiaHou(bpy.types.Panel):
+    bl_label = "局部或整体加厚"
+    bl_idname = "HUIER_PT_LocalOrGlobalJiaHou"
+    bl_space_type  =  "PROPERTIES"
+    bl_region_type  =  "WINDOW"
+    bl_context="output"
     def draw(self, context):
         layout = self.layout
         layout.separator()
         col = layout.column(align=True)
-        col.prop(context.scene, 'pianYiZhi', text="偏移值")
+        col.prop(context.scene, 'localThicking_offset', text="偏移值")
         layout.separator()
         col = layout.column(align=True)
-        col.prop(context.scene, 'bianKuangKuanDu', text="边框宽度")
+        col.prop(context.scene, 'localThicking_borderWidth', text="边框宽度")
 
 # 局部或整体加厚面板2
 
 
-class CustomPanelLocalOrGlobalJiaHou2(bpy.types.Panel):
+class HUIER_PT_LocalOrGlobalJiaHou2(bpy.types.Panel):
     bl_label = "局部或整体加厚"
-    bl_idname = "CustomPanelLocalOrGlobalJiaHou2"
+    bl_idname = "HUIER_PT_LocalOrGlobalJiaHou2"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "view_layer"
@@ -89,17 +91,17 @@ class CustomPanelLocalOrGlobalJiaHou2(bpy.types.Panel):
         layout = self.layout
         layout.separator()
         col = layout.column(align=True)
-        col.prop(context.scene, 'pianYiZhi', text="偏移值")
+        col.prop(context.scene, 'localThicking_offset', text="偏移值")
         layout.separator()
         col = layout.column(align=True)
-        col.prop(context.scene, 'bianKuangKuanDu', text="边框宽度")
+        col.prop(context.scene, 'localThicking_borderWidth', text="边框宽度")
 
 # 点面切割
 
 
-class CustomPanelDianMianQieGe(bpy.types.Panel):
+class HUIER_PT_DianMianQieGe(bpy.types.Panel):
     bl_label = "选择工具"
-    bl_idname = "CustomPanelDianMianQieGe"
+    bl_idname = "HUIER_PT_DianMianQieGe"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "scene"
@@ -112,9 +114,9 @@ class CustomPanelDianMianQieGe(bpy.types.Panel):
         col.prop(context.scene, 'qieGeTypeEnum', text="选择工具")
 
 
-class CustomPanelPlantCut(bpy.types.Panel):
+class HUIER_PT_PlantCut(bpy.types.Panel):
     bl_label = "plant cut平面切割"
-    bl_idname = "CustomPanelPlantCut"
+    bl_idname = "HUIER_PT_PlantCut"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "scene"
@@ -132,9 +134,9 @@ class CustomPanelPlantCut(bpy.types.Panel):
         layout.separator()
 
 
-class CustomPanelStepCut(bpy.types.Panel):
+class HUIER_PT_StepCut(bpy.types.Panel):
     bl_label = "step vent阶梯状切割"
-    bl_idname = "CustomPanelStepCut"
+    bl_idname = "HUIER_PT_StepCut"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "scene"
@@ -155,9 +157,9 @@ class CustomPanelStepCut(bpy.types.Panel):
 
 
 # 创建模具
-class CustomPaneChuangJianMuJu(bpy.types.Panel):
+class HUIER_PT_ChuangJianMuJu(bpy.types.Panel):
     bl_label = "创建模具"
-    bl_idname = "CustomPaneChuangJianMuJu"
+    bl_idname = "HUIER_PT_ChuangJianMuJu"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
@@ -179,9 +181,9 @@ class CustomPaneChuangJianMuJu(bpy.types.Panel):
         col.prop(context.scene, 'neiBianYuanSheRuPianYi', text="内舍入偏移")
 
 
-class CustomPanelMuJuHouDu(bpy.types.Panel):
+class HUIER_PT_MuJuHouDu(bpy.types.Panel):
     bl_label = "模具厚度"
-    bl_idname = "CustomPanelMuJuHouDu"
+    bl_idname = "HUIER_PT_MuJuHouDu"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
@@ -196,12 +198,12 @@ class CustomPanelMuJuHouDu(bpy.types.Panel):
         col.prop(context.scene, 'jiHuoBianYuanHouDu', text="激活边缘厚度")
 
 
-class CustomPanelBianYuanHouDu(bpy.types.Panel):
+class HUIER_PT_BianYuanHouDu(bpy.types.Panel):
     bl_label = "边缘厚度"
-    bl_idname = "CustomPanelBianYuanHouDu"
+    bl_idname = "HUIER_PT_BianYuanHouDu"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_parent_id = "CustomPanelMuJuHouDu"
+    bl_parent_id = "HUIER_PT_MuJuHouDu"
 
     def draw(self, context):
         layout = self.layout
@@ -225,9 +227,9 @@ class CustomPanelBianYuanHouDu(bpy.types.Panel):
         col.prop(context.scene, 'neiBuHouDu', text="内部厚度")
 
 
-class CustomPanelMianBanAndDianZiSheBei(bpy.types.Panel):
+class HUIER_PT_MianBanAndDianZiSheBei(bpy.types.Panel):
     bl_label = "面板和电子设备"
-    bl_idname = "CustomPanelMianBanAndDianZiSheBei"
+    bl_idname = "HUIER_PT_MianBanAndDianZiSheBei"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
@@ -260,9 +262,9 @@ class CustomPanelMianBanAndDianZiSheBei(bpy.types.Panel):
         col.prop(context.scene, 'xiaSheRuYinZi', text="下舍入因子")
 
 
-class CustomPanelShangBuQieGeMianBan(bpy.types.Panel):
+class HUIER_PT_ShangBuQieGeMianBan(bpy.types.Panel):
     bl_label = "上部切割面板"
-    bl_idname = "CustomPanelShangBuQieGeMianBan"
+    bl_idname = "HUIER_PT_ShangBuQieGeMianBan"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
@@ -277,9 +279,9 @@ class CustomPanelShangBuQieGeMianBan(bpy.types.Panel):
         col.prop(context.scene, 'shangBuQieGeMianBanPianYi', text="上部切割面板偏移")
 
 
-class CustomPanelKongQiangMianBan(bpy.types.Panel):
+class HUIER_PT_KongQiangMianBan(bpy.types.Panel):
     bl_label = "空腔面板"
-    bl_idname = "CustomPanelKongQiangMianBan"
+    bl_idname = "HUIER_PT_KongQiangMianBan"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
@@ -297,9 +299,9 @@ class CustomPanelKongQiangMianBan(bpy.types.Panel):
         col.prop(context.scene, 'ShangBuQieGeBanPianYi', text="上部切割板偏移")
 
 
-class CustomPanelYingErMoCanShu(bpy.types.Panel):
+class HUIER_PT_YingErMoCanShu(bpy.types.Panel):
     bl_label = "硬耳膜参数"
-    bl_idname = "CustomPanelYingErMoCanShu"
+    bl_idname = "HUIER_PT_YingErMoCanShu"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
@@ -320,9 +322,9 @@ class CustomPanelYingErMoCanShu(bpy.types.Panel):
         col.prop(context.scene, 'yingErMoSheRuPianYi', text="舍入偏移")
 
 
-class CustomPanelTongQiKong1(bpy.types.Panel):
+class HUIER_PT_TongQiKong1(bpy.types.Panel):
     bl_label = "通气孔"
-    bl_idname = "CustomPanelTongFengKou"
+    bl_idname = "HUIER_PT_TongFengKou"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
@@ -344,9 +346,9 @@ class CustomPanelTongQiKong1(bpy.types.Panel):
 
 
 # 传声孔
-class CustomPanelChuanShenKong1(bpy.types.Panel):
+class HUIER_PT_ChuanShenKong1(bpy.types.Panel):
     bl_label = "传声孔"
-    bl_idname = "CustomPanelChuanShenKong1"
+    bl_idname = "HUIER_PT_ChuanShenKong1"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "collection"
@@ -362,9 +364,9 @@ class CustomPanelChuanShenKong1(bpy.types.Panel):
         col.prop(context.scene, 'chuanShenGuanDaoZhiJing', text="管道直径")
 
 
-class CustomPanelChuanShenKong2(bpy.types.Panel):
+class HUIER_PT_ChuanShenKong2(bpy.types.Panel):
     bl_label = "faceplate opening面板开口"
-    bl_idname = "CustomPanelChuanShenKong2"
+    bl_idname = "HUIER_PT_ChuanShenKong2"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "collection"
@@ -383,9 +385,9 @@ class CustomPanelChuanShenKong2(bpy.types.Panel):
 
 
 # 通气孔
-class CustomPanelTongQiKong(bpy.types.Panel):
+class HUIER_PT_TongQiKong(bpy.types.Panel):
     bl_label = "通气孔"
-    bl_idname = "CustomPanelTongQiKong"
+    bl_idname = "HUIER_PT_TongQiKong"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "object"
@@ -398,9 +400,9 @@ class CustomPanelTongQiKong(bpy.types.Panel):
 
 
 # 耳膜附件
-class CustomPanelErMoFuJian(bpy.types.Panel):
+class HUIER_PT_ErMoFuJian(bpy.types.Panel):
     bl_label = "耳膜附件"
-    bl_idname = "CustomPanelErMoFuJian"
+    bl_idname = "HUIER_PT_ErMoFuJian"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "modifier"
@@ -416,9 +418,9 @@ class CustomPanelErMoFuJian(bpy.types.Panel):
 
 
 # 编号       字体大小  字体深度     字体风格
-class CustomPanelNumber(bpy.types.Panel):
+class HUIER_PT_Number(bpy.types.Panel):
     bl_label = "编号"
-    bl_idname = "CustomPanelNumber"
+    bl_idname = "HUIER_PT_Number"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "particle"
@@ -437,9 +439,9 @@ class CustomPanelNumber(bpy.types.Panel):
 
 
 # 软耳模厚度
-class CustomPanelRuanErMoHouDu(bpy.types.Panel):
+class HUIER_PT_RuanErMoHouDu(bpy.types.Panel):
     bl_label = "软耳模厚度"
-    bl_idname = "CustomPanelRuanErMoHouDu"
+    bl_idname = "HUIER_PT_RuanErMoHouDu"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "physics"
@@ -458,9 +460,9 @@ class CustomPanelRuanErMoHouDu(bpy.types.Panel):
 
 
 # 支撑
-class CustomPanelZhiCheng(bpy.types.Panel):
+class HUIER_PT_ZhiCheng(bpy.types.Panel):
     bl_label = "支撑"
-    bl_idname = "CustomPanelZhiCheng"
+    bl_idname = "HUIER_PT_ZhiCheng"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "constraint"
@@ -476,9 +478,9 @@ class CustomPanelZhiCheng(bpy.types.Panel):
 
 
 # 排气孔
-class CustomPanelPaiQiKong(bpy.types.Panel):
+class HUIER_PT_PaiQiKong(bpy.types.Panel):
     bl_label = "排气孔"
-    bl_idname = "CustomPanelPaiQiKong"
+    bl_idname = "HUIER_PT_PaiQiKong"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "data"
@@ -494,9 +496,9 @@ class CustomPanelPaiQiKong(bpy.types.Panel):
 
 
 # 后期打磨
-class CustomPanelHouQiDaMo(bpy.types.Panel):
+class HUIER_PT_HouQiDaMo(bpy.types.Panel):
     bl_label = "后期打磨"
-    bl_idname = "CustomPanelHouQiDaMo"
+    bl_idname = "HUIER_PT_HouQiDaMo"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "material"
@@ -553,7 +555,7 @@ class TOPBAR_HT_upper_bar(bpy.types.Header):
 
 
 # ********** 标题栏自定义菜单透明度 **********
-class TOPBAR_MT_transparency1(bpy.types.Panel):
+class TOPBAR_PT_transparency1(bpy.types.Panel):
     bl_label = "透明度1"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
@@ -573,7 +575,7 @@ class TOPBAR_MT_transparency1(bpy.types.Panel):
 # 透明度2
 
 
-class TOPBAR_MT_transparency2(bpy.types.Panel):
+class TOPBAR_PT_transparency2(bpy.types.Panel):
     bl_label = "透明度2"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
@@ -595,7 +597,7 @@ class TOPBAR_MT_transparency2(bpy.types.Panel):
 # 透明度3
 
 
-class TOPBAR_MT_transparency3(bpy.types.Panel):
+class TOPBAR_PT_transparency3(bpy.types.Panel):
     bl_label = "透明度3"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
@@ -623,8 +625,8 @@ class TOPBAR_MT_editor_menus(bpy.types.Menu):
     def draw(self, context):
         layout = self.layout
         layout.menu("TOPBAR_MT_huierFile")
-        # layout.menu("TOPBAR_MT_file")
-        # layout.menu("TOPBAR_MT_edit")
+        layout.menu("TOPBAR_MT_file")
+        layout.menu("TOPBAR_MT_edit")
         # layout.menu("TOPBAR_MT_screteEarFile")                             #惠耳文件菜单
 
 
@@ -809,13 +811,14 @@ class TOPBAR_MT_edit(bpy.types.Menu):
 class VIEW3D_HT_header(bpy.types.Header):
     bl_space_type = 'VIEW_3D'
 
-    def draw(self, context):
+    def draw(self,context):
         layout = self.layout
-        icons = load_icons()  # 标题栏自制图标
+        icons=load_icons()                                                    #标题栏自制图标
+
         icon = icons.get("icon_backup")
-        layout.operator("wm.open_mainfile", text="", icon_value=icon.icon_id)
+        layout.operator("obj.undo1", text="", icon_value=icon.icon_id)
         icon = icons.get("icon_forward")
-        layout.operator("wm.open_mainfile", text="", icon_value=icon.icon_id)
+        layout.operator("obj.redo1", text="", icon_value=icon.icon_id)
         icon = icons.get("icon_grid")
         layout.operator("wm.open_mainfile", text="", icon_value=icon.icon_id)
         icon = icons.get("icon_ruler")
@@ -823,20 +826,18 @@ class VIEW3D_HT_header(bpy.types.Header):
         icon = icons.get("icon_viewShift")
         layout.operator("wm.open_mainfile", text="", icon_value=icon.icon_id)
         icon = icons.get("icon_transparency1")
-        layout.popover("TOPBAR_MT_transparency1",
-                       text="", icon_value=icon.icon_id)
+        layout.popover("TOPBAR_PT_transparency1", text="", icon_value=icon.icon_id)
         icon = icons.get("icon_transparency2")
-        layout.popover("TOPBAR_MT_transparency2",
-                       text="", icon_value=icon.icon_id)
+        layout.popover("TOPBAR_PT_transparency2", text="", icon_value=icon.icon_id)
         icon = icons.get("icon_transparency3")
-        layout.popover("TOPBAR_MT_transparency3",
-                       text="", icon_value=icon.icon_id)
+        layout.popover("TOPBAR_PT_transparency3", text="", icon_value=icon.icon_id)
+
 
 
 # 测试按钮功能
-class CustomPanelTestButton(bpy.types.Panel):
+class HUIER_PT_TestButton(bpy.types.Panel):
     bl_label = "按钮测试"
-    bl_idname = "testButton"
+    bl_idname = "HUIER_PT_Button"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "TestButton"
@@ -844,52 +845,55 @@ class CustomPanelTestButton(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         col = layout.column()
-        col.operator("obj.initialcolor", text="测试用例")
-        # col.operator("obj.initialtransparency",text="透明")
-        # col.operator("obj.localreset",text="重置")
-        # col.operator("obj.addarea",text="扩大区域")
-        # col.operator("obj.reducearea",text="缩小区域")
-        # col.operator("obj.local_thickening",text="加厚")
-        # col.operator("sculpt.brush_stroke",text="+")
-        # col.operator("obj.local_submit",text="提交")
+        col.operator("obj.initialcolor", text="初始化模型颜色")
+        col.operator("obj.initialtransparency", text="透明")
+        col.operator("obj.localthickeningreset", text="重置")
+        col.operator("obj.localthickeningaddarea", text="扩大区域")
+        col.operator("obj.localthickeningreducearea", text="缩小区域")
+        col.operator("obj.localthickeningthick", text="加厚")
+        col.operator("obj.localthickeningsubmit", text="提交")
+        col.operator("object.smooth", text="光滑")
+        col.operator("obj.undo", text="撤销")
+        col.operator("obj.redo", text="重做")
+        col.operator("obj.testfunc", text="功能测试")
 
 
 # 注册类
 _classes = [
     # VIEW3D_HT_header,
-    huier_PT_damo,
-    CustomPanelLocalOrGlobalJiaHou,
-    CustomPanelLocalOrGlobalJiaHou2,
-    CustomPanelDianMianQieGe,
-    CustomPanelPlantCut,
-    CustomPanelStepCut,
-    CustomPaneChuangJianMuJu,
-    CustomPanelMuJuHouDu,
-    CustomPanelBianYuanHouDu,
-    CustomPanelMianBanAndDianZiSheBei,
-    CustomPanelShangBuQieGeMianBan,
-    CustomPanelKongQiangMianBan,
-    CustomPanelYingErMoCanShu,
-    CustomPanelTongQiKong1,
-    CustomPanelChuanShenKong1,
-    CustomPanelChuanShenKong2,
-    CustomPanelTongQiKong,
-    CustomPanelErMoFuJian,
-    CustomPanelNumber,
-    CustomPanelRuanErMoHouDu,
-    CustomPanelZhiCheng,
-    CustomPanelPaiQiKong,
-    CustomPanelHouQiDaMo,
+    HUIER_PT_damo,
+    HUIER_PT_LocalOrGlobalJiaHou,
+    HUIER_PT_LocalOrGlobalJiaHou2,
+    HUIER_PT_DianMianQieGe,
+    HUIER_PT_PlantCut,
+    HUIER_PT_StepCut,
+    HUIER_PT_ChuangJianMuJu,
+    HUIER_PT_MuJuHouDu,
+    HUIER_PT_BianYuanHouDu,
+    HUIER_PT_MianBanAndDianZiSheBei,
+    HUIER_PT_ShangBuQieGeMianBan,
+    HUIER_PT_KongQiangMianBan,
+    HUIER_PT_YingErMoCanShu,
+    HUIER_PT_TongQiKong1,
+    HUIER_PT_ChuanShenKong1,
+    HUIER_PT_ChuanShenKong2,
+    HUIER_PT_TongQiKong,
+    HUIER_PT_ErMoFuJian,
+    HUIER_PT_Number,
+    HUIER_PT_RuanErMoHouDu,
+    HUIER_PT_ZhiCheng,
+    HUIER_PT_PaiQiKong,
+    HUIER_PT_HouQiDaMo,
     # TOPBAR_HT_upper_bar,
-    # TOPBAR_MT_transparency1,
-    # TOPBAR_MT_transparency2,
-    # TOPBAR_MT_transparency3,
+    TOPBAR_PT_transparency1,
+    TOPBAR_PT_transparency2,
+    TOPBAR_PT_transparency3,
     # TOPBAR_MT_editor_menus,
-    TOPBAR_MT_screteEarFile,
+    # TOPBAR_MT_screteEarFile,
     TOPBAR_MT_huierFile,
     # TOPBAR_MT_file,
     # TOPBAR_MT_edit,
-    CustomPanelTestButton,
+    # HUIER_PT_TestButton,
     OT_ImportFile
 ]
 
