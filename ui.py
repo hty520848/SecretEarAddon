@@ -13,12 +13,11 @@ import bpy_extras
 from bpy_extras.io_utils import ImportHelper
 from .icon.icons import load_icons
 from .icon.icons import clear_icons
-
+from bpy.props import BoolProperty
 
 import mathutils
 import bmesh
 from bpy_extras import view3d_utils
-
 
 # 打磨面板
 class HUIER_PT_damo(bpy.types.Panel):
@@ -45,8 +44,10 @@ class HUIER_PT_damo(bpy.types.Panel):
         col.prop(context.scene, 'maxLaHouDu', text="最大蜡厚度")
         col.separator()
         col.prop(context.scene, 'minLaHouDu', text="最小蜡厚度")
-        # col.operator("screen.userpref_show",
-        #               text="Preferences...", icon='PREFERENCES')
+        # col.operator("huier.addons",
+        #                 text="Preferences...", icon='PREFERENCES')
+        # col.operator("huier.keymap",
+        #                 text="Preferences...", icon='PREFERENCES')
         # box = layout.box()
         # box.prop(context.scene, 'laHouDU', text="蜡厚度")
         # lahoudu(self,context,box)
@@ -156,10 +157,9 @@ class HUIER_PT_StepCut(bpy.types.Panel):
         col.prop(context.scene, 'qiegeneiBianYuan', text="内边缘平滑偏移")
 
 
-# 创建模具
-class HUIER_PT_ChuangJianMuJu(bpy.types.Panel):
-    bl_label = "创建模具"
-    bl_idname = "HUIER_PT_ChuangJianMuJu"
+class HUIER_PT_MoJuTab(bpy.types.Panel):
+    bl_label = ""
+    bl_idname = "HUIER_PT_MoJuTab"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
@@ -167,9 +167,29 @@ class HUIER_PT_ChuangJianMuJu(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        col  = layout.split(factor=0.4)
+        row = col.row(align=True)
+        row.prop_tabs_enum(context.scene, 'tabEnum')
+
+# 创建模具
+class HUIER_PT_ChuangJianMuJu(bpy.types.Panel):
+    bl_label = "创建模具"
+    bl_idname = "HUIER_PT_ChuangJianMuJu"
+    bl_space_type = "PROPERTIES"
+    bl_region_type = "WINDOW"
+    bl_context = "world"
+    # bl_options = {'HIDE_HEADER'}
+    # bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.tabEnum == '参数'
+
+    def draw(self, context):
+        layout = self.layout
         layout.separator()
         col = layout.column(align=True)
-        col.prop(context.scene, 'muJuTypeEnum', text="模具类型")
+        col.prop(context.scene, 'muJuTypeEnum', text="模具类型",icon= 'NONE')
         layout.separator()
         col = layout.column(align=True)
         col.prop(context.scene, 'neiBianJiXian', text="内编辑线")
@@ -187,6 +207,12 @@ class HUIER_PT_MuJuHouDu(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
+    bl_options = {'DEFAULT_CLOSED'}
+    
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.tabEnum == '参数'
 
     def draw(self, context):
         layout = self.layout
@@ -204,6 +230,11 @@ class HUIER_PT_BianYuanHouDu(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_parent_id = "HUIER_PT_MuJuHouDu"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.tabEnum == '参数'
 
     def draw(self, context):
         layout = self.layout
@@ -233,6 +264,11 @@ class HUIER_PT_MianBanAndDianZiSheBei(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.tabEnum == '参数'
 
     def draw(self, context):
         layout = self.layout
@@ -268,6 +304,11 @@ class HUIER_PT_ShangBuQieGeMianBan(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.tabEnum == '参数'
 
     def draw(self, context):
         layout = self.layout
@@ -285,6 +326,11 @@ class HUIER_PT_KongQiangMianBan(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.tabEnum == '参数'
 
     def draw(self, context):
         layout = self.layout
@@ -305,6 +351,11 @@ class HUIER_PT_YingErMoCanShu(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.tabEnum == '参数'
 
     def draw(self, context):
         layout = self.layout
@@ -328,6 +379,11 @@ class HUIER_PT_TongQiKong1(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "world"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.tabEnum == '参数'
 
     def draw(self, context):
         layout = self.layout
@@ -343,6 +399,49 @@ class HUIER_PT_TongQiKong1(bpy.types.Panel):
         layout.separator()
         col = layout.column(align=True)
         col.prop(context.scene, 'tongFengGuanWaiBuHouDu', text="外部厚度")
+
+class HUIER_PT_MoBanXuanZe(bpy.types.Panel):
+    bl_label = "模板"
+    bl_idname = "HUIER_PT_MoBanXuanZe"
+    bl_space_type = "PROPERTIES"
+    bl_region_type = "WINDOW"
+    bl_context = "world"
+    bl_options = {'HIDE_HEADER'}
+
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.tabEnum == '模板'
+
+    def draw(self, context):
+        layout = self.layout
+        # 左列目录
+        split = layout.split(factor=0.4)
+        box1 = split.box()
+        box1.label(text = '模板类别')
+        box2 = box1.box()
+        col = box2.column()
+        col.label(text = '用户模板')
+        col.label(text = '预定义模板')
+        col.prop(context.scene, "showHdu",
+            icon="TRIA_DOWN" if context.scene.showHdu else "TRIA_RIGHT",
+            icon_only=True, emboss=False,text = 'HDU'
+        )
+        if context.scene.showHdu:
+            # 右列模板
+            icons=load_icons()                                                    
+            icon=icons.get("icon_reset")
+            col = split.column(align = True)
+            grid_flow = col.grid_flow(columns=2,align=True)
+            grid_flow.scale_y = 3
+            grid_flow.prop_tabs_enum(context.scene, 'muJuTypeEnum',icon_only=True)
+            
+            # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
+            # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
+            # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
+            # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
+            # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
+            # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)   
 
 
 # 传声孔
@@ -391,6 +490,7 @@ class HUIER_PT_TongQiKong(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "object"
+    bl_options = {'HIDE_HEADER'}
 
     def draw(self, context):
         layout = self.layout
@@ -398,6 +498,22 @@ class HUIER_PT_TongQiKong(bpy.types.Panel):
         col = layout.column(align=True)
         col.prop(context.scene, 'tongQiGuanDaoZhiJing', text="管道直径")
 
+
+
+class HUIER_PT_YuDingYi(bpy.types.Panel):
+    bl_label = "预定义模板"
+    bl_idname = "HUIER_PT_YUDINGYI"
+    bl_space_type = "PROPERTIES"
+    bl_region_type = "WINDOW"
+    bl_parent_id = "HUIER_PT_TongQiKong"
+    bl_context = "object"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.separator()
+        col = layout.column(align=True)
+        col.prop(context.scene, 'waiBuHouDu', text="外部厚度")
+        
 
 # 耳膜附件
 class HUIER_PT_ErMoFuJian(bpy.types.Panel):
@@ -427,6 +543,9 @@ class HUIER_PT_Number(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.separator()
+        col = layout.column(align=True)
+        col.prop(context.scene, 'labelText', text="标签名称")
         layout.separator()
         col = layout.column(align=True)
         col.prop(context.scene, 'fontSize', text="字体尺寸")
@@ -560,6 +679,10 @@ class TOPBAR_PT_transparency1(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
 
+    @classmethod
+    def poll(cls, context):
+        return False
+
     def draw(self, context):
         layout = self.layout
         layout.operator("wm.open_mainfile", text="自动...", icon='FILE_FOLDER')
@@ -579,6 +702,10 @@ class TOPBAR_PT_transparency2(bpy.types.Panel):
     bl_label = "透明度2"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
+
+    @classmethod
+    def poll(cls, context):
+        return False
 
     def draw(self, context):
         layout = self.layout
@@ -602,6 +729,10 @@ class TOPBAR_PT_transparency3(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
 
+    @classmethod
+    def poll(cls, context):
+        return False
+
     def draw(self, context):
         layout = self.layout
         layout.ui_units_x = 5
@@ -617,7 +748,7 @@ class TOPBAR_PT_transparency3(bpy.types.Panel):
         layout.menu("TOPBAR_MT_file_import", text="透明比例", icon='IMPORT')
 
 
-# 第一行的菜单
+# 第一行的菜单项
 class TOPBAR_MT_editor_menus(bpy.types.Menu):
     bl_idname = "TOPBAR_MT_editor_menus"
     bl_label = ""
@@ -625,8 +756,8 @@ class TOPBAR_MT_editor_menus(bpy.types.Menu):
     def draw(self, context):
         layout = self.layout
         layout.menu("TOPBAR_MT_huierFile")
-        layout.menu("TOPBAR_MT_file")
-        layout.menu("TOPBAR_MT_edit")
+        # layout.menu("TOPBAR_MT_file")
+        # layout.menu("TOPBAR_MT_edit")
         # layout.menu("TOPBAR_MT_screteEarFile")                             #惠耳文件菜单
 
 
@@ -640,7 +771,6 @@ class TOPBAR_MT_screteEarFile(bpy.types.Menu):
         layout.operator_context = 'INVOKE_AREA'
         layout.menu("TOPBAR_MT_file_new", text="新建", icon='FILE_NEW')
         layout.operator("wm.open_mainfile", text="打开...", icon='FILE_FOLDER')
-        layout.menu("TOPBAR_MT_file_open_recent")
 
         layout.separator()
 
@@ -653,8 +783,9 @@ class TOPBAR_MT_screteEarFile(bpy.types.Menu):
 
         layout.separator()
 
-        layout.menu("TOPBAR_MT_file_import", icon='IMPORT')
-        layout.menu("TOPBAR_MT_file_export", icon='EXPORT')
+        # layout.menu("TOPBAR_MT_file_import", icon='IMPORT')
+        layout.menu("TOPBAR_MT_file_export",text="导出为",icon='EXPORT')
+        layout.operator("wm.save_as_mainfile", text="另存为模板")
 
 
 class OT_ImportFile(bpy.types.Operator, bpy_extras.io_utils.ImportHelper):
@@ -693,17 +824,77 @@ class OT_ImportFile(bpy.types.Operator, bpy_extras.io_utils.ImportHelper):
         # bpy.data.screens["Layout"].shading.type = 'MATERIAL'
         return {'FINISHED'}
 
+
+class Huier_OT_NewFile(bpy.types.Operator):
+    bl_idname = "huier.new_file"
+    bl_label = "新建"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        bpy.ops.screen.userpref_show(section='SAVE_LOAD')
+        return {'FINISHED'}
+    
+class Huier_OT_addon(bpy.types.Operator):
+    bl_idname = "huier.addons"
+    bl_label = "查看插件"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        bpy.ops.screen.userpref_show(section='ADDONS')
+        return {'FINISHED'}
+
+class Huier_OT_keymap(bpy.types.Operator):
+    bl_idname = "huier.keymap"
+    bl_label = "查看键位映射"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        bpy.ops.screen.userpref_show(section='KEYMAP')
+        return {'FINISHED'}
+
+class Huier_OT_DaoChuWei(bpy.types.Operator):
+    bl_idname = "huier.export"
+    bl_label = "导出为"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        bpy.ops.screen.userpref_show(section='SYSTEM')
+        # bpy.ops.screen.userpref_show()
+        # area = bpy.context.window_manager.windows[-1].screen.areas[0]
+        # area.type = "FILE_BROWSER"
+        # area.ui_type = 'ASSETS'
+        return {'FINISHED'}
+
+class Huier_OT_SaveAsMoban(bpy.types.Operator):
+    bl_idname = "huier.save_as_moban"
+    bl_label = "另存为模板"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        bpy.ops.screen.userpref_show(section='FILE_PATHS')
+        return {'FINISHED'}
+
 # 自定义的新增菜单
-
-
 class TOPBAR_MT_huierFile(bpy.types.Menu):
     bl_label = "文件"
 
     def draw(self, context):
         layout = self.layout
-        layout.operator(OT_ImportFile.bl_idname, text="新建", icon='FILE_NEW')
+        layout.operator_context = 'EXEC_AREA'
+        layout.operator("huier.new_file", text="新建", icon='FILE_NEW')
+        # layout.operator("wm.open_mainfile", text="打开...", icon='FILE_FOLDER')
 
+        # layout.operator_context = 'EXEC_AREA' if context.blend_data.is_saved else 'INVOKE_AREA'
+        # layout.operator("wm.save_mainfile", text="保存", icon='FILE_TICK')
 
+        # layout.operator_context = 'INVOKE_AREA'
+        # layout.operator("wm.save_as_mainfile", text="另存为")
+        layout.operator_context = 'INVOKE_AREA'
+
+        layout.operator("huier.export",text="导出为",icon='EXPORT')
+        layout.operator("huier.save_as_moban", text="另存为模板")
+
+# 原始File菜单
 class TOPBAR_MT_file(bpy.types.Menu):
     bl_label = "File"
 
@@ -847,15 +1038,15 @@ class HUIER_PT_TestButton(bpy.types.Panel):
         col = layout.column()
         col.operator("obj.initialcolor", text="初始化模型颜色")
         col.operator("obj.initialtransparency", text="透明")
-        col.operator("obj.localthickeningreset", text="重置")
-        col.operator("obj.localthickeningaddarea", text="扩大区域")
-        col.operator("obj.localthickeningreducearea", text="缩小区域")
-        col.operator("obj.localthickeningthick", text="加厚")
-        col.operator("obj.localthickeningsubmit", text="提交")
-        col.operator("object.smooth", text="光滑")
-        col.operator("obj.undo", text="撤销")
-        col.operator("obj.redo", text="重做")
-        col.operator("obj.testfunc", text="功能测试")
+        # col.operator("obj.localthickeningreset", text="重置")
+        # col.operator("obj.localthickeningaddarea", text="扩大区域")
+        # col.operator("obj.localthickeningreducearea", text="缩小区域")
+        # col.operator("obj.localthickeningthick", text="加厚")
+        # col.operator("obj.localthickeningsubmit", text="提交")
+        # col.operator("object.smooth", text="光滑")
+        # col.operator("obj.undo", text="撤销")
+        # col.operator("obj.redo", text="重做")
+        # col.operator("obj.testfunc", text="功能测试")
 
 
 # 注册类
@@ -889,12 +1080,19 @@ _classes = [
     TOPBAR_PT_transparency2,
     TOPBAR_PT_transparency3,
     # TOPBAR_MT_editor_menus,
-    # TOPBAR_MT_screteEarFile,
+    TOPBAR_MT_screteEarFile,
     TOPBAR_MT_huierFile,
     # TOPBAR_MT_file,
     # TOPBAR_MT_edit,
     # HUIER_PT_TestButton,
-    OT_ImportFile
+    OT_ImportFile,
+    Huier_OT_addon,
+    Huier_OT_keymap,
+    Huier_OT_NewFile,
+    Huier_OT_DaoChuWei,
+    Huier_OT_SaveAsMoban,
+    HUIER_PT_MoJuTab,
+    HUIER_PT_MoBanXuanZe
 ]
 
 

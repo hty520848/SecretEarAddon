@@ -7,8 +7,19 @@ from bpy_extras import view3d_utils
 from .jiahou import *
 from .damo import *
 from .qiege import *
+from .label import *
+from .handle import *
+from .create_mould.create_mould import *
+from .utils.utils import *
 
 prev_properties_context = None  # 保存Properties窗口切换时上次Properties窗口中的上下文,记录由哪个模式切换而来
+
+processing_stage_dict = {
+    "OUTPUT": "局部加厚",
+    "RENDER": "打磨",
+    "SCENE": "切割",
+    "WORLD": "创建模具",
+}
 
 
 class BackUp1(bpy.types.Operator):
@@ -43,7 +54,7 @@ def msgbus_callback(*args):
     bpy.context.scene.var = 0
 
     current_tab = bpy.context.screen.areas[0].spaces.active.context
-    print("当前激活的物体:", bpy.context.active_object.name)
+    # print("当前激活的物体:",bpy.context.active_object.name)
     print("前面的上下文", prev_properties_context)
     print(f'Current Tab: {current_tab}')
     selected_objs = bpy.data.objects
@@ -62,6 +73,19 @@ def msgbus_callback(*args):
             with bpy.context.temp_override(**override):
                 frontFromQieGe()  # 退出切割
                 backToLocalThickening()  # 局部加厚初始化
+        elif (prev_properties_context == 'PARTICLES'):
+            print("labelToLocalThick")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                frontFromLabel()
+                backToLocalThickening()
+        elif (prev_properties_context == 'WORLD'):
+            print("createMouldToLocalThick")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                frontFromCreateMould()
+                backToLocalThickening()
+
     elif (current_tab == 'RENDER'):
         if (prev_properties_context == 'OUTPUT'):
             print("LocalThickToDaMo")
@@ -77,6 +101,20 @@ def msgbus_callback(*args):
                 print("当前激活物体", bpy.context.active_object)
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
                 backToDamo()  # 打磨初始化,保存到打磨保存的状态
+        elif (prev_properties_context == 'PARTICLES'):
+            print("labelToDaMo")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                frontFromLabel()
+                backToDamo()
+        elif (prev_properties_context == 'WORLD'):
+            print("createMouldToDamo")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                frontFromCreateMould()
+                backToDamo()
+
+
     elif (current_tab == 'SCENE'):
         if (prev_properties_context == 'OUTPUT'):
             print("LocalThickToQieGe")
@@ -90,6 +128,81 @@ def msgbus_callback(*args):
             with bpy.context.temp_override(**override):
                 backFromDamo()  # 打磨保存状态
                 frontToQieGe()  # 切割初始化
+        elif (prev_properties_context == 'PARTICLES'):
+            print("labelToQieGe")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                frontFromLabel()
+                backToQieGe()
+        elif (prev_properties_context == 'WORLD'):
+            print("createMouldToQieGe")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                frontFromCreateMould()
+                backToQieGe()
+
+
+    elif (current_tab == 'PARTICLES'):
+        if (prev_properties_context == 'OUTPUT'):
+            print("LocalThickToLabel")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                backFromLocalThickening()  # 局部加厚完成
+                frontToLabel()
+        elif (prev_properties_context == 'RENDER' or prev_properties_context == None):
+            print("RenderToLabel")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                backFromDamo()  # 打磨保存状态
+                frontToLabel()
+        elif (prev_properties_context == 'SCENE'):
+            print("QieGeToLabel")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                backFromQieGe()
+                frontToLabel()
+        elif (prev_properties_context == 'WORLD'):
+            print("createMouldToLabel")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                backFromCreateMould()
+                frontToLabel()
+
+
+    elif (current_tab == 'WORLD'):
+        if (prev_properties_context == 'OUTPUT'):
+            print("LocalThickToCreateMould")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                backFromLocalThickening()
+                frontToCreateMould()
+        elif (prev_properties_context == 'RENDER' or prev_properties_context == None):
+            print("RenderToCreateMould")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                backFromDamo()
+                frontToCreateMould()
+        elif (prev_properties_context == 'SCENE'):
+            print("QieGeToCreateMould")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                backFromQieGe()
+                frontToCreateMould()
+        elif (prev_properties_context == 'PARTICLES'):
+            print("LabelToCreateMould")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                frontFromLabel()
+                backToCreateMould()
+
+
+    elif (current_tab == 'MODIFIER'):
+        if (prev_properties_context == 'RENDER' or prev_properties_context == None):
+            print("RenderToHandle")
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                toHandle()
+
 
     print("---------")
     prev_properties_context = current_tab

@@ -27,12 +27,17 @@ last_ratation = None
 finish = False
 # 模型进入切割模式的原始网格
 oridata = None
-old_loc_sphere1 = [10.290, -8.958, 6.600]
-old_loc_sphere2 = [5.266, -9.473, 6.613]
-old_loc_sphere3 = [11.282, -2.077, 6.607]
-old_loc_sphere4 = [8.107, -6.029, 13.345]
+# old_loc_sphere1 = [10.290, -8.958, 6.600]
+# old_loc_sphere2 = [5.266, -9.473, 6.613]
+# old_loc_sphere3 = [11.282, -2.077, 6.607]
+# old_loc_sphere4 = [8.107, -6.029, 13.345]
 
-a = 1
+old_loc_sphere1 = []
+old_loc_sphere2 = []
+old_loc_sphere3 = []
+old_loc_sphere4 = []
+
+qiegeenum = 1 # 当前切割的模式，1为环切，2为侧切
 
 
 # 复制初始模型，并赋予透明材质
@@ -45,14 +50,14 @@ def copyModel():
     obj_all = bpy.data.objects
     copy_compare = True  # 判断是否复制当前物体作为透明的参照,不存在参照物体时默认会复制一份新的参照物体
     for selected_obj in obj_all:
-        if (selected_obj.name == "右耳compare"):
+        if (selected_obj.name == "右耳huanqiecompare"):
             copy_compare = False  # 当存在参照物体时便不再复制新的物体
             # break
     if (copy_compare):  # 复制一份物体作为透明的参照
         active_obj = obj_ori
         duplicate_obj = active_obj.copy()
         duplicate_obj.data = active_obj.data.copy()
-        duplicate_obj.name = active_obj.name + "compare"
+        duplicate_obj.name = active_obj.name + "huanqiecompare"
         duplicate_obj.animation_data_clear()
         # 将复制的物体加入到场景集合中
         scene = bpy.context.scene
@@ -74,7 +79,7 @@ def displacement(distance, a, b):
 # 平滑边缘
 def smooth():
     global now_radius
-    obj_ori = bpy.data.objects['右耳compare']
+    obj_ori = bpy.data.objects['右耳huanqiecompare']
     obj_main = bpy.data.objects['右耳']
     obj_circle = bpy.data.objects['Circle']
     obj_torus = bpy.data.objects['Torus']
@@ -228,7 +233,7 @@ def getRadius():
     # 翻转圆环法线
     obj_torus = bpy.data.objects['Torus']
     obj_circle = bpy.data.objects['Circle']
-    active_obj = bpy.data.objects['右耳compare']
+    active_obj = bpy.data.objects['右耳huanqiecompare']
     duplicate_obj = active_obj.copy()
     duplicate_obj.data = active_obj.data.copy()
     duplicate_obj.name = active_obj.name + "intersect"
@@ -320,7 +325,7 @@ def initCircle():
     copyModel()
     getModelZ()
 
-    initZ = round(zmax * 0.8, 2)
+    initZ = round(zmax * 0.8, 2)    
     # 获取目标物体的编辑模式网格
 
     obj_main.data.materials.clear()
@@ -329,7 +334,7 @@ def initCircle():
     obj_main.data.materials.append(bpy.data.materials['yellow'])
     if (checkinitialTransparency() == False):
         initialTransparency()
-    obj_compare = bpy.data.objects['右耳compare']
+    obj_compare = bpy.data.objects['右耳huanqiecompare']
     obj_compare.data.materials.clear()
     obj_compare.data.materials.append(bpy.data.materials['yellow2'])
     # bpy.ops.object.select_all(action='DESELECT')
@@ -356,12 +361,12 @@ def initCircle():
         max_distance = max(max_distance, distance)
         min_distance = min(min_distance, distance)
     old_radius = max_distance / cos(math.radians(30))
-    old_radius = 6
+    old_radius = 7
     now_radius = round(min_distance, 2)
 
     # 切换回对象模式
     bpy.ops.object.mode_set(mode='OBJECT')
-    print('当前位置', last_loc)
+    # print('当前位置', last_loc)
 
     # 正常初始化
     if last_loc == None:
@@ -520,7 +525,7 @@ def update_plane():
            bpy.data.objects['StepCutSphere4'].location]
 
     # 更新位置
-    obj = bpy.data.objects['myplane']
+    obj = bpy.data.objects['StepCutplane']
     bm = obj.data
     if bm.vertices:
         for i in range(0, 4):
@@ -585,26 +590,48 @@ def checkinitialTransparency():
             return True
     return False
 
-
-def initPlane():
-    global a
+# 确定四个圆球的位置
+def initsphereloc():
+    global zmax
     global old_loc_sphere1
     global old_loc_sphere2
     global old_loc_sphere3
     global old_loc_sphere4
-    a = 2
+    getModelZ()
+    initZ = round(zmax * 0.8, 2)
+    bm = bmesh.new()
+    obj = bpy.data.objects['右耳']
+    objdata = bpy.data.objects['右耳'].data
+    bm.from_mesh(objdata)
+    selected_verts = [v.co for v in bm.verts if round(v.co.z, 2) < round(
+    initZ, 2) + 0.1 and round(v.co.z, 2) > round(initZ, 2) - 0.1]
+    
+    # 找到具有最大或最小坐标的顶点
+    old_loc_sphere1 = min(selected_verts, key=lambda v: v[1])
+    old_loc_sphere2 = min(selected_verts, key=lambda v: v[0])
+    old_loc_sphere3 = max(selected_verts, key=lambda v: v[0])
 
+    initx = (old_loc_sphere2[2] + old_loc_sphere3[2]) / 2
+    selected_verts2 = [v.co for v in bm.verts if round(v.co.x, 2) < round(
+    initx, 2) + 0.1 and round(v.co.x, 2) > round(initx, 2) - 0.1]
+    old_loc_sphere4 = max(selected_verts2, key=lambda v: v[2])
+
+# 初始化侧切模块中用于切割的平面
+def initPlane():
+    global qiegeenum
+    global old_loc_sphere1
+    global old_loc_sphere2
+    global old_loc_sphere3
+    global old_loc_sphere4
+
+    qiegeenum = 2
+    initsphereloc()
     # 新建圆球
-    # new_sphere('StepCutSphere1', (10.290, -8.958, 6.600))
-    # new_sphere('StepCutSphere2', (5.266, -9.473, 6.613))
-    # new_sphere('StepCutSphere3', (11.282, -2.077, 6.607))
-    # new_sphere('StepCutSphere4', (8.107, -6.029, 13.345))
-
     new_sphere('StepCutSphere1', old_loc_sphere1)
     new_sphere('StepCutSphere2', old_loc_sphere2)
     new_sphere('StepCutSphere3', old_loc_sphere3)
     new_sphere('StepCutSphere4', old_loc_sphere4)
-    new_plane('myplane')
+    new_plane('StepCutplane')
 
     red_material = bpy.data.materials.new(name="Red")
     red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
@@ -625,6 +652,7 @@ def initPlane():
             bpy.context.view_layer.objects.active = i
             obj = bpy.context.active_object
             obj_copy = obj.copy()
+            obj_copy.name = obj.name + 'ceqieCompare'
             obj_copy.data = obj.data.copy()
             obj_copy.animation_data_clear()
             scene = bpy.context.scene
@@ -638,26 +666,21 @@ def initPlane():
         initialTransparency()
 
     bpy.data.objects['右耳'].data.materials.append(bpy.data.materials['yellow'])
-    bpy.data.objects['右耳.001'].data.materials.clear()
-    bpy.data.objects['右耳.001'].data.materials.append(
+    bpy.data.objects['右耳ceqieCompare'].data.materials.clear()
+    bpy.data.objects['右耳ceqieCompare'].data.materials.append(
         bpy.data.materials['yellow2'])
     bpy.ops.object.select_all(action='DESELECT')
 
-    plane = bpy.data.objects['myplane']
-    # plane.data.materials.append(mat2)
+    plane = bpy.data.objects['StepCutplane']
     obj_main = bpy.data.objects['右耳']
     bool_modifier = obj_main.modifiers.new(
         name="step cut", type='BOOLEAN')
     bool_modifier.operation = 'DIFFERENCE'
     bool_modifier.object = plane
-    # bool_modifier2 = obj_main.modifiers.new(
-    #     name="Remesh", type='REMESH')
-    # bool_modifier2.mode = 'VOXEL'
 
     # 调用调整按钮
     override = getOverride()
     with bpy.context.temp_override(**override):
-        # bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         bpy.ops.object.stepcut('INVOKE_DEFAULT')
 
 
@@ -717,6 +740,7 @@ def saveStep():
     old_loc_sphere4.append(round(bpy.data.objects['StepCutSphere4'].location.y, 3))
     old_loc_sphere4.append(round(bpy.data.objects['StepCutSphere4'].location.z, 3))
 
+    print('圆球的坐标为')
     print(old_loc_sphere1)
     print(old_loc_sphere2)
     print(old_loc_sphere3)
@@ -725,34 +749,40 @@ def saveStep():
 
 # 退出操作
 def quitCut():
-    global a, finish
-    # a = 2
+    global finish
     # 切割未完成
     if finish == False:
-        all_objs = bpy.data.objects
-        for selected_obj in all_objs:  # 删除用于对比的未被激活的模型
-            if (
-                    selected_obj.name != "右耳compare" and selected_obj.name != "右耳LocalThickCopy" and selected_obj.name != "右耳DamoCopy" and selected_obj.name != "DamoReset"):
-                bpy.data.objects.remove(selected_obj, do_unlink=True)
+        # all_objs = bpy.data.objects
+        # for selected_obj in all_objs:  # 删除用于对比的未被激活的模型
+        #     print('name',selected_obj.name)
+        #     if (
+        #             selected_obj.name != "右耳huanqiecompare" and selected_obj.name != "右耳LocalThickCopy" and selected_obj.name != "右耳DamoCopy" and selected_obj.name != "DamoReset"):
+        #         bpy.data.objects.remove(selected_obj, do_unlink=True)
+
+        del_objs = ['Circle','Torus','右耳']
+
+        for obj in del_objs:
+            if (bpy.data.objects[obj]):
+                obj1 = bpy.data.objects[obj]
+                bpy.data.objects.remove(obj1, do_unlink=True)
         bpy.ops.outliner.orphans_purge(
             do_local_ids=True, do_linked_ids=True, do_recursive=False)
         bpy.ops.object.select_all(action='DESELECT')
-        obj = bpy.data.objects["右耳compare"]
+        obj = bpy.data.objects["右耳huanqiecompare"]
         obj.hide_set(False)
         bpy.context.view_layer.objects.active = obj
         obj.name = '右耳'
         obj.data.materials.clear()
     # 已切割
-    else:
-        print('已切割')
-        print('还原网格')
-        obj_main = bpy.data.objects['右耳']
-        oridata.to_mesh(obj_main.data)
+    # else:
+    #     print('已切割')
+    #     print('还原网格')
+    #     obj_main = bpy.data.objects['右耳']
+    #     oridata.to_mesh(obj_main.data)
 
 
 def quitStepCut():
-    global a, finish
-    # a = 1
+    global finish
 
     # 切割未完成
     if finish == False:
@@ -774,20 +804,20 @@ def quitStepCut():
         if (bpy.data.objects['StepCutSphere4']):
             obj = bpy.data.objects['StepCutSphere4']
             bpy.data.objects.remove(obj, do_unlink=True)
-        if (bpy.data.objects['myplane']):
-            obj = bpy.data.objects['myplane']
+        if (bpy.data.objects['StepCutplane']):
+            obj = bpy.data.objects['StepCutplane']
             bpy.data.objects.remove(obj, do_unlink=True)
-        if (bpy.data.objects['右耳.001']):
-            obj = bpy.data.objects['右耳.001']
+        if (bpy.data.objects['右耳ceqieCompare']):
+            obj = bpy.data.objects['右耳ceqieCompare']
             bpy.data.objects.remove(obj, do_unlink=True)
         bpy.ops.outliner.orphans_purge(
             do_local_ids=True, do_linked_ids=True, do_recursive=False)
     # 切割已完成
-    else:
-        print('已切割')
-        print('还原网格')
-        obj_main = bpy.data.objects['右耳']
-        oridata.to_mesh(obj_main.data)
+    # else:
+    #     print('已切割')
+    #     print('还原网格')
+    #     obj_main = bpy.data.objects['右耳']
+    #     oridata.to_mesh(obj_main.data)
 
 
 class Circle_Cut(bpy.types.Operator):
@@ -808,8 +838,8 @@ class Circle_Cut(bpy.types.Operator):
 
         op_cls = Circle_Cut
 
-        global a
-        a = 1
+        global qiegeenum
+        qiegeenum = 1
 
         print('invokeCir')
 
@@ -835,14 +865,14 @@ class Circle_Cut(bpy.types.Operator):
             context.area.tag_redraw()
         # 未切割时起效
         if finish == False:
-            if a == 1:
+            if qiegeenum == 1:
                 obj_torus = bpy.data.objects['Torus']
                 active_obj = bpy.data.objects['Circle']
                 bpy.ops.object.select_all(action='DESELECT')
                 bpy.context.view_layer.objects.active = obj_torus
                 obj_torus.select_set(True)
             # 鼠标是否在圆环上
-            if (a == 1 and is_mouse_on_object(context, event)):
+            if (qiegeenum == 1 and is_mouse_on_object(context, event)):
                 # print('在圆环上')
 
                 # bpy.ops.object.select_all(action='DESELECT')
@@ -925,7 +955,7 @@ class Circle_Cut(bpy.types.Operator):
                 return {'PASS_THROUGH'}
                 # return {'RUNNING_MODAL'}
 
-            elif (a != 1):
+            elif (qiegeenum != 1):
                 return {'FINISHED'}
 
             else:
@@ -994,8 +1024,8 @@ class Step_Cut(bpy.types.Operator):
 
     def invoke(self, context, event):
         print('invokeStep')
-        global a
-        a = 2
+        global qiegeenum
+        qiegeenum = 2
         Step_Cut._timer = context.window_manager.event_timer_add(
             0.5, window=context.window)
         context.window_manager.modal_handler_add(self)
@@ -1010,13 +1040,13 @@ class Step_Cut(bpy.types.Operator):
         if context.area:
             context.area.tag_redraw()
 
-        global a
+        global qiegeenum
         global finish
         # 未切割时起效
         if finish == False:
 
             # 鼠标在圆球上
-            if (a == 2 and is_mouse_on_which_object(context, event) != 5):
+            if (qiegeenum == 2 and is_mouse_on_which_object(context, event) != 5):
                 if (is_changed_stepcut(context, event)):
                     bpy.ops.wm.tool_set_by_id(name="builtin.select")
 
@@ -1026,7 +1056,7 @@ class Step_Cut(bpy.types.Operator):
 
                 return {'PASS_THROUGH'}
 
-            elif (a != 2):
+            elif (qiegeenum != 2):
                 context.window_manager.event_timer_remove(Step_Cut._timer)
                 Step_Cut._timer = None
                 print('timer remove')
@@ -1057,22 +1087,29 @@ class Finish_Cut(bpy.types.Operator):
         return {'FINISHED'}
 
     def excute(self, context):
-        global a, finish
-        if (a == 1):
-            # a = 3
+        global qiegeenum, finish
+        if (qiegeenum == 1):
             # 完成切割
             finish = True
             # 保存圆环信息
             saveCir()
-            all_objs = bpy.data.objects
-            for selected_obj in all_objs:  # 删除用于对比的未被激活的模型
-                if (selected_obj.name != "右耳"):
-                    bpy.data.objects.remove(selected_obj, do_unlink=True)
+            # all_objs = bpy.data.objects
+            # for selected_obj in all_objs:  # 删除用于对比的未被激活的模型
+            #     if (selected_obj.name != "右耳"):
+            #         bpy.data.objects.remove(selected_obj, do_unlink=True)
+            # bpy.ops.outliner.orphans_purge(
+            #     do_local_ids=True, do_linked_ids=True, do_recursive=False)
+
+            del_objs = ['Circle','Torus','右耳huanqiecompare']
+
+            for obj in del_objs:
+                if (bpy.data.objects[obj]):
+                    obj1 = bpy.data.objects[obj]
+                    bpy.data.objects.remove(obj1, do_unlink=True)
             bpy.ops.outliner.orphans_purge(
                 do_local_ids=True, do_linked_ids=True, do_recursive=False)
 
-        if (a == 2):
-            # a = 3
+        if (qiegeenum == 2):
             # 完成切割
             finish = True
             saveStep()
@@ -1081,7 +1118,7 @@ class Finish_Cut(bpy.types.Operator):
                     bpy.context.view_layer.objects.active = i
                     bpy.ops.object.modifier_apply(modifier="step cut")
             for i in bpy.context.visible_objects:
-                if i.name == "myplane":
+                if i.name == "StepCutplane":
                     i.hide_set(False)
                     bpy.context.view_layer.objects.active = i
                     bpy.ops.object.modifier_apply(modifier="smooth")
@@ -1094,10 +1131,13 @@ class Finish_Cut(bpy.types.Operator):
             bpy.data.objects.remove(
                 bpy.data.objects['StepCutSphere4'], do_unlink=True)
             bpy.data.objects.remove(
-                bpy.data.objects['myplane'], do_unlink=True)
-            bpy.data.objects.remove(bpy.data.objects['右耳.001'], do_unlink=True)
+                bpy.data.objects['StepCutplane'], do_unlink=True)
+            bpy.data.objects.remove(bpy.data.objects['右耳ceqieCompare'], do_unlink=True)
             bpy.ops.outliner.orphans_purge(
                 do_local_ids=True, do_linked_ids=True, do_recursive=False)
+        name = "右耳"  # TODO    根据导入文件名称更改
+        obj = bpy.data.objects[name]
+        bpy.context.view_layer.objects.active = obj
 
         return {'FINISHED'}
 
@@ -1116,25 +1156,25 @@ class Reset_Cut(bpy.types.Operator):
         return {'FINISHED'}
 
     def excute(self, context):
-        global a
-        if (a == 1):
-            a = 4
+        global qiegeenum
+        if (qiegeenum == 1):
+            qiegeenum = 4
             all_objs = bpy.data.objects
             for selected_obj in all_objs:  # 删除用于对比的未被激活的模型
-                if (selected_obj.name != "右耳compare"):
+                if (selected_obj.name != "右耳huanqiecompare"):
                     bpy.data.objects.remove(selected_obj, do_unlink=True)
             bpy.ops.outliner.orphans_purge(
                 do_local_ids=True, do_linked_ids=True, do_recursive=False)
             bpy.ops.object.select_all(action='DESELECT')
-            obj = bpy.data.objects["右耳compare"]
+            obj = bpy.data.objects["右耳huanqiecompare"]
             obj.hide_set(False)
             bpy.context.view_layer.objects.active = obj
             obj.name = '右耳'
             obj.data.materials.clear()
             initCircle()
 
-        if (a == 2):
-            a = 4
+        if (qiegeenum == 2):
+            qiegeenum = 4
             # 回到原来的位置
             bpy.data.objects['StepCutSphere1'].location = (10.290, -8.958, 6.600)
             bpy.data.objects['StepCutSphere2'].location = (5.266, -9.473, 6.613)
@@ -1193,7 +1233,27 @@ class qiegeTool2(WorkSpaceTool):
         pass
 
 
+
+
 def frontToQieGe():
+    global finish
+    finish = False
+    # 将当前激活物体复制一份保存,用于切割之后的模块回到切割时还原
+    all_objs = bpy.data.objects
+    for selected_obj in all_objs:
+        if (selected_obj.name == "右耳QieGeCopy"):
+            bpy.data.objects.remove(selected_obj, do_unlink=True)
+    name = "右耳"  # TODO    根据导入文件名称更改
+    obj = bpy.data.objects[name]
+    duplicate_obj1 = obj.copy()
+    duplicate_obj1.data = obj.data.copy()
+    duplicate_obj1.animation_data_clear()
+    duplicate_obj1.name = name + "QieGeCopy"
+    bpy.context.collection.objects.link(duplicate_obj1)
+    duplicate_obj1.hide_set(True)
+    duplicate_obj1.hide_set(False)
+    duplicate_obj1.hide_set(True)
+
     enum = bpy.context.scene.qieGeTypeEnum
     if enum == "OP1":
         initCircle()
@@ -1202,7 +1262,7 @@ def frontToQieGe():
 
 
 def frontFromQieGe():
-    global a
+    global qiegeenum
     enum = bpy.context.scene.qieGeTypeEnum
     if enum == "OP1":
         quitCut()
@@ -1213,68 +1273,39 @@ def frontFromQieGe():
         initialModelColor()
         bpy.data.objects["右耳"].data.materials.append(bpy.data.materials['yellow'])
     # 将切割模式中运行的Model退出
-    a = 0
+    qiegeenum = 0
 
 
-# # 监听回调函数
-# def msgbus_callback(*args):
-#     global gcontext
-#     global flag, finish
-#     global a, init1, init2
-#     current_tab = bpy.context.screen.areas[1].spaces.active.context
-#     gcontext = current_tab
-#     if (current_tab == 'SCENE'):
-#         initialModelColor()
-#         initialTransparency()
-#         # 保存原始网格信息，用于退出切割时还原
-#         saveOriobj()
-#         flag = True
-#         if (flag):
-#             finish = False
-#             if (a == 1):
-#                 alreadyInit = False
-#                 all_objs = bpy.data.objects
-#                 for selected_obj in all_objs:  # 删除用于对比的未被激活的模型
-#                     print('name', selected_obj.name)
-#                     if (selected_obj.name == 'Circle') or (selected_obj.name == 'Torus'):
-#                         alreadyInit = True
-#                 # print('是否初始化',alreadyInit)
-#                 if alreadyInit == False:
-#                     initCircle()
-#             elif (a == 2):
-#                 initPlane()
-#                 all_objs = bpy.data.objects
-#                 for selected_obj in all_objs:  # 删除用于对比的未被激活的模型
-#                     print('name', selected_obj.name)
-#     else:
-#         if (flag):
-#             flag == False
-#             if (a == 1):
-#                 print('quitCut')
-#                 quitCut()
-#                 initialModelColor()
-#                 bpy.data.objects["右耳"].data.materials.append(bpy.data.materials['yellow'])
-#             elif (a == 2):
-#                 print('quitStepCut')
-#                 quitStepCut()
-#                 initialModelColor()
-#                 bpy.data.objects["右耳"].data.materials.append(bpy.data.materials['yellow'])
-#     print(f'Current Tab: {current_tab}')
+def backToQieGe():
+    global finish
+    finish = False
+
+    # 根据切割中保存的物体,将其复制一份替换当前激活物体
+    name = "右耳"
+    obj = bpy.data.objects[name]
+    copyname = "右耳QieGeCopy"  # TODO    根据导入文件名称更改
+    copy_obj = bpy.data.objects[copyname]
+    bpy.data.objects.remove(obj, do_unlink=True)
+    duplicate_obj = copy_obj.copy()
+    duplicate_obj.data = copy_obj.data.copy()
+    duplicate_obj.animation_data_clear()
+    duplicate_obj.name = name
+    bpy.context.scene.collection.objects.link(duplicate_obj)
+    duplicate_obj.select_set(True)
+    bpy.context.view_layer.objects.active = duplicate_obj
+
+    enum = bpy.context.scene.qieGeTypeEnum
+    if enum == "OP1":
+        initCircle()
+    if enum == "OP2":
+        initPlane()
 
 
-# # 监听属性
-# subscribe_to = bpy.types.SpaceProperties, 'context'
-#
-# # 发布订阅，监听context变化
-# bpy.msgbus.subscribe_rna(
-#     key=subscribe_to,
-#     owner=object(),
-#     args=(1, 2, 3),
-#     notify=msgbus_callback,
-# )
-
-
-# bpy.utils.register_class(Circle_Cut)
+def backFromQieGe():
+    # 将切割提交
+    global finish
+    if(not finish):
+        bpy.ops.object.finishcut('INVOKE_DEFAULT')
 
 
 def register():
@@ -1296,24 +1327,3 @@ def unregister():
 
     # bpy.utils.unregister_tool(qiegeTool)
     # bpy.utils.unregister_tool(qiegeTool2)
-
-    # # 创建一个新的集合
-    # collection = bpy.data.collections.new("MyCollection")
-
-    # # 将新的集合添加到场景中
-    # bpy.context.scene.collection.children.link(collection)
-
-    # # 获取当前场景
-    # scene = bpy.context.scene
-
-    # # 遍历场景中的所有集合
-    # for collection in scene.collection.children:
-    #     if collection.name == "MyCollection":
-    #         bpy.context.view_layer.active_layer_collection =  bpy.context.view_layer.layer_collection.children[collection.name]
-
-    # # 获取要删除的集合
-    # collection = bpy.data.collections.get("MyCollection")
-
-    # # 如果集合存在，则删除它
-    # if collection:
-    #     bpy.data.collections.remove(collection)

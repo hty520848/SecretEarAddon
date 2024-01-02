@@ -13,8 +13,8 @@ import re
 from datetime import *
 import sys
 
-is_copy_local_thickening = False  # 重置按钮相关属性，用于重置局部加厚的选区 和 未提交前的加厚效果
-
+is_copy_local_thickening = False  # 判断加厚状态，值为True时为未提交，值为False为提交后或重置后(未处于加厚预览状态)
+                                  #主要用于加厚按钮中，第一次加厚初始化状态数组。局部加厚模块切换时的状态判断
 prev_on_object = False  # 全局变量,保存之前的鼠标状态,用于判断鼠标状态是否改变(如从物体上移动到公共区域或从公共区域移动到物体
 
 local_thickening_objects_array = []  # 保存局部加厚功能中每一步加厚时物体的状态，用于单步撤回
@@ -27,7 +27,7 @@ is_timer_start = False  # 判断定时器是否已启动,若已经启动,则扩�
 switch_selected_vertex_index = []  # 用于保存当前模型的局部加厚区域,从其他模式切换到局部加厚模式时根据该区域初始化模型
 
 
-# prev_properties_context = None                   #保存Properties窗口切换时上次Properties窗口中的上下文,记录由哪个模式切换而来
+is_submit = False           #判断是否提交过   主要用于局部加厚模块切换时颜色顶点索引的保存
 
 
 # 获取区域和空间，鼠标行为切换相关
@@ -180,47 +180,22 @@ def initialTransparency():
     bpy.data.materials["Transparency"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
 
 
-def ToLocalThickening():
-    # 根据当前激活物体复制得到用于重置的LocalThickCopy和初始时的参照物LocalThickCompare
-    active_obj = bpy.context.active_object
-    name = active_obj.name
-    duplicate_obj1 = active_obj.copy()
-    duplicate_obj1.data = active_obj.data.copy()
-    duplicate_obj1.animation_data_clear()
-    duplicate_obj1.name = name + "LocalThickCompare"
-    bpy.context.collection.objects.link(duplicate_obj1)
-    duplicate_obj1.hide_set(True)
-    duplicate_obj1.hide_set(False)
-    duplicate_obj2 = active_obj.copy()
-    duplicate_obj2.data = active_obj.data.copy()
-    duplicate_obj2.animation_data_clear()
-    duplicate_obj2.name = name + "LocalThickCopy"
-    bpy.context.collection.objects.link(duplicate_obj2)
-    duplicate_obj2.hide_set(True)
-    active_obj = bpy.data.objects[name]  # 将右耳设置为当前激活物体
-    bpy.context.view_layer.objects.active = active_obj
-
-
-def FromLocalThickening():
-    # 删除场景中局部加厚相关的用于重置的LocalThickCopy和初始时的参照物LocalThickCompare
-    selected_objs = bpy.data.objects
-    active_object = bpy.context.active_object
-    name = active_object.name
-    for selected_obj in selected_objs:
-        if (selected_obj.name == name + "LocalThickCompare" or selected_obj.name == name + "LocalThickCopy"):
-            bpy.data.objects.remove(selected_obj, do_unlink=True)
-
 
 # 前面的打磨功能切换到 局部加厚模式时
 def frontToLocalThickening():
     global switch_selected_vertex_index
     global objects_array_index
-    objects_array_index = 0
+    global is_copy_local_thickening
+    # 进入局部加厚模块时,是否已经加厚过,初始化了状态数组的第一个模型
+    if (is_copy_local_thickening == True):
+        objects_array_index = 0
+    else:
+        objects_array_index = -1
 
     # 若存在LocalThickCopy,则将其删除并重新生成
     all_objs = bpy.data.objects
     for selected_obj in all_objs:
-        if (selected_obj.name == "右耳LocalThickCopy"):
+        if (selected_obj.name == "右耳LocalThickCopy" or selected_obj.name == "右耳LocalThickCompare"):
             bpy.data.objects.remove(selected_obj, do_unlink=True)
     # 根据当前激活物体复制得到用于重置的LocalThickCopy和初始时的参照物LocalThickCompare
     active_obj = bpy.context.active_object
@@ -237,8 +212,7 @@ def frontToLocalThickening():
     duplicate_obj2.animation_data_clear()
     duplicate_obj2.name = name + "LocalThickCopy"
     bpy.context.collection.objects.link(duplicate_obj2)
-    duplicate_obj2.hide_set(
-        True)  # 将LocalThickCopy隐藏
+    duplicate_obj2.hide_set(True)  # 将LocalThickCopy隐藏
     active_obj = bpy.data.objects[name]  # 将右耳设置为当前激活物体
     bpy.context.view_layer.objects.active = active_obj
 
@@ -268,21 +242,24 @@ def frontToLocalThickening():
 
 def frontFromLocalThickening():
     # 保存模型上选中的局部加厚区域中的顶点索引,同样保存模型上已选中点放在submit功能模块中
+    global is_submit
     global switch_selected_vertex_index
-    switch_selected_vertex_index = []
-    active_obj = bpy.context.active_object
-    if active_obj.type == 'MESH':
-        me = active_obj.data
-        bm = bmesh.new()
-        bm.from_mesh(me)
-        bm.verts.ensure_lookup_table()
-        color_lay = bm.verts.layers.float_color["Color"]
-        for vert in bm.verts:
-            colvert = vert[color_lay]
-            if round(colvert.x, 3) != 1.000 and round(colvert.y, 3) != 0.319 and round(colvert.z, 3) != 0.133:
-                switch_selected_vertex_index.append(vert.index)
-        bm.to_mesh(me)
-        bm.free()
+    # 未提交时,保存局部加厚区域中顶点索引。若已提交,则submit按钮中已经保存该顶点索引,无序置空在重新确定顶点索引
+    if (is_submit == False):
+        switch_selected_vertex_index = []
+        active_obj = bpy.context.active_object
+        if active_obj.type == 'MESH':
+            me = active_obj.data
+            bm = bmesh.new()
+            bm.from_mesh(me)
+            bm.verts.ensure_lookup_table()
+            color_lay = bm.verts.layers.float_color["Color"]
+            for vert in bm.verts:
+                colvert = vert[color_lay]
+                if round(colvert.x, 3) != 1.000 and round(colvert.y, 3) != 0.319 and round(colvert.z, 3) != 0.133:
+                    switch_selected_vertex_index.append(vert.index)
+            bm.to_mesh(me)
+            bm.free()
 
     # 根据LocalThickCopy复制出一份物体并替换为当前激活物体
     active_obj = bpy.context.active_object  # 将当前激活的模型替换为执行加厚操作之前的模型
@@ -313,7 +290,12 @@ def frontFromLocalThickening():
 def backToLocalThickening():
     global switch_selected_vertex_index
     global objects_array_index
-    objects_array_index = 0
+    global is_copy_local_thickening
+    # 进入局部加厚模块时,是否已经加厚过,初始化了状态数组的第一个模型
+    if (is_copy_local_thickening == True):
+        objects_array_index = 0
+    else:
+        objects_array_index = -1
 
     exist_LocalThickCopy = False
 
@@ -324,17 +306,26 @@ def backToLocalThickening():
         if (selected_obj.name == "右耳LocalThickCopy"):
             exist_LocalThickCopy = True
     if (exist_LocalThickCopy):
-        # 根据LocalThickCopy复制得到LocalThickCompare
+        # 根据LocalThickCopy复制出来一份物体用来替换当前激活物体
         name = bpy.context.active_object.name
+        active_obj = bpy.data.objects[name]
         copyname = name + "LocalThickCopy"
         ori_obj = bpy.data.objects[copyname]
+        bpy.data.objects.remove(active_obj, do_unlink=True)
         duplicate_obj = ori_obj.copy()
         duplicate_obj.data = ori_obj.data.copy()
         duplicate_obj.animation_data_clear()
-        duplicate_obj.name = name + "LocalThickCompare"
+        duplicate_obj.name = name
         bpy.context.scene.collection.objects.link(duplicate_obj)
-        active_obj = bpy.data.objects[name]  # 将右耳设置为当前激活物体
-        bpy.context.view_layer.objects.active = active_obj
+        duplicate_obj.select_set(True)
+        bpy.context.view_layer.objects.active = duplicate_obj
+
+        # 根据LocalThickCopy复制得到LocalThickCompare
+        duplicate_obj1 = ori_obj.copy()
+        duplicate_obj1.data = ori_obj.data.copy()
+        duplicate_obj1.animation_data_clear()
+        duplicate_obj1.name = name + "LocalThickCompare"
+        bpy.context.scene.collection.objects.link(duplicate_obj1)
 
         # 根据switch_selected_vertex中保存的模型上的已选中顶点,将其置为局部加厚中已选中顶点并根据offset和borderWidth进行加厚,进行初始化处理
         active_obj = bpy.context.active_object
@@ -387,21 +378,24 @@ def backToLocalThickening():
 # 从当前的局部加厚切换到后面的其他功能时
 def backFromLocalThickening():
     # 保存模型上选中的局部加厚区域中的顶点索引,同样保存模型上已选中点放在submit功能模块中
+    global is_submit
     global switch_selected_vertex_index
-    switch_selected_vertex_index = []
-    active_obj = bpy.context.active_object
-    if active_obj.type == 'MESH':
-        me = active_obj.data
-        bm = bmesh.new()
-        bm.from_mesh(me)
-        bm.verts.ensure_lookup_table()
-        color_lay = bm.verts.layers.float_color["Color"]
-        for vert in bm.verts:
-            colvert = vert[color_lay]
-            if round(colvert.x, 3) != 1.000 and round(colvert.y, 3) != 0.319 and round(colvert.z, 3) != 0.133:
-                switch_selected_vertex_index.append(vert.index)
-        bm.to_mesh(me)
-        bm.free()
+    # 未提交时,保存局部加厚区域中顶点索引。若已提交,则submit按钮中已经保存该顶点索引,无序置空在重新确定顶点索引
+    if (is_submit == False):
+        switch_selected_vertex_index = []
+        active_obj = bpy.context.active_object
+        if active_obj.type == 'MESH':
+            me = active_obj.data
+            bm = bmesh.new()
+            bm.from_mesh(me)
+            bm.verts.ensure_lookup_table()
+            color_lay = bm.verts.layers.float_color["Color"]
+            for vert in bm.verts:
+                colvert = vert[color_lay]
+                if round(colvert.x, 3) != 1.000 and round(colvert.y, 3) != 0.319 and round(colvert.z, 3) != 0.133:
+                    switch_selected_vertex_index.append(vert.index)
+            bm.to_mesh(me)
+            bm.free()
 
     # 将当前模型的预览提交
     initialModelColor()
@@ -584,6 +578,10 @@ def showThickness(context, event):
 
 
 def auto_thickening():
+    global is_submit
+    is_submit = False
+
+
     initialTransparency()
     offset = bpy.context.scene.localThicking_offset  # 获取局部加厚面板中的偏移量参数
     borderWidth = bpy.context.scene.localThicking_borderWidth  # 获取局部加厚面板中的边界宽度参数
@@ -611,7 +609,7 @@ def auto_thickening():
     thickening_offset_borderwidth(offset, borderWidth, False)
 
     # 将加厚函数中添加的修改器应用并删除该修改器,防止卡顿
-    bpy.ops.object.modifier_apply(modifier="LaplacianSmooth")
+    bpy.ops.object.modifier_apply(modifier="LaplacianSmooth",single_user=True)
     draw_border_curve()
 
 
@@ -811,7 +809,7 @@ def backup(context):
         thickening_offset_borderwidth(0, borderWidth, True)
         thickening_offset_borderwidth(offset, borderWidth, False)
         # 将加厚函数中添加的修改器应用并删除该修改器,防止卡顿
-        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth")
+        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth",single_user=True)
         draw_border_curve()  # 重新绘制边界
 
 
@@ -848,7 +846,7 @@ def forward(context):
         thickening_offset_borderwidth(0, borderWidth, True)
         thickening_offset_borderwidth(offset, borderWidth, False)
         # 将加厚函数中添加的修改器应用并删除该修改器,防止卡顿
-        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth")
+        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth",single_user=True)
         draw_border_curve()  # 重新绘制边界
 
 
@@ -893,7 +891,7 @@ class BackUp(bpy.types.Operator):
                 thickening_offset_borderwidth(0, borderWidth, True)
                 thickening_offset_borderwidth(offset, borderWidth, False)
                 # 将加厚函数中添加的修改器应用并删除该修改器,防止卡顿
-                bpy.ops.object.modifier_apply(modifier="LaplacianSmooth")
+                bpy.ops.object.modifier_apply(modifier="LaplacianSmooth",single_user=True)
                 draw_border_curve()  # 重新绘制边界
 
         return {'FINISHED'}
@@ -941,7 +939,7 @@ class Forward(bpy.types.Operator):
                 thickening_offset_borderwidth(0, borderWidth, True)
                 thickening_offset_borderwidth(offset, borderWidth, False)
                 # 将加厚函数中添加的修改器应用并删除该修改器,防止卡顿
-                bpy.ops.object.modifier_apply(modifier="LaplacianSmooth")
+                bpy.ops.object.modifier_apply(modifier="LaplacianSmooth",single_user=True)
                 draw_border_curve()  # 重新绘制边界
 
         return {'FINISHED'}
@@ -1174,7 +1172,7 @@ class Local_Thickening_AddArea(bpy.types.Operator):
         op_cls.__initial_mouse_x = None
         op_cls.__initial_mouse_y = None
         # 将加厚函数中添加的修改器应用并删除该修改器,防止卡顿
-        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth")
+        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth",single_user=True)
         # 开启定时器,局部加厚区域扩大时,自动加厚
         if (is_timer_start == False):
             bpy.ops.object.timer_auto_thick()
@@ -1256,7 +1254,7 @@ class Local_Thickening_ReduceArea(bpy.types.Operator):
         op_cls.__initial_mouse_x = None
         op_cls.__initial_mouse_y = None
         # 将加厚函数中添加的修改器应用并删除该修改器,防止卡顿
-        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth")
+        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth",single_user=True)
         # 开启定时器,局部加厚区域缩小时,自动加厚
         if (is_timer_start == False):
             bpy.ops.object.timer_auto_thick()
@@ -1318,6 +1316,7 @@ class Local_Thickening_Thicken(bpy.types.Operator):
         global is_copy_local_thickening  # 用于再第一次加厚时,将LocalThickCopy复制下来并保存以初始化状态数组
         global local_thickening_objects_array  # 将模型最初的状态保存到状态数组中
         global objects_array_index
+        global is_submit
 
         if not is_copy_local_thickening:
             # 保存模型最初的状态，用于重置,并将LocalThickCopy保存到状态数组的初始化状态
@@ -1330,8 +1329,10 @@ class Local_Thickening_Thicken(bpy.types.Operator):
             duplicate_obj = compare_obj.copy()
             duplicate_obj.data = compare_obj.data.copy()
             duplicate_obj.animation_data_clear()
+            duplicate_obj.name = "localThick_array_objects"
             local_thickening_objects_array.append(duplicate_obj)
             objects_array_index = objects_array_index + 1
+            is_submit = False
 
         if bpy.context.mode == "PAINT_VERTEX":  # 将默认的顶点绘制模式切换到物体模式
             bpy.ops.paint.vertex_paint_toggle()
@@ -1351,7 +1352,7 @@ class Local_Thickening_Thicken(bpy.types.Operator):
         # 将加厚之后的模型保存到状态数组中
         initialModelColor()
         # 防止保存到状态数组中的模型存在修改器,使得在撤销或重做后出现卡顿现象
-        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth")
+        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth",single_user=True)
         active_obj = bpy.context.active_object
         duplicate_obj = active_obj.copy()
         duplicate_obj.data = active_obj.data.copy()
@@ -1393,7 +1394,7 @@ class Local_Thickening_Thicken(bpy.types.Operator):
         draw_border_curve()  # 更新圆环材质
 
         # 将加厚函数中添加的修改器应用并删除该修改器,防止卡顿
-        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth")
+        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth",single_user=True)
 
         # 解决模型重叠问题
         active_obj = bpy.context.active_object
@@ -1429,9 +1430,11 @@ class Local_Thickening_Submit(bpy.types.Operator):
         global local_thickening_objects_array
         global objects_array_index
         global switch_selected_vertex_index
+        global is_submit
 
         bpy.context.scene.var = 8
         is_copy_local_thickening = False
+        is_submit = True
 
         # 重置局部加厚中保存模型各个状态的数组
         local_thickening_objects_array = []
@@ -1809,7 +1812,7 @@ def register():
     # bpy.utils.register_tool(MyTool5_JiaHou, separator=True, group=False, after={MyTool3_JiaHou.bl_idname})
     # bpy.utils.register_tool(MyTool7_JiaHou, separator=True, group=False, after={MyTool5_JiaHou.bl_idname})
     # bpy.utils.register_tool(MyTool9_JiaHou, separator=True, group=False, after={MyTool7_JiaHou.bl_idname})
-    # bpy.utils.register_tool(MyTool11_JiaHou,separator=True, group=False,after={MyTool9_JiaHou.bl_idname})
+    # # bpy.utils.register_tool(MyTool11_JiaHou,separator=True, group=False,after={MyTool9_JiaHou.bl_idname})
 
     # bpy.utils.register_tool(MyTool2_JiaHou, separator=True, group=False)
     # bpy.utils.register_tool(MyTool4_JiaHou, separator=True, group=False, after={MyTool2_JiaHou.bl_idname})
@@ -1826,7 +1829,7 @@ def unregister():
     # bpy.utils.unregister_tool(MyTool5_JiaHou)
     # bpy.utils.unregister_tool(MyTool7_JiaHou)
     # bpy.utils.unregister_tool(MyTool9_JiaHou)
-    # bpy.utils.unregister_tool(MyTool11_JiaHou)
+    # # bpy.utils.unregister_tool(MyTool11_JiaHou)
 
     # bpy.utils.unregister_tool(MyTool2_JiaHou)
     # bpy.utils.unregister_tool(MyTool4_JiaHou)

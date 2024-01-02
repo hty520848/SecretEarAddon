@@ -20,10 +20,10 @@
     右耳是当前操作的物体,LocalThickCompare主要用来作为加厚过程中的模型对比,LocalThickCopy主要用来重置局部加厚模块和模块切换间局部加厚的恢复
 
 切割模块:
-    环切:  该模块主要使用 右耳(导入文件名)  Tours   Circle  QieGeCompare
-           右耳是当前操作的物体,Tours时可用于操作和移动的圆环,Circle主要用来切割且由Tours生成,QieGeCompare则是用于对比的透明物体
-    侧切： 该模块主要使用 右耳(导入文件名) mysphere1, mysphere2,mysphere3,mysphere4, myplane
-           右耳是当前操作的物体, mysphere是用于操作的四个圆球, myplane是用于切割的两个面,QieGeStepCompare则是用于对比的透明物体
+    环切:  该模块主要使用 右耳(导入文件名)  Tours   Circle  右耳huanqieCompare
+           右耳是当前操作的物体,Tours时可用于操作和移动的圆环,Circle主要用来切割且由Tours生成,右耳huanqieCompare则是用于对比的透明物体
+    侧切： 该模块主要使用 右耳(导入文件名) StepCutsphere1, StepCutsphere2,StepCutsphere3,StepCutsphere4,右耳ceqieCompare
+           右耳是当前操作的物体, StepCutsphere是用于操作的四个圆球, StepCutplane是用于切割的平面,右耳ceqieCompare则是用于对比的透明物体
 '''
 bl_info = {
     "name" : "SecretEar",
@@ -47,6 +47,9 @@ if "bpy" in locals():
          "jiahou"
          "public_operation"
          "qiege"
+         "tool"
+         "label"
+         "handle"
     ]
     #reload()函数重新载入模块，调试时加载的模块发生改变时，
     for module in reloadable_modules:
@@ -61,7 +64,9 @@ from . import  (
                 ui,
                 prop,
                 public_operation,
-                qiege
+                qiege,
+                label,
+                handle
                 )
 
 def register():
@@ -71,6 +76,8 @@ def register():
     prop.register()
     public_operation.register()
     qiege.register()
+    label.register()
+    handle.register()
 
 def unregister():
     ui.unregister()
@@ -78,6 +85,8 @@ def unregister():
     jiahou.unregister()
     public_operation.unregister()
     qiege.unregister()
+    label.unregister()
+    handle.unregister()
 
 if __name__ == "__main__":
     register()

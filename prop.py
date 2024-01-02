@@ -3,6 +3,7 @@ import blf
 from .damo import *
 from .jiahou import *
 from .qiege import *
+from .label import *
 
 font_info = {
     "font_id": 0,
@@ -60,14 +61,139 @@ def My_Properties():
         name="qiegeneiBianYuan", min=0.1, max=3, step=10, update=qiegesmooth2, default=0.4)
 
     # 创建模具属性
+
+    # 参数、模具面板切换
+    bpy.types.Scene.tabEnum = bpy.props.EnumProperty(
+        name="tab",
+        description='参数面板和模板选择面板切换',
+        items=[
+            ('参数', '参数', ''),
+            ('模板', '模板', '')],
+        # default = '模板' 
+    )
+
+    bpy.types.Scene.showHdu = bpy.props.BoolProperty(
+        name="showMenu",default = True)
+    
+     # 新建菜单属性
+
+    bpy.types.Scene.newMuban = bpy.props.BoolProperty(
+        name="newMuban",default = True)
+    
+    # 右耳文件
+    bpy.types.Scene.rightEar_path = bpy.props.StringProperty(name="右耳输入",
+                                        description="右耳",
+                                        default="",
+                                        maxlen=1024,
+                                        subtype="FILE_PATH")   
+    
+    # 左耳文件
+    bpy.types.Scene.leftEar_path = bpy.props.StringProperty(name="左耳输入",
+                                        description="左耳",
+                                        default="",
+                                        maxlen=1024,
+                                        subtype="FILE_PATH")  
+    # 自动文件匹配选项
+    bpy.types.Scene.autoMatch = bpy.props.BoolProperty(
+        name="autoMatch" , default= True)
+    
+    # 导出STL属性
+    
+    # 勾选右耳
+    bpy.types.Scene.tickRight = bpy.props.BoolProperty(
+        name="tickRight" , default= True)
+    # 勾选右耳
+    bpy.types.Scene.tickLeft = bpy.props.BoolProperty(
+        name="tickLeft" , default= True)
+    
+    bpy.types.Scene.expRightEar_path = bpy.props.StringProperty(name="",
+                                        description="右耳输出",
+                                        default="",
+                                        maxlen=1024,
+                                        subtype="FILE_PATH") 
+
+    bpy.types.Scene.expLeftEar_path = bpy.props.StringProperty(name="",
+                                        description="左耳输出",
+                                        default="",
+                                        maxlen=1024,
+                                        subtype="FILE_PATH") 
+    
+    # 保存选项
+    bpy.types.Scene.expSave = bpy.props.BoolProperty(
+        name="expSace" , default= True)
+    # 关闭选项
+    bpy.types.Scene.expClose = bpy.props.BoolProperty(
+        name="expClose" , default= True)
+
+    # sed文件
+    bpy.types.Scene.expSedFile_path = bpy.props.StringProperty(name="",
+                                        description="Sed模板",
+                                        default="",
+                                        maxlen=1024,
+                                        subtype="FILE_PATH") 
+    
+    # 另存为模板属性
+    # 模板描述
+    bpy.types.Scene.save_desc = bpy.props.StringProperty(name="",
+                                        description="模板描述",
+                                        default="",
+                                        maxlen=1024)  
+    
+    # 左侧模型属性是否保存
+    bpy.types.Scene.leftDamo = bpy.props.BoolProperty(
+        name="leftDamo" , default= True)
+    
+    bpy.types.Scene.leftQiege = bpy.props.BoolProperty(
+        name="leftQiege" , default= True)
+    
+    bpy.types.Scene.leftChuangjianmoju = bpy.props.BoolProperty(
+        name="leftChuangjianmoju" , default= False)
+    
+    bpy.types.Scene.leftChuanshengkong = bpy.props.BoolProperty(
+        name="leftChuanshengkong" , default= True)
+    
+    bpy.types.Scene.leftTongqikong = bpy.props.BoolProperty(
+        name="leftTongqikong" , default= False)
+    
+    bpy.types.Scene.leftFujian = bpy.props.BoolProperty(
+        name="leftFujian" , default= True)
+    
+    bpy.types.Scene.leftRuanermohoudu = bpy.props.BoolProperty(
+        name="leftRuanermohoudu" , default= True)
+    
+    # 右侧模型属性是否保存
+    bpy.types.Scene.rightDamo = bpy.props.BoolProperty(
+        name="rightDamo" , default= True)
+    
+    bpy.types.Scene.rightQiege = bpy.props.BoolProperty(
+        name="rightQiege" , default= True)
+    
+    bpy.types.Scene.rightChuangjianmoju = bpy.props.BoolProperty(
+        name="rightChuangjianmoju" , default= False)
+    
+    bpy.types.Scene.rightChuanshengkong = bpy.props.BoolProperty(
+        name="rightChuanshengkong" , default= True)
+    
+    bpy.types.Scene.rightTongqikong = bpy.props.BoolProperty(
+        name="rightTongqikong" , default= False)
+    
+    bpy.types.Scene.rightFujian = bpy.props.BoolProperty(
+        name="rightFujian" , default= True)
+    
+    bpy.types.Scene.rightRuanermohoudu = bpy.props.BoolProperty(
+        name="rightRuanermohoudu" , default= True)
+
+
     bpy.types.Scene.muJuTypeEnum = bpy.props.EnumProperty(
-        name="muJuTypeEnum",
+        name="",
         description='this is option',
         items=[
-            ('OP1', '软耳模', ''),
-            ('OP2', '硬耳膜', ''),
-            ('OP3', '外壳', ''),
-            ('OP4', '框架式耳膜', '')]
+            ('OP1', '软耳模', '','URL',1),
+            ('OP2', '硬耳膜', '','URL',2),
+            ('OP3', '一体外壳', '','URL',3),
+            ('OP4', '框架式耳膜', '','URL',4),
+            ('OP5', '常规外壳', '','URL',5),
+            ('OP6', '实心面板', '','URL',6)]
     )
     bpy.types.Scene.neiBianJiXian = bpy.props.BoolProperty(
         name="neiBianJiXian")
@@ -194,11 +320,11 @@ def My_Properties():
 
     # 编号
     bpy.types.Scene.labelText = bpy.props.StringProperty(
-        name="labelText", description="Enter label text here")
-    bpy.types.Scene.fontSize = bpy.props.FloatProperty(
-        name="fontSize", min=-1.0, max=1.0)
+        name="labelText", description="Enter label text here", default="HDU", update=LabelTextUpdate)
+    bpy.types.Scene.fontSize = bpy.props.IntProperty(
+        name="fontSize", min=1, max=8, default=4, update=LabelSizeUpdate)
     bpy.types.Scene.deep = bpy.props.FloatProperty(
-        name="deep", min=-1.0, max=1.0)
+        name="deep", min=-3.0, max=3.0, default=1.0, update=LabelDepthUpdate)
     bpy.types.Scene.styleEnum = bpy.props.EnumProperty(
         name="styleEnum",
         description='编号的风格',
@@ -287,16 +413,20 @@ def qiegeenum(self, context):
     enum = bpy.context.scene.qieGeTypeEnum
     if enum == "OP1":
         quitStepCut()
-        initCircle()
+        override = getOverride()
+        with bpy.context.temp_override(**override):
+            initCircle()
     if enum == "OP2":
         quitCut()
-        initPlane()
+        override = getOverride()
+        with bpy.context.temp_override(**override):
+            initPlane()
 
 
 def qiegesmooth2(self, context):
     bl_description = "阶梯切割平滑偏移值2"
     pianyi = bpy.context.scene.qiegeneiBianYuan
-    bpy.data.objects["myplane"].modifiers["smooth"].width = pianyi
+    bpy.data.objects["StepCutplane"].modifiers["smooth"].width = pianyi
 
 
 # 回调函数，根据绑定的属性值更改选中区域的厚度
@@ -339,6 +469,34 @@ def LocalThickeningBorderWidthUpdate(self, context):
     else:
         pass
 
+
+def LabelTextUpdate(self, context):
+    bl_description = "更新标签中的文本内容"
+
+    print("update")
+    labelText = bpy.context.scene.labelText
+
+    # 将属性面板中的text属性值读取到剪切板中生成新的label
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        labelTextUpdate(labelText)
+
+
+def LabelSizeUpdate(self, context):
+    bl_description = "更新文本中字体的大小"
+    size = bpy.context.scene.fontSize
+    print("字体大小更新")
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        labelSizeUpdate(size)
+
+
+def LabelDepthUpdate(self, context):
+    bl_description = "更新文本中字体的高度"
+    depth = bpy.context.scene.deep
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        labelDepthUpdate(depth)
 
 def register():
     My_Properties()
