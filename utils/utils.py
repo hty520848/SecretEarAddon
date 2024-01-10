@@ -56,7 +56,7 @@ def utils_draw_curve(order_border_co, name, depth):
         bpy.context.view_layer.objects.active = active_obj
 
 
-def re_color(target_object_name, color):
+def utils_re_color(target_object_name, color):
     '''为模型重新上色'''
     # 遍历场景中的所有对象，并根据名称选择目标物体
     for obj in bpy.context.view_layer.objects:
@@ -75,3 +75,19 @@ def re_color(target_object_name, color):
         colvert.z = color[2]
     bm.to_mesh(me)
     bm.free()
+
+def utils_copy_object(origin_name,copy_name):
+    copy_flag = False
+    for obj in bpy.context.view_layer.objects:
+        if obj.name == "origin_name":
+            copy_flag = True
+            cur_obj = obj
+            break
+    # 复制一份挖孔前的模型以备用
+    if copy_flag:
+        duplicate_obj = cur_obj.copy()
+        duplicate_obj.data = cur_obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = copy_name
+        bpy.context.collection.objects.link(duplicate_obj)
+    return copy_flag

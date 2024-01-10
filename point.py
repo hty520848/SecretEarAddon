@@ -3,6 +3,7 @@ import bmesh
 import mathutils
 from bpy_extras import view3d_utils
 from math import sqrt
+from mathutils import Vector    
 
 index_initial = -1 #记录第一次点击蓝线时的下标索引
 index_finish = -1  #记录结束时点击蓝线的的下标索引
@@ -117,6 +118,8 @@ def copy_curve(name):
             new_spline.points[i].co = point.co
 
 def join_curve():
+    global index_initial
+    global index_finish
     # 获取两条曲线对象
     curve_obj1 = bpy.data.objects['operatecurve']
     curve_obj2 = bpy.data.objects['point']
@@ -143,19 +146,33 @@ def join_curve():
     # 合并两条曲线的点集
     new_curve_data.splines.clear()
     new_spline = new_curve_data.splines.new(type=curve_data1.splines[0].type)
-    new_spline.points.add(len(curve_data1.splines[0].points) + len(curve_data2.splines[0].points) - 1)
+    point_number = len(curve_data1.splines[0].points) + len(curve_data2.splines[0].points) - abs(index_finish-index_initial) -1
+    new_spline.points.add(point_number)
 
-    # 将第一条曲线的点复制到新曲线
+    # 将第一条曲线在初始起点前的点复制到新曲线
     for i, point in enumerate(curve_data1.splines[0].points):
+        if i == index_initial:
+            break
         new_spline.points[i].co = point.co
-
+        
     # 将第二条曲线的点复制到新曲线
     for i, point in enumerate(curve_data2.splines[0].points):
-        new_spline.points[i + len(curve_data1.splines[0].points) - 1].co = point.co
+        new_spline.points[i + index_initial].co = point.co
+
+    # 将第一条曲线在结束点之后的点复制到新曲线
+    for i, point in enumerate(curve_data1.splines[0].points):
+        if i >= index_finish:
+            new_spline.points[i + len(curve_data2.splines[0].points) - abs(index_finish-index_initial)].co = point.co
+    
 
     bpy.data.objects.remove(bpy.data.objects['operatecurve'],do_unlink=True)
     bpy.data.objects.remove(bpy.data.objects['point'],do_unlink=True)
     new_curve_obj.name = 'operatecurve'
+
+    bpy.context.view_layer.objects.active = bpy.data.objects['operatecurve']
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.data.objects['operatecurve'].select_set(state=True)
+    bpy.context.object.data.dimensions = '3D'
 
 
 def join_object():
@@ -240,18 +257,21 @@ class TEST_OT_doubleclick(bpy.types.Operator):
                 index_finish = select_nearest_point(co)
                 print("在曲线上最近点的下标是",index_finish)
                 bpy.ops.object.mode_set(mode='OBJECT') #返回对象模式
-                curve_obj = bpy.data.objects['operatecurve']
-                bpy.context.view_layer.objects.active = curve_obj
-                bpy.ops.object.select_all(action='DESELECT')
-                curve_obj.select_set(state=True)
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.curve.select_all(action='DESELECT')
-                for i in range(index_initial,index_finish,1):  #选中两个索引中的点
-                    curve_obj.data.splines[0].points[i].select = True
-                bpy.ops.curve.delete(type='SEGMENT')      #删除选中的顶点
-                # bpy.ops.curve.delete(type='VERT')  
-                bpy.ops.object.mode_set(mode='OBJECT') #返回对象模式
                 bpy.context.scene.tool_settings.use_snap = False #取消吸附
+
+                # #删除两个索引间的顶点
+                # curve_obj = bpy.data.objects['operatecurve']
+                # bpy.context.view_layer.objects.active = curve_obj
+                # bpy.ops.object.select_all(action='DESELECT')
+                # curve_obj.select_set(state=True)
+                # bpy.ops.object.mode_set(mode='EDIT')
+                # bpy.ops.curve.select_all(action='DESELECT')
+                # for i in range(index_initial,index_finish,1):  #选中两个索引中的点
+                #     curve_obj.data.splines[0].points[i].select = True
+                # bpy.ops.curve.delete(type='SEGMENT')     
+                # # bpy.ops.curve.delete(type='VERT')  
+                # bpy.ops.object.mode_set(mode='OBJECT') #返回对象模式
+                
                 join_object() #合并物体
 
             else:
@@ -288,3 +308,24 @@ class MyTool(bpy.types.WorkSpaceTool):
 bpy.utils.register_class(TEST_OT_doubleclick)
 
 bpy.utils.register_tool(MyTool, separator=True, group=False)
+
+# 获取直线对象
+curve_object = bpy.data.objects["operatecurve"]
+# 获取目标物体
+target_object = bpy.data.objects["右耳"] 
+# 获取数据
+curve_data = curve_object.data
+target_mesh = target_object.data
+
+# 将曲线的每个顶点吸附到目标物体的表面
+for spline in curve_data.splines:
+    for point in spline.points:
+        # 获取顶点原位置
+        vertex_co = curve_object.matrix_world @ Vector(point.co[0:3])
+  
+        # 计算顶点在目标物体面上的 closest point
+        _ , closest_co, _ , _ = target_object.closest_point_on_mesh(vertex_co)
+
+        # 将顶点位置设置为 closest point
+        point.co[0:3]= closest_co
+        point.co[3] = 0 
