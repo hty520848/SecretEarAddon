@@ -152,7 +152,7 @@ def apply_template():
     bpy.context.collection.objects.link(duplicate_obj)
     duplicate_obj.hide_set(True)
     # todo 先加到右耳集合，后续调整左右耳适配
-    moveToRight(duplicate_obj)
+    # moveToRight(duplicate_obj)
 
     dig_hole()
     bottom_cut()

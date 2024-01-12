@@ -218,7 +218,7 @@ def translate_circle_to_object():
     duplicate_obj.name = cur_obj.name + "ForCutR"
     bpy.context.collection.objects.link(duplicate_obj)
     # todo 先加到右耳集合，后续调整左右耳适配
-    moveToRight(duplicate_obj)
+    # moveToRight(duplicate_obj)
 
     for obj in bpy.data.objects:
         obj.select_set(False)
@@ -365,7 +365,7 @@ def bottom_cut():
     bpy.context.collection.objects.link(duplicate_obj)
     duplicate_obj.hide_set(True)
     # todo 先加到右耳集合，后续调整左右耳适配
-    moveToRight(duplicate_obj)
+    # moveToRight(duplicate_obj)
 
     high_percent = 0.25
     # 获取活动对象
@@ -411,7 +411,7 @@ def bottom_cut():
         # 2024/1/6 使用exact，曲线深度小于0.39也会有问题，这里设置为0.4
         draw_cut_border_curve(get_order_border_vert(order_border_co), "BottomRingBorderR", 0.4)
         # todo 先加到右耳集合，后续调整左右耳适配
-        moveToRight(bpy.data.objects["BottomRingBorderR"])
+        # moveToRight(bpy.data.objects["BottomRingBorderR"])
 
         translate_circle_to_object()
         boolean_apply()

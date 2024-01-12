@@ -81,21 +81,21 @@ class HUIER_PT_LocalOrGlobalJiaHou(bpy.types.Panel):
 # 局部或整体加厚面板2
 
 
-class HUIER_PT_LocalOrGlobalJiaHou2(bpy.types.Panel):
-    bl_label = "局部或整体加厚"
-    bl_idname = "HUIER_PT_LocalOrGlobalJiaHou2"
-    bl_space_type = "PROPERTIES"
-    bl_region_type = "WINDOW"
-    bl_context = "view_layer"
+# class HUIER_PT_LocalOrGlobalJiaHou2(bpy.types.Panel):
+#     bl_label = "局部或整体加厚"
+#     bl_idname = "HUIER_PT_LocalOrGlobalJiaHou2"
+#     bl_space_type = "PROPERTIES"
+#     bl_region_type = "WINDOW"
+#     bl_context = "view_layer"
 
-    def draw(self, context):
-        layout = self.layout
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'localThicking_offset', text="偏移值")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'localThicking_borderWidth', text="边框宽度")
+#     def draw(self, context):
+#         layout = self.layout
+#         layout.separator()
+#         col = layout.column(align=True)
+#         col.prop(context.scene, 'localThicking_offset', text="偏移值")
+#         layout.separator()
+#         col = layout.column(align=True)
+#         col.prop(context.scene, 'localThicking_borderWidth', text="边框宽度")
 
 # 点面切割
 
@@ -105,7 +105,7 @@ class HUIER_PT_DianMianQieGe(bpy.types.Panel):
     bl_idname = "HUIER_PT_DianMianQieGe"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "scene"
+    bl_context = "view_layer"
     bl_options = {'HIDE_HEADER'}
 
     def draw(self, context):
@@ -120,7 +120,7 @@ class HUIER_PT_PlantCut(bpy.types.Panel):
     bl_idname = "HUIER_PT_PlantCut"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "scene"
+    bl_context = "view_layer"
 
     @classmethod
     def poll(cls, context):
@@ -140,7 +140,7 @@ class HUIER_PT_StepCut(bpy.types.Panel):
     bl_idname = "HUIER_PT_StepCut"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "scene"
+    bl_context = "view_layer"
 
     @classmethod
     def poll(cls, context):
@@ -162,7 +162,7 @@ class HUIER_PT_MoJuTab(bpy.types.Panel):
     bl_idname = "HUIER_PT_MoJuTab"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "world"
+    bl_context = "scene"
     bl_options = {'HIDE_HEADER'}
 
     def draw(self, context):
@@ -177,7 +177,7 @@ class HUIER_PT_ChuangJianMuJu(bpy.types.Panel):
     bl_idname = "HUIER_PT_ChuangJianMuJu"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "world"
+    bl_context = "scene"
     # bl_options = {'HIDE_HEADER'}
     # bl_options = {'DEFAULT_CLOSED'}
 
@@ -206,7 +206,7 @@ class HUIER_PT_MuJuHouDu(bpy.types.Panel):
     bl_idname = "HUIER_PT_MuJuHouDu"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "world"
+    bl_context = "scene"
     bl_options = {'DEFAULT_CLOSED'}
     
 
@@ -263,7 +263,7 @@ class HUIER_PT_MianBanAndDianZiSheBei(bpy.types.Panel):
     bl_idname = "HUIER_PT_MianBanAndDianZiSheBei"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "world"
+    bl_context = "scene"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -303,7 +303,7 @@ class HUIER_PT_ShangBuQieGeMianBan(bpy.types.Panel):
     bl_idname = "HUIER_PT_ShangBuQieGeMianBan"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "world"
+    bl_context = "scene"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -325,7 +325,7 @@ class HUIER_PT_KongQiangMianBan(bpy.types.Panel):
     bl_idname = "HUIER_PT_KongQiangMianBan"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "world"
+    bl_context = "scene"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -350,7 +350,7 @@ class HUIER_PT_YingErMoCanShu(bpy.types.Panel):
     bl_idname = "HUIER_PT_YingErMoCanShu"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "world"
+    bl_context = "scene"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -378,7 +378,7 @@ class HUIER_PT_TongQiKong1(bpy.types.Panel):
     bl_idname = "HUIER_PT_TongFengKou"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "world"
+    bl_context = "scene"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -405,7 +405,7 @@ class HUIER_PT_MoBanXuanZe(bpy.types.Panel):
     bl_idname = "HUIER_PT_MoBanXuanZe"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "world"
+    bl_context = "scene"
     bl_options = {'HIDE_HEADER'}
 
 
@@ -450,7 +450,7 @@ class HUIER_PT_ChuanShenKong1(bpy.types.Panel):
     bl_idname = "HUIER_PT_ChuanShenKong1"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "collection"
+    bl_context = "world"
     bl_options = {'HIDE_HEADER'}
 
     def draw(self, context):
@@ -468,7 +468,7 @@ class HUIER_PT_ChuanShenKong2(bpy.types.Panel):
     bl_idname = "HUIER_PT_ChuanShenKong2"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "collection"
+    bl_context = "world"
 
     def draw(self, context):
         layout = self.layout
@@ -489,7 +489,7 @@ class HUIER_PT_TongQiKong(bpy.types.Panel):
     bl_idname = "HUIER_PT_TongQiKong"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "object"
+    bl_context = "collection"
     bl_options = {'HIDE_HEADER'}
 
     def draw(self, context):
@@ -506,7 +506,7 @@ class HUIER_PT_YuDingYi(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_parent_id = "HUIER_PT_TongQiKong"
-    bl_context = "object"
+    bl_context = "collection"
 
     def draw(self, context):
         layout = self.layout
@@ -521,7 +521,7 @@ class HUIER_PT_ErMoFuJian(bpy.types.Panel):
     bl_idname = "HUIER_PT_ErMoFuJian"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "modifier"
+    bl_context = "object"
 
     def draw(self, context):
         layout = self.layout
@@ -539,7 +539,7 @@ class HUIER_PT_Number(bpy.types.Panel):
     bl_idname = "HUIER_PT_Number"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "particle"
+    bl_context = "modifier"
 
     def draw(self, context):
         layout = self.layout
@@ -563,7 +563,7 @@ class HUIER_PT_RuanErMoHouDu(bpy.types.Panel):
     bl_idname = "HUIER_PT_RuanErMoHouDu"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "physics"
+    bl_context = "particle"
 
     def draw(self, context):
         layout = self.layout
@@ -584,7 +584,7 @@ class HUIER_PT_ZhiCheng(bpy.types.Panel):
     bl_idname = "HUIER_PT_ZhiCheng"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "constraint"
+    bl_context = "physics"
 
     def draw(self, context):
         layout = self.layout
@@ -602,7 +602,7 @@ class HUIER_PT_PaiQiKong(bpy.types.Panel):
     bl_idname = "HUIER_PT_PaiQiKong"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "data"
+    bl_context = "constraint"
 
     def draw(self, context):
         layout = self.layout
@@ -620,7 +620,7 @@ class HUIER_PT_HouQiDaMo(bpy.types.Panel):
     bl_idname = "HUIER_PT_HouQiDaMo"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
-    bl_context = "material"
+    bl_context = "data"
 
     def draw(self, context):
         layout = self.layout
@@ -999,6 +999,51 @@ class TOPBAR_MT_edit(bpy.types.Menu):
 
 # ********** 3D视图下的菜单栏 **********
 
+def notify_test(context):
+    override = []
+    if(context.window.workspace.name == '布局.001'):
+        workspace = context.window.workspace
+        for screen in workspace.screens:
+             for area in screen.areas:
+                 if area.type == 'VIEW_3D':
+                    if(area.spaces.active.use_local_collections == False):
+                    # 设置local collection
+                        area.spaces.active.use_local_collections = True
+                    # 这里我们无法获取窗口和workspace的引用
+                    ride = {'screen': screen, 'area': area}
+                    override.append(ride)
+        with bpy.context.temp_override(**override[0]):
+             bpy.ops.object.hide_collection(collection_index=1, extend=False)
+        with bpy.context.temp_override(**override[1]):
+             bpy.ops.object.hide_collection(collection_index=2, extend=False)    
+
+
+# 切换左右耳窗口
+class Huier_OT_SwitchWorkspace(bpy.types.Operator):
+    bl_idname = "huier.switch"
+    bl_label = "切换窗口"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+
+        # 监听workspace切换到左右耳窗口
+        subscribe_to = bpy.types.Window,'workspace'
+        bpy.msgbus.subscribe_rna(
+            key=subscribe_to,
+            owner=object(),
+            args=(bpy.context,),
+            notify=notify_test,
+        )
+        bpy.msgbus.publish_rna(key=subscribe_to)
+
+        if bpy.context.window.workspace.name == '布局':
+            bpy.context.window.workspace = bpy.data.workspaces['布局.001']
+        if bpy.context.window.workspace.name == '布局.001':
+            bpy.context.window.workspace = bpy.data.workspaces['布局']
+        return {'FINISHED'}
+
+
+
 class VIEW3D_HT_header(bpy.types.Header):
     bl_space_type = 'VIEW_3D'
 
@@ -1015,7 +1060,7 @@ class VIEW3D_HT_header(bpy.types.Header):
         icon = icons.get("icon_ruler")
         layout.operator("wm.open_mainfile", text="", icon_value=icon.icon_id)
         icon = icons.get("icon_viewShift")
-        layout.operator("wm.open_mainfile", text="", icon_value=icon.icon_id)
+        layout.operator("huier.switch", text="", icon_value=icon.icon_id)
         icon = icons.get("icon_transparency1")
         layout.popover("TOPBAR_PT_transparency1", text="", icon_value=icon.icon_id)
         icon = icons.get("icon_transparency2")
@@ -1054,7 +1099,7 @@ _classes = [
     # VIEW3D_HT_header,
     HUIER_PT_damo,
     HUIER_PT_LocalOrGlobalJiaHou,
-    HUIER_PT_LocalOrGlobalJiaHou2,
+    # HUIER_PT_LocalOrGlobalJiaHou2,
     HUIER_PT_DianMianQieGe,
     HUIER_PT_PlantCut,
     HUIER_PT_StepCut,
@@ -1092,7 +1137,8 @@ _classes = [
     Huier_OT_DaoChuWei,
     Huier_OT_SaveAsMoban,
     HUIER_PT_MoJuTab,
-    HUIER_PT_MoBanXuanZe
+    HUIER_PT_MoBanXuanZe,
+    Huier_OT_SwitchWorkspace
 ]
 
 

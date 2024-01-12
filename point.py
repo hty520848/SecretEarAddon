@@ -3,10 +3,11 @@ import bmesh
 import mathutils
 from bpy_extras import view3d_utils
 from math import sqrt
-from mathutils import Vector    
+from mathutils import Vector
 
-index_initial = -1 #记录第一次点击蓝线时的下标索引
-index_finish = -1  #记录结束时点击蓝线的的下标索引
+index_initial = -1  # 记录第一次点击蓝线时的下标索引
+index_finish = -1  # 记录结束时点击蓝线的的下标索引
+
 
 def get_region_and_space(context, area_type, region_type, space_type):
     region = None
@@ -33,8 +34,9 @@ def get_region_and_space(context, area_type, region_type, space_type):
 
     return (region, space)
 
+
 def co_on_object(context, event):
-    active_obj = bpy.data.objects['curve']
+    active_obj = bpy.data.objects['BottomRingBorderRForCutR']
 
     co = []
 
@@ -76,13 +78,14 @@ def co_on_object(context, event):
             co, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
 
             if fidx is not None:
-                return co # 如果发生交叉，返回坐标的值
+                return co  # 如果发生交叉，返回坐标的值
     return -1
+
 
 def select_nearest_point(co):
 
     # 获取当前选择的曲线对象
-    curve_obj = bpy.data.objects['operatecurve']
+    curve_obj = bpy.data.objects['BottomRingBorderR']
     # 获取曲线的数据
     curve_data = curve_obj.data
     # 遍历曲线的所有点
@@ -99,6 +102,7 @@ def select_nearest_point(co):
                 min_dis_index = point_index
 
     return min_dis_index
+
 
 def copy_curve(name):
     # 选择要复制数据的源曲线对象
@@ -117,25 +121,28 @@ def copy_curve(name):
         for i, point in enumerate(spline.points):
             new_spline.points[i].co = point.co
 
+
 def join_curve():
     global index_initial
     global index_finish
     # 获取两条曲线对象
-    curve_obj1 = bpy.data.objects['operatecurve']
+    curve_obj1 = bpy.data.objects['BottomRingBorderR']
     curve_obj2 = bpy.data.objects['point']
 
     bpy.context.view_layer.objects.active = curve_obj2
     bpy.ops.object.select_all(action='DESELECT')
     curve_obj2.select_set(state=True)
-    bpy.context.object.data.bevel_depth = 0
+    bpy.context.object.data.bevel_depth = 0  # 设置倒角深度为0
 
     # 获取两条曲线的曲线数据
     curve_data1 = curve_obj1.data
     curve_data2 = curve_obj2.data
 
     # 创建一个新的曲线对象
-    new_curve_data = bpy.data.curves.new(name="secondoperatecurve", type='CURVE')
-    new_curve_obj = bpy.data.objects.new(name="secondoperatecurve", object_data=new_curve_data)
+    new_curve_data = bpy.data.curves.new(
+        name="secondBottomRingBorderR", type='CURVE')
+    new_curve_obj = bpy.data.objects.new(
+        name="secondBottomRingBorderR", object_data=new_curve_data)
 
     # 将新的曲线对象添加到场景中
     bpy.context.collection.objects.link(new_curve_obj)
@@ -146,7 +153,8 @@ def join_curve():
     # 合并两条曲线的点集
     new_curve_data.splines.clear()
     new_spline = new_curve_data.splines.new(type=curve_data1.splines[0].type)
-    point_number = len(curve_data1.splines[0].points) + len(curve_data2.splines[0].points) - abs(index_finish-index_initial) -1
+    point_number = len(curve_data1.splines[0].points) + len(
+        curve_data2.splines[0].points) - abs(index_finish-index_initial) - 1
     new_spline.points.add(point_number)
 
     # 将第一条曲线在初始起点前的点复制到新曲线
@@ -154,41 +162,62 @@ def join_curve():
         if i == index_initial:
             break
         new_spline.points[i].co = point.co
-        
+
     # 将第二条曲线的点复制到新曲线
     for i, point in enumerate(curve_data2.splines[0].points):
         new_spline.points[i + index_initial].co = point.co
+    length = len(curve_data2.splines[0].points)
 
     # 将第一条曲线在结束点之后的点复制到新曲线
     for i, point in enumerate(curve_data1.splines[0].points):
         if i >= index_finish:
-            new_spline.points[i + len(curve_data2.splines[0].points) - abs(index_finish-index_initial)].co = point.co
-    
+            new_spline.points[i + length -
+                              abs(index_finish-index_initial)].co = point.co
 
-    bpy.data.objects.remove(bpy.data.objects['operatecurve'],do_unlink=True)
-    bpy.data.objects.remove(bpy.data.objects['point'],do_unlink=True)
-    new_curve_obj.name = 'operatecurve'
+    bpy.data.objects.remove(
+        bpy.data.objects['BottomRingBorderR'], do_unlink=True)
+    bpy.data.objects.remove(bpy.data.objects['point'], do_unlink=True)
+    new_curve_obj.name = 'BottomRingBorderR'
 
-    bpy.context.view_layer.objects.active = bpy.data.objects['operatecurve']
+    bpy.context.view_layer.objects.active = bpy.data.objects['BottomRingBorderR']
     bpy.ops.object.select_all(action='DESELECT')
-    bpy.data.objects['operatecurve'].select_set(state=True)
+    bpy.data.objects['BottomRingBorderR'].select_set(state=True)
     bpy.context.object.data.dimensions = '3D'
+
+    # 处理曲线结束时的瑕疵
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.curve.select_all(action='DESELECT')
+    end_point = index_initial + length
+    bpy.data.objects['BottomRingBorderR'].data.splines[0].points[end_point].select = True
+    bpy.ops.curve.delete(type='VERT')
+    bpy.ops.curve.select_all(action='DESELECT')
+    bpy.data.objects['BottomRingBorderR'].data.splines[0].points[end_point-1].select = True
+    bpy.data.objects['BottomRingBorderR'].data.splines[0].points[end_point].select = True
+    bpy.ops.curve.make_segment()
+    bpy.ops.curve.select_all(action='DESELECT')
+    for i in range(index_initial, end_point+1, 1):  # 选中原本在第二条曲线上的点
+        bpy.data.objects['BottomRingBorderR'].data.splines[0].points[i].select = True
+    bpy.ops.curve.subdivide(number_cuts=3)
+    bpy.ops.object.mode_set(mode='OBJECT')
 
 
 def join_object():
 
-    join_curve() #合并曲线对象
- 
-    copy_curve('operatecurve')  #复制一份曲线数据
-    bpy.data.objects.remove(bpy.data.objects['curve'],do_unlink=True) #删除原有蓝线
-    obj = bpy.data.objects['newoperatecurve'] 
+    join_curve()  # 合并曲线对象
+
+    copy_curve('BottomRingBorderR')  # 复制一份曲线数据
+    bpy.data.objects.remove(
+        bpy.data.objects['BottomRingBorderRForCutR'], do_unlink=True)  # 删除原有蓝线
+    obj = bpy.data.objects['newBottomRingBorderR']
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.select_all(action='DESELECT')
     obj.select_set(state=True)
-    bpy.context.object.data.bevel_depth = 0.1 #设置曲线倒角深度为0.1
-    bpy.ops.object.convert(target='MESH') #转化为网格
-    bpy.data.objects['newoperatecurve'].data.materials.append(bpy.data.materials['blue'])
-    bpy.data.objects['newoperatecurve'].name = 'curve'
+    bpy.context.object.data.bevel_depth = 0.1  # 设置曲线倒角深度为0.1
+    bpy.ops.object.convert(target='MESH')  # 转化为网格
+    bpy.data.objects['newBottomRingBorderR'].data.materials.append(
+        bpy.data.materials['blue'])
+    bpy.data.objects['newBottomRingBorderR'].name = 'BottomRingBorderRForCutR'
+
 
 def initialBlueColor():
     yellow_material = bpy.data.materials.new(name="blue")
@@ -196,12 +225,14 @@ def initialBlueColor():
     bpy.data.materials["blue"].node_tree.nodes["Principled BSDF"].inputs[0].default_value = (
         0, 0, 1, 1.0)
 
+
 def checkinitialBlueColor():
     materials = bpy.data.materials
     for material in materials:
         if material.name == 'blue':
             return True
     return False
+
 
 class TEST_OT_doubleclick(bpy.types.Operator):
 
@@ -212,55 +243,57 @@ class TEST_OT_doubleclick(bpy.types.Operator):
     def excute(self, context, event):
         global index_initial
         global index_finish
-        if co_on_object(context, event) == -1:  #双击位置不在曲线上不做任何事
+        if co_on_object(context, event) == -1:  # 双击位置不在曲线上不做任何事
             print("不在曲线上")
 
         else:
-            if bpy.context.mode == 'OBJECT':   #如果处于物体模式下，蓝线双击开始绘制
+            if bpy.context.mode == 'OBJECT':  # 如果处于物体模式下，蓝线双击开始绘制
                 co = co_on_object(context, event)
                 index = select_nearest_point(co)
-                print("在曲线上最近点的下标是",index)
+                print("在曲线上最近点的下标是", index)
                 index_initial = index
-                curve_obj = bpy.data.objects['operatecurve']
+                curve_obj = bpy.data.objects['BottomRingBorderR']
                 bpy.context.view_layer.objects.active = curve_obj
                 bpy.ops.object.select_all(action='DESELECT')
                 curve_obj.select_set(state=True)
                 bpy.ops.object.mode_set(mode='EDIT')
                 bpy.ops.curve.select_all(action='DESELECT')
                 curve_obj.data.splines[0].points[index].select = True
-                bpy.ops.curve.separate() #分离将要进行操作的点
+                bpy.ops.curve.separate()  # 分离将要进行操作的点
                 bpy.ops.object.mode_set(mode='OBJECT')
-                for object in bpy.data.objects:  #改名
-                    if object.name == 'operatecurve.001':
-                        print('select copy object')
+                for object in bpy.data.objects:  # 改名
+                    if object.name == 'BottomRingBorderR.001':
+                        # print('select copy object')
                         object.name = 'point'
                         break
                 bpy.context.view_layer.objects.active = bpy.data.objects['point']
                 bpy.ops.object.select_all(action='DESELECT')
                 bpy.data.objects['point'].select_set(state=True)
 
-                bpy.ops.object.mode_set(mode='EDIT')   #进入编辑模式进行操作
+                bpy.ops.object.mode_set(mode='EDIT')  # 进入编辑模式进行操作
                 bpy.ops.curve.select_all(action='SELECT')
-                bpy.ops.wm.tool_set_by_id(name="builtin.extrude_cursor")  #调用挤出至光标工具
-                bpy.context.object.data.bevel_depth = 0.1                 #设置倒角深度
-                bpy.data.objects['point'].data.materials.append(bpy.data.materials['blue'])
+                bpy.ops.wm.tool_set_by_id(
+                    name="builtin.extrude_cursor")  # 调用挤出至光标工具
+                bpy.context.object.data.bevel_depth = 0.1  # 设置倒角深度
+                bpy.data.objects['point'].data.materials.append(
+                    bpy.data.materials['blue'])
                 # 开启吸附
                 bpy.context.scene.tool_settings.use_snap = True
                 bpy.context.scene.tool_settings.snap_elements = {'FACE'}
                 bpy.context.scene.tool_settings.snap_target = 'CENTER'
                 bpy.context.scene.tool_settings.use_snap_align_rotation = True
                 bpy.context.scene.tool_settings.use_snap_backface_culling = True
-                
-            elif bpy.context.mode == 'EDIT_CURVE': #如果处于编辑模式下，蓝线双击确认完成
-                print("起始位置的下标是",index_initial)
+
+            elif bpy.context.mode == 'EDIT_CURVE':  # 如果处于编辑模式下，蓝线双击确认完成
+                print("起始位置的下标是", index_initial)
                 co = co_on_object(context, event)
                 index_finish = select_nearest_point(co)
-                print("在曲线上最近点的下标是",index_finish)
-                bpy.ops.object.mode_set(mode='OBJECT') #返回对象模式
-                bpy.context.scene.tool_settings.use_snap = False #取消吸附
+                print("在曲线上最近点的下标是", index_finish)
+                bpy.ops.object.mode_set(mode='OBJECT')  # 返回对象模式
+                bpy.context.scene.tool_settings.use_snap = False  # 取消吸附
 
                 # #删除两个索引间的顶点
-                # curve_obj = bpy.data.objects['operatecurve']
+                # curve_obj = bpy.data.objects['BottomRingBorderR']
                 # bpy.context.view_layer.objects.active = curve_obj
                 # bpy.ops.object.select_all(action='DESELECT')
                 # curve_obj.select_set(state=True)
@@ -268,24 +301,24 @@ class TEST_OT_doubleclick(bpy.types.Operator):
                 # bpy.ops.curve.select_all(action='DESELECT')
                 # for i in range(index_initial,index_finish,1):  #选中两个索引中的点
                 #     curve_obj.data.splines[0].points[i].select = True
-                # bpy.ops.curve.delete(type='SEGMENT')     
-                # # bpy.ops.curve.delete(type='VERT')  
+                # bpy.ops.curve.delete(type='SEGMENT')
+                # bpy.ops.curve.delete(type='SEGMENT')
+                # # bpy.ops.curve.delete(type='VERT')
                 # bpy.ops.object.mode_set(mode='OBJECT') #返回对象模式
-                
-                join_object() #合并物体
+
+                join_object()  # 合并曲线
 
             else:
                 pass
 
     def invoke(self, context, event):
         if checkinitialBlueColor() == False:
-            initialBlueColor() 
-        self.excute(context,event)
+            initialBlueColor()
+        self.excute(context, event)
         return {'FINISHED'}
 
 
-
-class MyTool(bpy.types.WorkSpaceTool):
+class doubleclick_MyTool(bpy.types.WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
     bl_context_mode = 'OBJECT'
 
@@ -295,7 +328,7 @@ class MyTool(bpy.types.WorkSpaceTool):
     bl_description = (
         "使用鼠标双击添加点"
     )
-    bl_icon = "ops.mesh.knife_tool"
+    bl_icon = "ops.mesh.knife_tool"  # TODO:修改图标
     bl_widget = None
     bl_keymap = (
         ("object.doubleclick", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'},
@@ -304,28 +337,24 @@ class MyTool(bpy.types.WorkSpaceTool):
 
     def draw_settings(context, layout, tool):
         pass
-            
-bpy.utils.register_class(TEST_OT_doubleclick)
 
-bpy.utils.register_tool(MyTool, separator=True, group=False)
 
-# 获取直线对象
-curve_object = bpy.data.objects["operatecurve"]
-# 获取目标物体
-target_object = bpy.data.objects["右耳"] 
-# 获取数据
-curve_data = curve_object.data
-target_mesh = target_object.data
+_classes = [
 
-# 将曲线的每个顶点吸附到目标物体的表面
-for spline in curve_data.splines:
-    for point in spline.points:
-        # 获取顶点原位置
-        vertex_co = curve_object.matrix_world @ Vector(point.co[0:3])
-  
-        # 计算顶点在目标物体面上的 closest point
-        _ , closest_co, _ , _ = target_object.closest_point_on_mesh(vertex_co)
+    TEST_OT_doubleclick,
+]
 
-        # 将顶点位置设置为 closest point
-        point.co[0:3]= closest_co
-        point.co[3] = 0 
+
+def register():
+    for cls in _classes:
+        bpy.utils.register_class(cls)
+    bpy.utils.register_tool(doubleclick_MyTool, separator=True, group=False)
+    # bpy.utils.register_tool(MyTool3, separator=True,
+    #                         group=False, after={doubleclick_MyTool.bl_idname})
+
+
+def unregister():
+    for cls in _classes:
+        bpy.utils.unregister_class(cls)
+    bpy.utils.unregister_tool(doubleclick_MyTool)
+    # bpy.utils.register_tool(MyTool3)

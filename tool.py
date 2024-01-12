@@ -43,7 +43,24 @@ font_info = {
     "handler": None,
 }
 
+def moveToRight(obj):
+    collection = bpy.data.collections['Right']
+    collection.objects.link(obj)
+    # 物体在根集合下
+    if obj.name in bpy.context.scene.collection.objects: 
+        bpy.context.scene.collection.objects.unlink(obj) 
+    print('start')
+    for obj in collection.objects:
+                print('Right',obj.name)
+    print('end')
 
+# 将物体移动到Left集合
+def moveToLeft(obj):
+    collection = bpy.data.collections['Left']
+    collection.objects.link(obj)
+    # 物体在根集合下
+    if obj.name in bpy.context.scene.collection.objects: 
+        bpy.context.scene.collection.objects.unlink(obj) 
 
 # 获取VIEW_3D区域的上下文
 def getOverride():

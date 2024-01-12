@@ -1,3 +1,9 @@
+'''
+Description: 
+Date: 2024-01-11 19:03:07
+LastEditTime: 2024-01-11 22:46:21
+FilePath: /SecretEarAddon/__init__.py
+'''
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -25,49 +31,52 @@
     侧切： 该模块主要使用 右耳(导入文件名) StepCutsphere1, StepCutsphere2,StepCutsphere3,StepCutsphere4,右耳ceqieCompare
            右耳是当前操作的物体, StepCutsphere是用于操作的四个圆球, StepCutplane是用于切割的平面,右耳ceqieCompare则是用于对比的透明物体
 '''
+import bpy
+from . import (
+    damo,
+    jiahou,
+    ui,
+    prop,
+    public_operation,
+    qiege,
+    label,
+    handle,
+    point
+)
 bl_info = {
-    "name" : "SecretEar",
-    "author" : "HDU",
-    "description" : "",
-    "blender" : (2, 80, 0),
-    "version" : (0, 0, 1),
-    "location" : "",
-    "warning" : "",
-    "category" : "Generic"
+    "name": "SecretEar",
+    "author": "HDU",
+    "description": "",
+    "blender": (2, 80, 0),
+    "version": (0, 0, 1),
+    "location": "",
+    "warning": "",
+    "category": "Generic"
 }
 
-import bpy 
 
 if "bpy" in locals():
     import importlib
     reloadable_modules = [
-         "ui",
-         "prop"
-         "damo"
-         "jiahou"
-         "public_operation"
-         "qiege"
-         "tool"
-         "label"
-         "handle"
+        "ui",
+        "prop"
+        "damo"
+        "jiahou"
+        "public_operation"
+        "qiege"
+        "tool"
+        "label"
+        "handle"
+        "point"
     ]
-    #reload()函数重新载入模块，调试时加载的模块发生改变时，
+    # reload()函数重新载入模块，调试时加载的模块发生改变时，
     for module in reloadable_modules:
         if module in locals():
             importlib.reload(locals()[module])
 
 
-#导入同级目录下的.py文件
-from . import  (
-                damo,
-                jiahou,
-                ui,
-                prop,
-                public_operation,
-                qiege,
-                label,
-                handle
-                )
+# 导入同级目录下的.py文件
+
 
 def register():
     ui.register()
@@ -78,6 +87,8 @@ def register():
     qiege.register()
     label.register()
     handle.register()
+    point.register()
+
 
 def unregister():
     ui.unregister()
@@ -87,6 +98,8 @@ def unregister():
     qiege.unregister()
     label.unregister()
     handle.unregister()
+    point.unregister()
+
 
 if __name__ == "__main__":
     register()
