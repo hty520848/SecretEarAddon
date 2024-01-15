@@ -5,8 +5,15 @@ from .dig_hole import dig_hole
 from .bottom_ring import bottom_cut
 from ..utils.utils import *
 from .thickness import init_thickness
-from ..tool import moveToRight
+from ..tool import moveToRight, newShader
 
+def initialTransparency():
+    mat = newShader("Transparency")  # 创建材质
+    obj = bpy.context.active_object
+    obj.data.materials.clear()
+    obj.data.materials.append(mat)
+    bpy.data.materials['Transparency'].blend_method = "BLEND"
+    bpy.data.materials["Transparency"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
 
 def frontToCreateMould():
     # 创建MouldReset,用于模型重置  与 模块向前返回时的恢复(若存在MouldReset则先删除)
@@ -18,12 +25,18 @@ def frontToCreateMould():
             bpy.data.objects.remove(selected_obj, do_unlink=True)
     name = "右耳"  # TODO    根据导入文件名称更改
     obj = bpy.data.objects[name]
+    utils_re_color("右耳", (1, 0.319, 0.133))
     duplicate_obj1 = obj.copy()
     duplicate_obj1.data = obj.data.copy()
     duplicate_obj1.animation_data_clear()
     duplicate_obj1.name = name + "MouldReset"
     bpy.context.collection.objects.link(duplicate_obj1)
-    duplicate_obj1.hide_set(True)
+    #duplicate_obj1.hide_set(True)
+    initialTransparency()
+    duplicate_obj1.data.materials.clear()
+    duplicate_obj1.data.materials.append(bpy.data.materials['Transparency'])
+    obj.data.materials.clear()
+    obj.data.materials.append(bpy.data.materials['Yellow'])
 
     apply_template()
 
@@ -140,7 +153,6 @@ def backFromCreateMould():
 
     delete_useless_object(need_to_delete_model_name_list)
 
-
 def apply_template():
 
     # 复制一份挖孔前的模型以备用
@@ -156,7 +168,7 @@ def apply_template():
 
     dig_hole()
     bottom_cut()
-    init_thickness()
+    # init_thickness()
     for obj in bpy.context.view_layer.objects:
         obj.select_set(False)
         # 布尔后，需要重新上色

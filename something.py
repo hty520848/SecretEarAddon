@@ -1,9 +1,3 @@
-'''
-Description: 
-Date: 2024-01-11 19:03:07
-LastEditTime: 2024-01-11 22:38:07
-FilePath: /SecretEarAddon/something.py
-'''
 import bpy
 import bmesh
 from mathutils import Vector
@@ -43,27 +37,6 @@ def smooth_stepcut():
     bpy.ops.mesh.bevel(offset=pianyi, segments=8)
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    # 获取直线对象
-    curve_object = bpy.data.objects["BottomRingBorderR"]
-    # 获取目标物体
-    target_object = bpy.data.objects["右耳"]
-    # 获取数据
-    curve_data = curve_object.data
-    target_mesh = target_object.data
-
-    # 将曲线的每个顶点吸附到目标物体的表面
-    for spline in curve_data.splines:
-        for point in spline.points:
-            # 获取顶点原位置
-            vertex_co = curve_object.matrix_world @ Vector(point.co[0:3])
-
-            # 计算顶点在目标物体面上的 closest point
-            _, closest_co, _, _ = target_object.closest_point_on_mesh(
-                vertex_co)
-
-            # 将顶点位置设置为 closest point
-            point.co[0:3] = closest_co
-            point.co[3] = 0
 
     # # 创建一个新的集合
     # collection = bpy.data.collections.new("MyCollection")

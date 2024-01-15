@@ -590,6 +590,13 @@ def checkinitialTransparency():
             return True
     return False
 
+def checkinitialRed():
+    materials = bpy.data.materials
+    for material in materials:
+        if material.name == 'Red':
+            return True
+    return False
+
 # 确定四个圆球的位置
 def initsphereloc():
     global zmax
@@ -633,7 +640,9 @@ def initPlane():
     new_sphere('StepCutSphere4', old_loc_sphere4)
     new_plane('StepCutplane')
 
-    red_material = bpy.data.materials.new(name="Red")
+    if checkinitialRed() == False:
+        bpy.data.materials.new(name="Red")
+    red_material = bpy.data.materials['Red']
     red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
     bpy.data.objects['StepCutSphere1'].data.materials.append(red_material)
     bpy.data.objects['StepCutSphere2'].data.materials.append(red_material)
@@ -665,6 +674,7 @@ def initPlane():
     if (checkinitialTransparency() == False):
         initialTransparency()
 
+    bpy.data.objects['右耳'].data.materials.clear()
     bpy.data.objects['右耳'].data.materials.append(bpy.data.materials['yellow'])
     bpy.data.objects['右耳ceqieCompare'].data.materials.clear()
     bpy.data.objects['右耳ceqieCompare'].data.materials.append(

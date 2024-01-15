@@ -150,7 +150,7 @@ class MsgbusCallBack(bpy.types.Operator):
                             backFromLocalThickening()  # 局部加厚完成
                             frontToQieGe()  # 切割初始化
                     elif (prev_properties_context == 'RENDER' or prev_properties_context == None):
-                        print("RenderToQieGe")
+                        print("damoToQieGe")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromDamo()  # 打磨保存状态
