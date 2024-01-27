@@ -26,6 +26,7 @@ def copy_object():
     # 将复制的物体加入到场景集合中
     scene = bpy.context.scene
     scene.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
     duplicate_obj.hide_set(True)
 
 

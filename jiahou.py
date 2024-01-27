@@ -239,6 +239,51 @@ def frontToLocalThickening():
         draw_border_curve()
     # 从当前的局部加厚切换到前面的打磨时
 
+class Local_Thickening_Mirror(bpy.types.Operator):
+    bl_idname = "obj.jingxiang"
+    bl_label = "加厚镜像"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+
+        # # 若存在LocalThickCopy,则将其删除并重新生成
+        # all_objs = bpy.data.objects
+        # for selected_obj in all_objs:
+        #     if (selected_obj.name == "右耳LocalThickCopy" or selected_obj.name == "右耳LocalThickCompare"):
+        #         bpy.data.objects.remove(selected_obj, do_unlink=True)
+        # # 根据当前激活物体复制得到用于重置的LocalThickCopy和初始时的参照物LocalThickCompare
+        # active_obj = bpy.context.active_object
+        # name = active_obj.name
+        # duplicate_obj1 = active_obj.copy()
+        # duplicate_obj1.data = active_obj.data.copy()
+        # duplicate_obj1.animation_data_clear()
+        # duplicate_obj1.name = name + "LocalThickCompare"
+        # bpy.context.collection.objects.link(duplicate_obj1)
+        # duplicate_obj1.hide_set(True)
+        # duplicate_obj1.hide_set(False)
+        # duplicate_obj2 = active_obj.copy()
+        # duplicate_obj2.data = active_obj.data.copy()
+        # duplicate_obj2.animation_data_clear()
+        # duplicate_obj2.name = name + "LocalThickCopy"
+        # bpy.context.collection.objects.link(duplicate_obj2)
+        # duplicate_obj2.hide_set(True)  # 将LocalThickCopy隐藏
+        # active_obj = bpy.data.objects[name]  # 将右耳设置为当前激活物体
+        # bpy.context.view_layer.objects.active = active_obj
+
+        initialTransparency()
+        offset = bpy.context.scene.localThicking_offset  # 获取局部加厚面板中的偏移量参数
+        borderWidth = bpy.context.scene.localThicking_borderWidth  # 获取局部加厚面板中的边界宽度参数
+
+        thickening_offset_borderwidth(0, 0, True)
+        thickening_offset_borderwidth(offset, borderWidth, False)
+
+        # 将加厚函数中添加的修改器应用并删除该修改器,防止卡顿
+        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth",single_user=True)
+        draw_border_curve()
+        # 绘制局部加厚区域圆环
+        draw_border_curve()
+
+        return {'FINISHED'}
 
 def frontFromLocalThickening():
     # 保存模型上选中的局部加厚区域中的顶点索引,同样保存模型上已选中点放在submit功能模块中
@@ -418,6 +463,18 @@ def backFromLocalThickening():
     # 删除局部加厚中的圆环
     draw_border_curve()
 
+    all_objs = bpy.data.objects
+    for selected_obj in all_objs:
+        if (selected_obj.name == "右耳LocalThickLast"):
+            bpy.data.objects.remove(selected_obj, do_unlink=True)
+    name = "右耳"  # TODO    根据导入文件名称更改
+    obj = bpy.data.objects[name]
+    duplicate_obj1 = obj.copy()
+    duplicate_obj1.data = obj.data.copy()
+    duplicate_obj1.animation_data_clear()
+    duplicate_obj1.name = name + "LocalThickLast"
+    bpy.context.collection.objects.link(duplicate_obj1)
+    duplicate_obj1.hide_set(True)
 
 # 获取当前激活物体上局部加厚区域是否改变
 def isSelectedAreaChanged():
@@ -1478,82 +1535,6 @@ class Local_Thickening_Submit(bpy.types.Operator):
         return {'FINISHED'}
 
 
-# def msgbus_callback(*args):
-#     '''
-#     hello
-#     '''
-#     global prev_properties_context
-
-#     #结束掉之前的所有正在运行的model
-#     bpy.context.scene.var = 0
-
-#     current_tab = bpy.context.screen.areas[1].spaces.active.context
-#     print("当前激活的物体:",bpy.context.active_object.name)
-#     print("前面的上下文",prev_properties_context)
-#     print(f'Current Tab: {current_tab}')
-#     selected_objs = bpy.data.objects
-#     for selected_obj in selected_objs:
-#         print(selected_obj.name)
-#     if (current_tab == 'OUTPUT'):
-#         if(prev_properties_context == 'RENDER' or prev_properties_context == None):
-#             print("frontToLocalThick")
-#             override = getOverride()
-#             with bpy.context.temp_override(**override):
-#                 backFromDamo()             #打磨保存状态
-#                 frontToLocalThickening()   #局部加厚初始化
-#         elif(prev_properties_context == 'SCENE'):
-#             print("qieGeToLocalThick")
-#             override = getOverride()
-#             with bpy.context.temp_override(**override):
-#                 frontFromQieGe()             #退出切割
-#                 backToLocalThickening()     #局部加厚初始化
-#     elif (current_tab == 'RENDER'):
-#         if(prev_properties_context == 'OUTPUT'):
-#             print("LocalThickToDaMo")
-#             override = getOverride()
-#             with bpy.context.temp_override(**override):
-#                 frontFromLocalThickening()   #退出局部加厚
-#                 backToDamo()                 #打磨初始化,保存到打磨保存的状态
-#         elif(prev_properties_context == 'SCENE'):
-#             print("QieGeToDamo")
-#             override = getOverride()
-#             with bpy.context.temp_override(**override):
-#                 frontFromQieGe()              #切割退出
-#                 print("当前激活物体",bpy.context.active_object)
-#                 backToDamo()                 #打磨初始化,保存到打磨保存的状态
-#     elif (current_tab == 'SCENE'):
-#         if(prev_properties_context == 'OUTPUT'):
-#             print("LocalThickToQieGe")
-#             override = getOverride()
-#             with bpy.context.temp_override(**override):
-#                 backFromLocalThickening()   #局部加厚完成
-#                 frontToQieGe()              #切割初始化
-#         elif(prev_properties_context == 'RENDER' or prev_properties_context == None):
-#             print("RenderToQieGe")
-#             override = getOverride()
-#             with bpy.context.temp_override(**override):
-#                 backFromDamo()               #打磨保存状态
-#                 frontToQieGe()               #切割初始化
-
-#     print("---------")
-#     prev_properties_context = current_tab
-#     selected_objs = bpy.data.objects
-#     for selected_obj in selected_objs:
-#         print(selected_obj.name)
-#     print(",,,,,,")
-
-
-# # 监听属性
-# subscribe_to = bpy.types.SpaceProperties, 'context'
-
-# # 发布订阅，监听context变化
-# bpy.msgbus.subscribe_rna(
-#     key=subscribe_to,
-#     owner=object(),
-#     args=(1, 2, 3),
-#     notify=msgbus_callback,
-# )
-
 
 class MyTool3_JiaHou(WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
@@ -1796,6 +1777,7 @@ _classes = [
     Local_Thickening_ReduceArea,
     Local_Thickening_Thicken,
     Local_Thickening_Submit,
+    Local_Thickening_Mirror,
     BackUp,
     Forward,
     TestFunc,
@@ -1812,7 +1794,7 @@ def register():
     # bpy.utils.register_tool(MyTool5_JiaHou, separator=True, group=False, after={MyTool3_JiaHou.bl_idname})
     # bpy.utils.register_tool(MyTool7_JiaHou, separator=True, group=False, after={MyTool5_JiaHou.bl_idname})
     # bpy.utils.register_tool(MyTool9_JiaHou, separator=True, group=False, after={MyTool7_JiaHou.bl_idname})
-    # # bpy.utils.register_tool(MyTool11_JiaHou,separator=True, group=False,after={MyTool9_JiaHou.bl_idname})
+    # bpy.utils.register_tool(MyTool11_JiaHou,separator=True, group=False,after={MyTool9_JiaHou.bl_idname})
 
     # bpy.utils.register_tool(MyTool2_JiaHou, separator=True, group=False)
     # bpy.utils.register_tool(MyTool4_JiaHou, separator=True, group=False, after={MyTool2_JiaHou.bl_idname})
@@ -1829,7 +1811,7 @@ def unregister():
     # bpy.utils.unregister_tool(MyTool5_JiaHou)
     # bpy.utils.unregister_tool(MyTool7_JiaHou)
     # bpy.utils.unregister_tool(MyTool9_JiaHou)
-    # # bpy.utils.unregister_tool(MyTool11_JiaHou)
+    # bpy.utils.unregister_tool(MyTool11_JiaHou)
 
     # bpy.utils.unregister_tool(MyTool2_JiaHou)
     # bpy.utils.unregister_tool(MyTool4_JiaHou)

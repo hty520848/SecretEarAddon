@@ -189,7 +189,7 @@ class HUIER_PT_ChuangJianMuJu(bpy.types.Panel):
         layout = self.layout
         layout.separator()
         col = layout.column(align=True)
-        col.prop(context.scene, 'muJuTypeEnum', text="模具类型",icon= 'NONE')
+        col.prop(context.scene, 'muJuNameEnum', text="模具类型",icon= 'NONE')
         layout.separator()
         col = layout.column(align=True)
         col.prop(context.scene, 'neiBianJiXian', text="内编辑线")
@@ -416,7 +416,7 @@ class HUIER_PT_MoBanXuanZe(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         # 左列目录
-        split = layout.split(factor=0.4)
+        split = layout.split(factor=0.3)
         box1 = split.box()
         box1.label(text = '模板类别')
         box2 = box1.box()
@@ -433,7 +433,7 @@ class HUIER_PT_MoBanXuanZe(bpy.types.Panel):
             icon=icons.get("icon_reset")
             col = split.column(align = True)
             grid_flow = col.grid_flow(columns=2,align=True)
-            grid_flow.scale_y = 3
+            grid_flow.scale_y = 5
             grid_flow.prop_tabs_enum(context.scene, 'muJuTypeEnum',icon_only=True)
             
             # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
@@ -1091,7 +1091,7 @@ class HUIER_PT_TestButton(bpy.types.Panel):
         # col.operator("object.smooth", text="光滑")
         # col.operator("obj.undo", text="撤销")
         # col.operator("obj.redo", text="重做")
-        # col.operator("obj.testfunc", text="功能测试")
+        # col.operator("object.switchtestfunc", text="磨具功能测试")
 
 
 # 注册类

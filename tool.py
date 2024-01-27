@@ -43,9 +43,12 @@ font_info = {
     "handler": None,
 }
 
+
+# 将物体移动到Right集合
 def moveToRight(obj):
     collection = bpy.data.collections['Right']
-    collection.objects.link(obj)
+    if obj.name not in collection.objects:
+        collection.objects.link(obj)
     # 物体在根集合下
     if obj.name in bpy.context.scene.collection.objects: 
         bpy.context.scene.collection.objects.unlink(obj) 
@@ -57,10 +60,12 @@ def moveToRight(obj):
 # 将物体移动到Left集合
 def moveToLeft(obj):
     collection = bpy.data.collections['Left']
-    collection.objects.link(obj)
+    if obj.name not in collection.objects:
+        collection.objects.link(obj)
     # 物体在根集合下
     if obj.name in bpy.context.scene.collection.objects: 
         bpy.context.scene.collection.objects.unlink(obj) 
+
 
 # 获取VIEW_3D区域的上下文
 def getOverride():
@@ -534,3 +539,18 @@ def is_changed_stepcut(context, event):
         return True
     else:
         return False
+    
+def convert_to_mesh(curve_name,depth):
+    active_obj = bpy.data.objects[curve_name]
+    duplicate_obj = active_obj.copy()
+    duplicate_obj.data = active_obj.data.copy()
+    duplicate_obj.name = "mesh" + active_obj.name 
+    duplicate_obj.animation_data_clear()
+    # 将复制的物体加入到场景集合中
+    bpy.context.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
+    bpy.context.view_layer.objects.active = duplicate_obj
+    bpy.ops.object.select_all(action='DESELECT')
+    duplicate_obj.select_set(state=True)
+    bpy.context.object.data.bevel_depth = depth # 设置曲线倒角深度
+    bpy.ops.object.convert(target='MESH')  # 转化为网格

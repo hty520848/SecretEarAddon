@@ -1,24 +1,39 @@
 import bpy
 import bmesh
 
-from .dig_hole import dig_hole
-from .bottom_ring import bottom_cut
 from ..utils.utils import *
-from .thickness import init_thickness
 from ..tool import moveToRight, newShader
+from .frame_style_eardrum.frame_style_eardrum import apply_frame_style_eardrum_template
+from .soft_eardrum.soft_eardrum import apply_soft_eardrum_template
+from .soft_eardrum.thickness_and_fill import set_finish
+from ..tool import convert_to_mesh
 
 def initialTransparency():
     mat = newShader("Transparency")  # 创建材质
-    obj = bpy.context.active_object
-    obj.data.materials.clear()
-    obj.data.materials.append(mat)
-    bpy.data.materials['Transparency'].blend_method = "BLEND"
-    bpy.data.materials["Transparency"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
+    mat.blend_method = "BLEND"
+    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
+
+
+def initialBlueColor():
+    ''' 生成蓝色材质 '''
+    material = bpy.data.materials.new(name="blue")
+    material.use_nodes = True
+    bpy.data.materials["blue"].node_tree.nodes["Principled BSDF"].inputs[0].default_value = (
+        0, 0, 1, 1.0)
+    material.blend_method = "BLEND"
+    material.use_backface_culling = True
+
+def checkinitialBlueColor():
+    ''' 确认是否生成蓝色材质 '''
+    materials = bpy.data.materials
+    for material in materials:
+        if material.name == 'blue':
+            return True
+    return False
 
 def frontToCreateMould():
     # 创建MouldReset,用于模型重置  与 模块向前返回时的恢复(若存在MouldReset则先删除)
     # 模型初始化,完成挖孔和切割操作                                          #TODO  初始化
-
     all_objs = bpy.data.objects
     for selected_obj in all_objs:
         if (selected_obj.name == "右耳MouldReset"):
@@ -31,14 +46,21 @@ def frontToCreateMould():
     duplicate_obj1.animation_data_clear()
     duplicate_obj1.name = name + "MouldReset"
     bpy.context.collection.objects.link(duplicate_obj1)
-    #duplicate_obj1.hide_set(True)
+    # duplicate_obj1.hide_set(True)
+    if checkinitialBlueColor() == False:
+        initialBlueColor()
     initialTransparency()
     duplicate_obj1.data.materials.clear()
     duplicate_obj1.data.materials.append(bpy.data.materials['Transparency'])
+    moveToRight(duplicate_obj1)
     obj.data.materials.clear()
     obj.data.materials.append(bpy.data.materials['Yellow'])
 
     apply_template()
+
+    enum = bpy.context.scene.muJuTypeEnum
+    if enum == "OP1":
+        set_finish(False)
 
 
 def frontFromCreateMould():
@@ -60,8 +82,12 @@ def frontFromCreateMould():
     # 切出创建模具时 需要被删除的物体的名称数组
     need_to_delete_model_name_list = ["右耳OriginForCreateMouldR", "HoleCutCylinderBottomR",
                                       "HoleBorderCurveR", "BottomRingBorderR", "cutPlane", "BottomRingBorderRForCutR",
-                                      "右耳OriginForCutR"]
+                                      "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
+                                      "右耳ForGetFillPlane"]
     delete_useless_object(need_to_delete_model_name_list)
+    enum = bpy.context.scene.muJuTypeEnum
+    if enum == "OP1":
+        set_finish(True)
 
 
 def backToCreateMould():
@@ -73,6 +99,7 @@ def backToCreateMould():
     for selected_obj in all_objs:
         if (selected_obj.name == "右耳MouldReset"):
             exist_MouldReset = True
+            selected_obj.hide_set(False)
     if (exist_MouldReset):
         name = "右耳"  # TODO    根据导入文件名称更改
         obj = bpy.data.objects[name]
@@ -86,6 +113,8 @@ def backToCreateMould():
         bpy.context.scene.collection.objects.link(duplicate_obj)
         duplicate_obj.select_set(True)
         bpy.context.view_layer.objects.active = duplicate_obj
+        duplicate_obj.data.materials.clear()
+        duplicate_obj.data.materials.append(bpy.data.materials['Yellow'])
 
         apply_template()
     else:
@@ -100,7 +129,7 @@ def backToCreateMould():
             ori_obj.name = name + "MouldReset"
             bpy.context.collection.objects.link(ori_obj)
             ori_obj.hide_set(True)
-        elif(bpy.data.objects.get("右耳LocalThickLast")!=None):
+        elif (bpy.data.objects.get("右耳LocalThickLast") != None):
             lastname = "右耳LocalThickLast"
             last_obj = bpy.data.objects.get(lastname)
             ori_obj = last_obj.copy()
@@ -126,8 +155,15 @@ def backToCreateMould():
         bpy.context.scene.collection.objects.link(duplicate_obj)
         duplicate_obj.select_set(True)
         bpy.context.view_layer.objects.active = duplicate_obj
+        duplicate_obj.data.materials.clear()
+        duplicate_obj.data.materials.append(bpy.data.materials['Yellow'])
 
         apply_template()
+
+    enum = bpy.context.scene.muJuTypeEnum
+    if enum == "OP1":
+        set_finish(False)
+
 
 def backFromCreateMould():
     # 创建MouldLast,用于 模型从后面模块返回时的恢复(若存在MouldLast则先将其删除)
@@ -137,6 +173,8 @@ def backFromCreateMould():
     for selected_obj in all_objs:
         if (selected_obj.name == "右耳MouldLast"):
             bpy.data.objects.remove(selected_obj, do_unlink=True)
+        if (selected_obj.name == "右耳MouldReset"):
+            selected_obj.hide_set(True)
     name = "右耳"  # TODO    根据导入文件名称更改
     obj = bpy.data.objects[name]
     duplicate_obj1 = obj.copy()
@@ -149,12 +187,17 @@ def backFromCreateMould():
     # 切出创建模具时 需要被删除的物体的名称数组
     need_to_delete_model_name_list = ["右耳OriginForCreateMouldR", "HoleCutCylinderBottomR",
                                       "HoleBorderCurveR", "BottomRingBorderR", "cutPlane", "BottomRingBorderRForCutR",
-                                      "右耳OriginForCutR"]
+                                      "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
+                                      "右耳ForGetFillPlane"]
 
     delete_useless_object(need_to_delete_model_name_list)
 
-def apply_template():
+    enum = bpy.context.scene.muJuTypeEnum
+    if enum == "OP1":
+        set_finish(True)
 
+
+def apply_template():
     # 复制一份挖孔前的模型以备用
     cur_obj = bpy.context.active_object
     duplicate_obj = cur_obj.copy()
@@ -164,11 +207,28 @@ def apply_template():
     bpy.context.collection.objects.link(duplicate_obj)
     duplicate_obj.hide_set(True)
     # todo 先加到右耳集合，后续调整左右耳适配
-    # moveToRight(duplicate_obj)
+    moveToRight(duplicate_obj)
+    mould_type = bpy.context.scene.muJuTypeEnum
 
-    dig_hole()
-    bottom_cut()
-    # init_thickness()
+    # 根据选择的模板调用对应的模板
+    if mould_type == "OP1":
+        print("软耳模")
+        apply_soft_eardrum_template()
+        convert_to_mesh('BottomRingBorderR',0.3)
+    elif mould_type == "OP2":
+        print("硬耳膜")
+    elif mould_type == "OP3":
+        print("一体外壳")
+    elif mould_type == "OP4":
+        print("框架式耳膜")
+        apply_frame_style_eardrum_template()
+        convert_to_mesh('BottomRingBorderR',0.4)
+        convert_to_mesh('HoleBorderCurveR', 0.18)
+    elif mould_type == "OP5":
+        print("常规外壳")
+    elif mould_type == "OP6":
+        print("实心面板")
+
     for obj in bpy.context.view_layer.objects:
         obj.select_set(False)
         # 布尔后，需要重新上色
@@ -179,6 +239,9 @@ def delete_useless_object(need_to_delete_model_name_list):
     for selected_obj in bpy.data.objects:
         if (selected_obj.name in need_to_delete_model_name_list):
             bpy.data.objects.remove(selected_obj, do_unlink=True)
+        bpy.ops.outliner.orphans_purge(
+            do_local_ids=True, do_linked_ids=True, do_recursive=False)
+
 
 def recover():
     '''
@@ -191,13 +254,42 @@ def recover():
             break
     # 找到最初创建的  OriginForCreateMould 才能进行恢复
     if recover_flag:
-
         # 删除不需要的物体
         need_to_delete_model_name_list = ["右耳", "HoleCutCylinderBottomR",
-                                          "HoleBorderCurveR", "BottomRingBorderR", "cutPlane", "BottomRingBorderRForCutR",
-                                          "右耳OriginForCutR"]
+                                          "HoleBorderCurveR", "BottomRingBorderR", "cutPlane",
+                                          "BottomRingBorderRForCutR",
+                                          "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
+                                          "右耳ForGetFillPlane"]
         delete_useless_object(need_to_delete_model_name_list)
         # 将最开始复制出来的OriginForCreateMould名称改为模型名称
+        obj.hide_set(False)
         obj.name = "右耳"
 
+        bpy.context.view_layer.objects.active = obj
+        # 恢复完后重新复制一份
+        cur_obj = bpy.context.active_object
+        duplicate_obj = cur_obj.copy()
+        duplicate_obj.data = cur_obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = cur_obj.name + "OriginForCreateMouldR"
+        bpy.context.collection.objects.link(duplicate_obj)
+        duplicate_obj.hide_set(True)
+        # todo 先加到右耳集合，后续调整左右耳适配
+        moveToRight(duplicate_obj)
+
     return recover_flag
+
+
+def complete():
+    '''
+    确认创建模具
+    '''
+    need_to_delete_model_name_list = ["HoleCutCylinderBottomR",
+                                      "HoleBorderCurveR", "BottomRingBorderR", "cutPlane",
+                                      "BottomRingBorderRForCutR",
+                                      "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
+                                      "右耳ForGetFillPlane"]
+    delete_useless_object(need_to_delete_model_name_list)
+    enum = bpy.context.scene.muJuTypeEnum
+    if enum == "OP1":
+        set_finish(True)

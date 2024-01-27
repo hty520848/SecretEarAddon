@@ -2,6 +2,25 @@ import bpy
 import math
 import bmesh
 from ..tool import moveToRight
+from contextlib import redirect_stdout
+import io
+
+def checkinitialBlueColor():
+    ''' 确认是否生成蓝色材质 '''
+    materials = bpy.data.materials
+    for material in materials:
+        if material.name == 'blue':
+            return True
+    return False
+
+def initialBlueColor():
+    ''' 生成蓝色材质 '''
+    material = bpy.data.materials.new(name="blue")
+    material.use_nodes = True
+    bpy.data.materials["blue"].node_tree.nodes["Principled BSDF"].inputs[0].default_value = (
+        0, 0, 1, 1.0)
+    material.blend_method = "BLEND"
+    material.use_backface_culling = True
 
 # 获取VIEW_3D区域的上下文
 def getOverride():
@@ -198,9 +217,12 @@ def draw_cut_border_curve(order_border_co, name, depth):
         bpy.context.active_object.data.bevel_depth = depth
 
         # 为圆环上色
-        color_matercal = bpy.data.materials.new(name="BottomRingColor")
-        color_matercal.diffuse_color = (0.0, 0.0, 1.0, 1.0)
-        bpy.context.active_object.data.materials.append(color_matercal)
+        # color_matercal = bpy.data.materials.new(name="BottomRingColor")
+        # color_matercal.diffuse_color = (0.0, 0.0, 1.0, 1.0)
+        # bpy.context.active_object.data.materials.append(color_matercal)
+        if checkinitialBlueColor() == False:
+            initialBlueColor()
+        bpy.context.active_object.data.materials.append(bpy.data.materials['blue'])
         bpy.context.view_layer.update()
         bpy.context.view_layer.objects.active = active_obj
 
@@ -218,7 +240,7 @@ def translate_circle_to_object():
     duplicate_obj.name = cur_obj.name + "ForCutR"
     bpy.context.collection.objects.link(duplicate_obj)
     # todo 先加到右耳集合，后续调整左右耳适配
-    # moveToRight(duplicate_obj)
+    moveToRight(duplicate_obj)
 
     for obj in bpy.data.objects:
         obj.select_set(False)
@@ -227,6 +249,14 @@ def translate_circle_to_object():
             bpy.context.view_layer.objects.active = obj
 
     bpy.ops.object.convert(target='MESH')
+
+    # # 合并简化网格
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        bpy.ops.mesh.remove_doubles(threshold=0.18)
+    del stdout
 
 
 def boolean_apply():
@@ -240,9 +270,13 @@ def boolean_apply():
     # 添加一个修饰器
     modifier = obj.modifiers.new(name="BottomCut", type='BOOLEAN')
     bpy.context.object.modifiers["BottomCut"].operation = 'DIFFERENCE'
+    # todo 用交集可能会快点，但仍然有待测试
+    # bpy.context.object.modifiers["BottomCut"].operation = 'UNION'
     bpy.context.object.modifiers["BottomCut"].object = bpy.data.objects["BottomRingBorderRForCutR"]
     # 2024/1/6 fast导致某些模型消失，暂时处理为改为exact，但是会很卡，后续找到问题所在再优化
     bpy.context.object.modifiers["BottomCut"].solver = 'EXACT'
+    # 2024/1/17 发现洞大小会影响布尔的效果，不得已设置基于自身，导致非常的卡，需要未来优化
+    bpy.context.object.modifiers["BottomCut"].use_self = True
     # 应用修改器
     bpy.ops.object.modifier_apply(modifier="BottomCut", single_user=True)
 
@@ -281,6 +315,7 @@ def cut_bottom_part():
     active_obj = bpy.context.active_object
     # 进入编辑模式
     bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
     # 获取网格数据
     obj = bpy.context.active_object
     mesh = obj.data
@@ -355,19 +390,7 @@ def get_plane_height(high_percent):
     return lowest_vert.co[2] + high_percent * (highest_vert.co[2] - lowest_vert.co[2])
 
 
-def bottom_cut():
-    # 复制一份模型
-    cur_obj = bpy.context.active_object
-    duplicate_obj = cur_obj.copy()
-    duplicate_obj.data = cur_obj.data.copy()
-    duplicate_obj.animation_data_clear()
-    duplicate_obj.name = cur_obj.name + "OriginForCutR"
-    bpy.context.collection.objects.link(duplicate_obj)
-    duplicate_obj.hide_set(True)
-    # todo 先加到右耳集合，后续调整左右耳适配
-    # moveToRight(duplicate_obj)
-
-    high_percent = 0.25
+def get_cut_border(high_percent):
     # 获取活动对象
     active_obj = bpy.context.active_object
 
@@ -411,8 +434,39 @@ def bottom_cut():
         # 2024/1/6 使用exact，曲线深度小于0.39也会有问题，这里设置为0.4
         draw_cut_border_curve(get_order_border_vert(order_border_co), "BottomRingBorderR", 0.4)
         # todo 先加到右耳集合，后续调整左右耳适配
-        # moveToRight(bpy.data.objects["BottomRingBorderR"])
+        moveToRight(bpy.data.objects["BottomRingBorderR"])
 
-        translate_circle_to_object()
-        boolean_apply()
-        cut_bottom_part()
+
+def soft_eardrum_bottom_cut():
+    # 复制一份模型
+    cur_obj = bpy.context.active_object
+    duplicate_obj = cur_obj.copy()
+    duplicate_obj.data = cur_obj.data.copy()
+    duplicate_obj.animation_data_clear()
+    duplicate_obj.name = cur_obj.name + "OriginForCutR"
+    bpy.context.collection.objects.link(duplicate_obj)
+    duplicate_obj.hide_set(True)
+    # todo 先加到右耳集合，后续调整左右耳适配
+    moveToRight(duplicate_obj)
+
+    translate_circle_to_object()
+    boolean_apply()
+    cut_bottom_part()
+
+
+def bottom_cut(high_percent):
+    # 复制一份模型
+    cur_obj = bpy.context.active_object
+    duplicate_obj = cur_obj.copy()
+    duplicate_obj.data = cur_obj.data.copy()
+    duplicate_obj.animation_data_clear()
+    duplicate_obj.name = cur_obj.name + "OriginForCutR"
+    bpy.context.collection.objects.link(duplicate_obj)
+    duplicate_obj.hide_set(True)
+    # todo 先加到右耳集合，后续调整左右耳适配
+    moveToRight(duplicate_obj)
+
+    get_cut_border(high_percent)
+    translate_circle_to_object()
+    boolean_apply()
+    cut_bottom_part()

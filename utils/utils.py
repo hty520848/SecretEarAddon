@@ -1,5 +1,6 @@
 import bpy
 import bmesh
+import math
 
 
 # 获取VIEW_3D区域的上下文
@@ -21,6 +22,29 @@ def utils_get_override():
     }
 
     return override
+
+
+# 对顶点进行排序用于画圈
+def utils_get_order_border_vert(selected_verts):
+    # 尝试使用距离最近的点
+    order_border_vert = []
+    now_vert = selected_verts[0]
+    unprocessed_vertex = selected_verts  # 未处理顶点
+    while len(unprocessed_vertex) > 1:
+        order_border_vert.append(now_vert)
+        unprocessed_vertex.remove(now_vert)
+
+        min_distance = math.inf
+        now_vert_co = now_vert
+
+        for vert in unprocessed_vertex:
+            distance = math.sqrt((vert[0] - now_vert_co[0]) ** 2 + (vert[1] - now_vert_co[1]) ** 2 + (
+                    vert[2] - now_vert_co[2]) ** 2)  # 计算欧几里得距离
+            if distance < min_distance:
+                min_distance = distance
+                now_vert = vert
+
+    return order_border_vert
 
 
 # 绘制曲线
@@ -76,7 +100,8 @@ def utils_re_color(target_object_name, color):
     bm.to_mesh(me)
     bm.free()
 
-def utils_copy_object(origin_name,copy_name):
+
+def utils_copy_object(origin_name, copy_name):
     copy_flag = False
     for obj in bpy.context.view_layer.objects:
         if obj.name == "origin_name":

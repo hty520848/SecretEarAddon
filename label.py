@@ -11,6 +11,8 @@ default_plane_size_y = 1  # 记录添加字体后平面的y轴默认尺寸,此�
 
 prev_on_object = False  # 判断鼠标在模型上与否的状态是否改变
 
+label_info_save = []    #保存已经提交过的label信息,用于模块切换时的初始化
+
 
 # 获取区域和空间，鼠标行为切换相关
 def get_region_and_space(context, area_type, region_type, space_type):
@@ -172,6 +174,7 @@ def frontToLabel():
     duplicate_obj1.name = name + "LabelReset"
     bpy.context.collection.objects.link(duplicate_obj1)
     duplicate_obj1.hide_set(True)
+    initial()  # 初始化
 
 
 def frontFromLabel():
@@ -201,28 +204,86 @@ def frontFromLabel():
 
 
 def backToLabel():
-    # 判断是否存在LabelLast
-    # 若没有LabelLast,则说明跳过了Label模块,再直接由后面的模块返回该模块。   TODO  根据切割操作的最后状态复制出LabelReset和LabelLast
-    # 若存在LabelLast,则直接将LabelLast复制一份用于替换当前操作物体
-    exist_LabelLast = False
+    # 判断是否存在LabelReset
+    # 若没有LabelReset,则说明跳过了Label模块,再直接由后面的模块返回该模块。   TODO  根据切割操作的最后状态复制出LabelReset和LabelLast
+    # 若存在LabelReset,则直接将LabelReset复制一份用于替换当前操作物体
+    exist_LabelReset = False
     all_objs = bpy.data.objects
     for selected_obj in all_objs:
-        if (selected_obj.name == "右耳LabelLast"):
-            exist_LabelLast = True
-    if (exist_LabelLast):
+        if (selected_obj.name == "右耳LabelReset"):
+            exist_LabelReset = True
+    if (exist_LabelReset):
         name = "右耳"  # TODO    根据导入文件名称更改
         obj = bpy.data.objects[name]
-        lastname = name + "LabelLast"
-        ori_obj = bpy.data.objects[lastname]
+        resetname = name + "LabelReset"
+        ori_obj = bpy.data.objects[resetname]
         bpy.data.objects.remove(obj, do_unlink=True)
         duplicate_obj = ori_obj.copy()
         duplicate_obj.data = ori_obj.data.copy()
         duplicate_obj.animation_data_clear()
         duplicate_obj.name = name
         bpy.context.scene.collection.objects.link(duplicate_obj)
+        duplicate_obj.select_set(True)
         bpy.context.view_layer.objects.active = duplicate_obj
+        initial()      #初始化
+
     else:
-        pass  # TODO
+        name = "右耳"  # TODO    根据导入文件名称更改
+        obj = bpy.data.objects[name]
+        lastname = "右耳HandleLast"
+        last_obj = bpy.data.objects.get(lastname)
+        if (last_obj != None):
+            ori_obj = last_obj.copy()
+            ori_obj.data = last_obj.data.copy()
+            ori_obj.animation_data_clear()
+            ori_obj.name = name + "LabelReset"
+            bpy.context.collection.objects.link(ori_obj)
+            ori_obj.hide_set(True)
+        elif (bpy.data.objects.get("右耳MouldLast") != None):
+            lastname = "右耳MouldLast"
+            last_obj = bpy.data.objects.get(lastname)
+            ori_obj = last_obj.copy()
+            ori_obj.data = last_obj.data.copy()
+            ori_obj.animation_data_clear()
+            ori_obj.name = name + "LabelReset"
+            bpy.context.collection.objects.link(ori_obj)
+            ori_obj.hide_set(True)
+        elif (bpy.data.objects.get("右耳QieGeLast") != None):
+            lastname = "右耳QieGeLast"
+            last_obj = bpy.data.objects.get(lastname)
+            ori_obj = last_obj.copy()
+            ori_obj.data = last_obj.data.copy()
+            ori_obj.animation_data_clear()
+            ori_obj.name = name + "LabelReset"
+            bpy.context.collection.objects.link(ori_obj)
+            ori_obj.hide_set(True)
+        elif (bpy.data.objects.get("右耳LocalThickLast") != None):
+            lastname = "右耳LocalThickLast"
+            last_obj = bpy.data.objects.get(lastname)
+            ori_obj = last_obj.copy()
+            ori_obj.data = last_obj.data.copy()
+            ori_obj.animation_data_clear()
+            ori_obj.name = name + "LabelReset"
+            bpy.context.collection.objects.link(ori_obj)
+            ori_obj.hide_set(True)
+        else:
+            lastname = "右耳DamoCopy"
+            last_obj = bpy.data.objects.get(lastname)
+            ori_obj = last_obj.copy()
+            ori_obj.data = last_obj.data.copy()
+            ori_obj.animation_data_clear()
+            ori_obj.name = name + "LabelReset"
+            bpy.context.collection.objects.link(ori_obj)
+            ori_obj.hide_set(True)
+        bpy.data.objects.remove(obj, do_unlink=True)
+        duplicate_obj = ori_obj.copy()
+        duplicate_obj.data = ori_obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = name
+        bpy.context.scene.collection.objects.link(duplicate_obj)
+        duplicate_obj.select_set(True)
+        bpy.context.view_layer.objects.active = duplicate_obj
+        initial()      #初始化
 
 
 def backFromLabel():
@@ -244,6 +305,143 @@ def backFromLabel():
     bpy.context.collection.objects.link(duplicate_obj1)
     duplicate_obj1.hide_set(True)
 
+#在label提交前会保存label的相关信息
+def saveInfo():
+    global label_info_save
+
+    textname = "Text"
+    text_obj = bpy.data.objects.get(textname)
+    planename = "Plane"
+    plane_obj = bpy.data.objects.get(planename)
+
+    text = bpy.context.scene.labelText
+    depth = bpy.context.scene.deep
+    size = bpy.context.scene.fontSize
+    style = bpy.context.scene.styleEnum
+    l_x = plane_obj.location[0]
+    l_y = plane_obj.location[1]
+    l_z = plane_obj.location[2]
+    r_x = plane_obj.rotation_euler[0]
+    r_y = plane_obj.rotation_euler[1]
+    r_z = plane_obj.rotation_euler[2]
+
+    label_info = LabelInfoSave(text,depth,size,style,l_x,l_y,l_z,r_x,r_y,r_z)
+    label_info_save.append(label_info)
+
+
+def initial():
+    global label_info_save
+    #对于数组中保存的label信息,前n-1个先添加后提交,最后一个添加不提交
+    if(len(label_info_save) > 0):
+        for i in range(len(label_info_save)-1):
+            labelInfo = label_info_save[i]
+            text = labelInfo.text
+            depth = labelInfo.depth
+            size = labelInfo.size
+            style = labelInfo.style
+            l_x = labelInfo.l_x
+            l_y = labelInfo.l_y
+            l_z = labelInfo.l_z
+            r_x = labelInfo.r_x
+            r_y = labelInfo.r_y
+            r_z = labelInfo.r_z
+            #添加Label并提交
+            labelInitial(text,depth,size,style,l_x,l_y,l_z,r_x,r_y,r_z)
+        labelInfo = label_info_save[len(label_info_save)-1]
+        text = labelInfo.text
+        depth = labelInfo.depth
+        size = labelInfo.size
+        style = labelInfo.style
+        l_x = labelInfo.l_x
+        l_y = labelInfo.l_y
+        l_z = labelInfo.l_z
+        r_x = labelInfo.r_x
+        r_y = labelInfo.r_y
+        r_z = labelInfo.r_z
+        bpy.context.scene.labelText = text
+        # 先根据text信息添加一个label,激活鼠标行为
+        bpy.ops.object.labeladd('INVOKE_DEFAULT')
+        # 获取添加后的label,并根据参数设置其形状大小
+        planename = "Plane"
+        plane_obj = bpy.data.objects.get(planename)
+        bpy.context.scene.deep = depth
+        bpy.context.scene.fontSize = size
+        bpy.context.scene.styleEnum = style
+        plane_obj.location[0] = l_x
+        plane_obj.location[1] = l_y
+        plane_obj.location[2] = l_z
+        plane_obj.rotation_euler[0] = r_x
+        plane_obj.rotation_euler[1] = r_y
+        plane_obj.rotation_euler[2] = r_z
+
+
+# 模块切换时,根据提交时保存的信息,添加label进行初始化,先根据信息添加label,之后再将label提交。与submit函数相比,提交时不必保存label信息。
+def labelInitial(text, depth, size, style, l_x, l_y, l_z, r_x, r_y, r_z):
+
+    # 先根据text信息添加一个label
+    addLabel(text)
+
+    # 获取添加后的label,并根据参数设置其形状大小
+    name = "右耳"
+    obj = bpy.data.objects.get(name)
+    textname = "Text"
+    text_obj = bpy.data.objects.get(textname)
+    planename = "Plane"
+    plane_obj = bpy.data.objects.get(planename)
+    bpy.context.scene.deep = depth
+    bpy.context.scene.fontSize = size
+    bpy.context.scene.styleEnum = style
+    plane_obj.location[0] = l_x
+    plane_obj.location[1] = l_y
+    plane_obj.location[2] = l_z
+    plane_obj.rotation_euler[0] = r_x
+    plane_obj.rotation_euler[1] = r_y
+    plane_obj.rotation_euler[2] = r_z
+
+    # 应用Label的表面形变修改器
+    text_modifier_name = "SurfaceDeform"
+    target_modifier = None
+    for modifier in text_obj.modifiers:
+        if modifier.name == text_modifier_name:
+            target_modifier = modifier
+    if (target_modifier != None):
+        bpy.ops.object.modifier_apply(modifier="SurfaceDeform", single_user=True)
+    # 应用Panel的缩裹修改器
+    panel_modifier_name = "Shrinkwrap"
+    target_modifier = None
+    for modifier in plane_obj.modifiers:
+        if modifier.name == panel_modifier_name:
+            target_modifier = modifier
+    if (target_modifier != None):
+        bpy.ops.object.modifier_apply(modifier="Shrinkwrap", single_user=True)
+
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.modifier_add(type='BOOLEAN')
+    bpy.context.object.modifiers["Boolean"].solver = 'FAST'
+
+    # 将模型与Label根据style进行合并
+    enum = bpy.types.Scene.styleEnum
+    if enum == "OP1":
+        bpy.context.object.modifiers["Boolean"].operation = 'DIFFERENCE'
+    if enum == "OP2":
+        bpy.context.object.modifiers["Boolean"].operation = 'UNION'
+    bpy.context.object.modifiers["Boolean"].object = text_obj
+    bpy.ops.object.modifier_apply(modifier="Boolean", single_user=True)
+    bpy.context.object.data.use_auto_smooth = True
+
+    # 删除平面和字体
+    bpy.data.objects.remove(plane_obj, do_unlink=True)
+    bpy.data.objects.remove(text_obj, do_unlink=True)
+
+    # 合并后Label会被去除材质,因此需要重置一下模型颜色为黄色
+    bpy.ops.object.mode_set(mode='VERTEX_PAINT')
+    bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
+    bpy.data.brushes["Draw"].color = (1, 0.6, 0.4)
+    bpy.ops.paint.vertex_color_set()
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+
 
 def addLabel(text):
     '''
@@ -251,6 +449,10 @@ def addLabel(text):
     '''
     global default_plane_size_x
     global default_plane_size_y
+
+    enum = bpy.context.scene.styleEnum
+    bpy.context.scene.deep = 1
+    bpy.context.scene.fontSize = 4
 
     # 添加字体,字体名称默认为Text
     bpy.ops.object.text_add(enter_editmode=False, align='WORLD', location=(-16, 8, 4), scale=(1, 1, 1))
@@ -305,12 +507,20 @@ def addLabel(text):
     default_plane_size_x = scale_x
     default_plane_size_y = scale_y
 
-    # 为字体添加红色材质
-    bpy.context.view_layer.objects.active = text_obj
-    red_material = bpy.data.materials.new(name="Red")
-    red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
-    text_obj.data.materials.clear()
-    text_obj.data.materials.append(red_material)
+    if enum == "OP1":
+        # 为字体添加红色材质
+        bpy.context.view_layer.objects.active = text_obj
+        red_material = bpy.data.materials.new(name="Red")
+        red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+        text_obj.data.materials.clear()
+        text_obj.data.materials.append(red_material)
+    elif enum == "OP2":
+        # 为字体添加青色材质
+        bpy.context.view_layer.objects.active = text_obj
+        red_material = bpy.data.materials.new(name="Red")
+        red_material.diffuse_color = (0, 0.4, 1.0, 1.0)
+        text_obj.data.materials.clear()
+        text_obj.data.materials.append(red_material)
     # 为字体添加细分修改器并应用。对字体添加表面形变修改器，将目标绑定为平面
     bpy.ops.object.modifier_add(type='SUBSURF')
     bpy.context.object.modifiers["Subdivision"].subdivision_type = 'SIMPLE'
@@ -357,7 +567,6 @@ def addLabel(text):
     text_obj.select_set(True)
     bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
     text_obj.select_set(False)
-    plane_obj.select_set(False)
 
     # 设置字体初始位置                               #TODO   改变了字体 y轴处的位置,需要修复该bug
     plane_obj.location[0] = -9.7  # TODO    Label初始位置应该为鼠标双击的位置
@@ -448,6 +657,8 @@ def labelSubmit():
     '''
     提交操作,应用修改器,将Plane删除并将Text实体化
     '''
+    enum = bpy.context.scene.styleEnum
+
     name = "右耳"
     obj = bpy.data.objects.get(name)
     textname = "Text"
@@ -456,6 +667,9 @@ def labelSubmit():
     plane_obj = bpy.data.objects.get(planename)
     # 存在未提交的Label和Plane时
     if (text_obj != None and plane_obj != None):
+        #先将该Label的相关信息保存下来,用于模块切换时的初始化。
+        saveInfo()
+
         # 应用Label的表面形变修改器
         text_modifier_name = "SurfaceDeform"
         target_modifier = None
@@ -475,43 +689,19 @@ def labelSubmit():
 
         bpy.context.view_layer.objects.active = obj
         bpy.ops.object.modifier_add(type='BOOLEAN')
-        bpy.context.object.modifiers["Boolean"].operation = 'UNION'
+        bpy.context.object.modifiers["Boolean"].solver = 'FAST'
+        #将模型与Label根据style进行合并
+        if enum == "OP1":
+            bpy.context.object.modifiers["Boolean"].operation = 'DIFFERENCE'
+        if enum == "OP2":
+            bpy.context.object.modifiers["Boolean"].operation = 'UNION'
         bpy.context.object.modifiers["Boolean"].object = text_obj
         bpy.ops.object.modifier_apply(modifier="Boolean",single_user=True)
-        # bpy.ops.object.convert(target='MESH')
+        bpy.context.object.data.use_auto_smooth = True
 
+        #删除平面和字体
         bpy.data.objects.remove(plane_obj, do_unlink=True)
         bpy.data.objects.remove(text_obj, do_unlink=True)
-        # # 删除平面,同时保存平面的位置坐标,旋转角度等信息
-        # plane_obj_location_x = plane_obj.location[0]
-        # plane_obj_location_y = plane_obj.location[1]
-        # plane_obj_location_z = plane_obj.location[2]
-        # plane_obj_rotation_x = plane_obj.rotation_euler[0]
-        # plane_obj_rotation_y = plane_obj.rotation_euler[1]
-        # plane_obj_rotation_z = plane_obj.rotation_euler[2]
-        # if (plane_obj != None):
-        #     bpy.data.objects.remove(plane_obj, do_unlink=True)
-        # # 失去父物体plane后,text会回复到原来的位置,因此需要更改text的坐标和旋转角度为当前位置
-        # text_obj.location[0] = plane_obj_location_x
-        # text_obj.location[1] = plane_obj_location_y
-        # text_obj.location[2] = plane_obj_location_z
-        # text_obj.rotation_euler[0] = plane_obj_rotation_x
-        # text_obj.rotation_euler[1] = plane_obj_rotation_y
-        # text_obj.rotation_euler[2] = plane_obj_rotation_z
-        # # 使用BoolTool将该Label与模型合并                                    TODO 使用BOOLtool插件合并,需要在偏好设置中打开Booltool
-        # textname = "Text"
-        # text_obj = bpy.data.objects.get(textname)
-        # oriname = "右耳"
-        # ori_obj = bpy.data.objects.get(oriname)
-        # objects = bpy.context.scene.objects
-        # for obj in objects:
-        #     obj.select_set(False)
-        # text_obj.select_set(True)
-        # ori_obj.select_set(True)
-        # bpy.context.view_layer.objects.active = ori_obj
-        # # 将操作模型和Label选中,同时将当前激活物体设置为操作模型,使用Booltool工具的自动合并操作将二者合并
-        # # 合并后名为Text的Label则不复存在
-        # bpy.ops.object.booltool_auto_union()  # TODO   Label添加过多后的卡顿问题
 
         #合并后Label会被去除材质,因此需要重置一下模型颜色为黄色
         bpy.ops.object.mode_set(mode='VERTEX_PAINT')
@@ -526,7 +716,9 @@ class LabelTest(bpy.types.Operator):
     bl_label = "功能测试"
 
     def invoke(self, context, event):
-        backFromLabel()
+        addLabel("HDU")
+
+
         return {'FINISHED'}
 
 
@@ -535,9 +727,26 @@ class LabelTest1(bpy.types.Operator):
     bl_label = "功能测试"
 
     def invoke(self, context, event):
-        backToLabel()
+        labelSubmit()
 
         return {'FINISHED'}
+
+#保存提交前的每个Label信息
+class LabelInfoSave(object):
+    def __init__(self,text,depth,size,style,l_x,l_y,l_z,r_x,r_y,r_z):
+        self.text = text
+        self.depth = depth
+        self.size = size
+        self.style = style
+        self.l_x = l_x
+        self.l_y = l_y
+        self.l_z = l_z
+        self.r_x = r_x
+        self.r_y = r_y
+        self.r_z = r_z
+
+
+
 
 
 class LabelReset(bpy.types.Operator):
@@ -547,6 +756,9 @@ class LabelReset(bpy.types.Operator):
     def invoke(self, context, event):
 
         bpy.context.scene.var = 10
+        global label_info_save
+        label_info_save = []
+
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
@@ -593,7 +805,6 @@ class LabelAdd(bpy.types.Operator):
         # 若模型上存在未提交的Label,则先将其提交
         labelSubmit()
         # 创建新的Label
-        print("LabelAdd")
         labelText = bpy.context.scene.labelText
         addLabel(labelText)
         # 将Plane激活并选中

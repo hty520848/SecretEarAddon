@@ -9,13 +9,15 @@ from .damo import *
 from .qiege import *
 from .label import *
 from .handle import *
+from .support import *
 from .create_mould.create_mould import *
+from .create_mould.frame_style_eardrum.frame_style_eardrum import *
 from .utils.utils import *
 import time
 
 prev_properties_context = None  # 保存Properties窗口切换时上次Properties窗口中的上下文,记录由哪个模式切换而来
 
-is_msgbus_start = False  # 模块切换操作符是否启动
+is_msgbus_start = False         #模块切换操作符是否启动
 
 processing_stage_dict = {
     "OUTPUT": "局部加厚",
@@ -46,6 +48,21 @@ class Forward1(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class SwitchTest(bpy.types.Operator):
+    bl_idname = "object.switchtestfunc"
+    bl_label = "功能测试"
+
+    def invoke(self, context, event):
+        # 复制一份挖孔前的模型以备用
+        cur_obj = bpy.context.active_object
+        duplicate_obj = cur_obj.copy()
+        duplicate_obj.data = cur_obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = cur_obj.name + "OriginForCreateMouldR"
+        bpy.context.collection.objects.link(duplicate_obj)
+        duplicate_obj.hide_set(True)
+        apply_frame_style_eardrum_template()
+        return {'FINISHED'}
 
 class MsgbusCallBack(bpy.types.Operator):
     bl_idname = "object.msgbuscallback"
@@ -60,8 +77,13 @@ class MsgbusCallBack(bpy.types.Operator):
 
     def modal(self, context, event):
         global prev_properties_context
-        current_tab = bpy.context.screen.areas[0].spaces.active.context
 
+        workspace = context.window.workspace.name
+
+        if workspace == '布局':
+            current_tab = bpy.context.screen.areas[1].spaces.active.context
+        elif workspace == '布局.001':
+            current_tab = bpy.context.screen.areas[0].spaces.active.context
         name = "右耳"  # TODO 导入物体的名称
         obj = bpy.data.objects.get(name)
         if (obj != None):
@@ -106,6 +128,12 @@ class MsgbusCallBack(bpy.types.Operator):
                         with bpy.context.temp_override(**override):
                             frontFromHandle()
                             backToLocalThickening()
+                    elif (prev_properties_context == 'PHYSICS'):
+                        print("SupportToLocalThick")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromSupport()
+                            backToLocalThickening()
 
                 elif (current_tab == 'RENDER'):
                     if (prev_properties_context == 'OUTPUT'):
@@ -120,8 +148,7 @@ class MsgbusCallBack(bpy.types.Operator):
                         with bpy.context.temp_override(**override):
                             frontFromQieGe()  # 切割退出
                             print("当前激活物体", bpy.context.active_object)
-                            bpy.ops.wm.tool_set_by_id(
-                                name="builtin.select_box")
+                            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
                             backToDamo()  # 打磨初始化,保存到打磨保存的状态
                     elif (prev_properties_context == 'MODIFIER'):
                         print("labelToDaMo")
@@ -141,6 +168,13 @@ class MsgbusCallBack(bpy.types.Operator):
                         with bpy.context.temp_override(**override):
                             frontFromHandle()
                             backToDamo()
+                    elif (prev_properties_context == 'PHYSICS'):
+                        print("SupportToDamo")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromSupport()
+                            backToDamo()
+
 
                 elif (current_tab == 'VIEW_LAYER'):
                     if (prev_properties_context == 'OUTPUT'):
@@ -173,6 +207,13 @@ class MsgbusCallBack(bpy.types.Operator):
                         with bpy.context.temp_override(**override):
                             frontFromHandle()
                             backToQieGe()
+                    elif (prev_properties_context == 'PHYSICS'):
+                        print("SupportToQieGe")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromSupport()
+                            backToQieGe()
+
 
                 elif (current_tab == 'MODIFIER'):
                     if (prev_properties_context == 'OUTPUT'):
@@ -205,6 +246,12 @@ class MsgbusCallBack(bpy.types.Operator):
                         with bpy.context.temp_override(**override):
                             backFromHandle()
                             frontToLabel()
+                    elif (prev_properties_context == 'PHYSICS'):
+                        print("SupportToLabel")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromSupport()
+                            backToLabel()
 
                 elif (current_tab == 'SCENE'):
                     if (prev_properties_context == 'OUTPUT'):
@@ -237,6 +284,13 @@ class MsgbusCallBack(bpy.types.Operator):
                         with bpy.context.temp_override(**override):
                             frontFromHandle()
                             backToCreateMould()
+                    elif (prev_properties_context == 'PHYSICS'):
+                        print("SupportToCreateMould")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromSupport()
+                            backToCreateMould()
+
 
                 elif (current_tab == 'OBJECT'):
                     if (prev_properties_context == 'OUTPUT'):
@@ -269,6 +323,51 @@ class MsgbusCallBack(bpy.types.Operator):
                         with bpy.context.temp_override(**override):
                             backFromCreateMould()
                             frontToHandle()
+                    elif (prev_properties_context == 'PHYSICS'):
+                        print("SupportToHandle")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromSupport()
+                            backToHandle()
+
+
+                elif (current_tab == 'PHYSICS'):
+                    if (prev_properties_context == 'OUTPUT'):
+                        print("LocalThickToSupport")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromLocalThickening()
+                            frontToSupport()
+                    elif (prev_properties_context == 'RENDER' or prev_properties_context == None):
+                        print("DamoToSupport")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromDamo()
+                            frontToSupport()
+                    elif (prev_properties_context == 'VIEW_LAYER'):
+                        print("QieGeToSupport")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromQieGe()
+                            frontToSupport()
+                    elif (prev_properties_context == 'MODIFIER'):
+                        print("LabelToSupport")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromLabel()
+                            frontToSupport()
+                    elif (prev_properties_context == 'SCENE'):
+                        print("CreateMouldToSupport")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromCreateMould()
+                            frontToSupport()
+                    elif (prev_properties_context == 'OBJECT'):
+                        print("HandleToSupport")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromHandle()
+                            frontToSupport()
 
                 print("---------")
                 selected_objs = bpy.data.objects
@@ -302,6 +401,7 @@ bpy.msgbus.subscribe_rna(
 _classes = [
     BackUp1,
     Forward1,
+    SwitchTest,
     MsgbusCallBack
 ]
 
