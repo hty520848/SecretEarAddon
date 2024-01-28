@@ -672,8 +672,6 @@ def selectcurve(context, event, curve_name, mesh_name, depth):
     bpy.context.view_layer.objects.active = bpy.data.objects['dragcurve']
     bpy.context.object.data.bevel_depth = depth
     bpy.ops.object.select_all(action='DESELECT')
-    bpy.data.objects['dragcurve'].select_set(state=True)
-
 
 def movecurve(co, initial_co, curve_name):
     global index
@@ -963,6 +961,9 @@ class TEST_OT_dragcurve(bpy.types.Operator):
                     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             if op_cls.__right_mouse_down == True:  # 鼠标右键按下
                 global number
+                curve_length = len(bpy.data.objects[op_cls.__curve_name].data.splines[0].points)
+                min_number = int*(curve_length * 0.1)
+                max_number = int*(curve_length * 0.8)
                 op_cls.__is_modifier_right = True
                 op_cls.__now_mouse_x_right = event.mouse_region_x
                 op_cls.__now_mouse_y_right = event.mouse_region_y
@@ -975,10 +976,10 @@ class TEST_OT_dragcurve(bpy.types.Operator):
                             op_cls.__now_mouse_y_right < op_cls.__initial_mouse_y_right):
                         dis *= -1  # 根据鼠标移动的方向确定是增大还是减小区域
                     number += dis  # 根据鼠标移动的距离扩大或缩小选区
-                    if (number < 10):  # 防止选不到点弹出报错信息
-                        number = 10
-                    if (number > 200):  # 设置最大值
-                        number = 200
+                    if (number < min_number):  # 防止选不到点弹出报错信息
+                        number = min_number
+                    if (number > max_number):
+                        number = max_number
                     selectcurve(context, event, op_cls.__curve_name, op_cls.__mesh_name, op_cls.__depth)
                     op_cls.__initial_mouse_x_right = op_cls.__now_mouse_x_right  # 重新开始检测
                     op_cls.__initial_mouse_y_right = op_cls.__now_mouse_y_right
@@ -1041,8 +1042,7 @@ class TEST_OT_dragcurve(bpy.types.Operator):
                     op_cls.__is_moving_right = False
                 return {'RUNNING_MODAL'}
             elif event.type == 'MOUSEMOVE' and op_cls.__left_mouse_down == False and op_cls.__right_mouse_down == False:  # 鼠标移动时选择不同的曲线区域
-                if (
-                        op_cls.__prev_mouse_location_x != event.mouse_region_x or op_cls.__prev_mouse_location_y != event.mouse_region_y):
+                if (op_cls.__prev_mouse_location_x != event.mouse_region_x or op_cls.__prev_mouse_location_y != event.mouse_region_y):
                     op_cls.__prev_mouse_location_x = event.mouse_region_x
                     op_cls.__prev_mouse_location_y = event.mouse_region_y
                     selectcurve(context, event, op_cls.__curve_name, op_cls.__mesh_name, op_cls.__depth)
@@ -1145,6 +1145,9 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
                     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             if op_cls.__right_mouse_down == True:  # 鼠标右键按下
                 global number
+                curve_length = len(bpy.data.objects[op_cls.__curve_name].data.splines[0].points)
+                min_number = int*(curve_length * 0.1)
+                max_number = int*(curve_length * 0.8)
                 op_cls.__is_modifier_right = True
                 op_cls.__now_mouse_x_right = event.mouse_region_x
                 op_cls.__now_mouse_y_right = event.mouse_region_y
@@ -1157,15 +1160,16 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
                             op_cls.__now_mouse_y_right < op_cls.__initial_mouse_y_right):
                         dis *= -1  # 根据鼠标移动的方向确定是增大还是减小区域
                     number += dis  # 根据鼠标移动的距离扩大或缩小选区
-                    if (number < 10):  # 防止选不到点弹出报错信息
-                        number = 10
-                    if (number > 200):  # 设置最大值
-                        number = 200
+                    if (number < min_number):  # 防止选不到点弹出报错信息
+                        number = min_number
+                    if (number > max_number):
+                        number = max_number
                     selectcurve(context, event, op_cls.__curve_name, op_cls.__mesh_name, op_cls.__depth)
                     op_cls.__initial_mouse_x_right = op_cls.__now_mouse_x_right  # 重新开始检测
                     op_cls.__initial_mouse_y_right = op_cls.__now_mouse_y_right
             if op_cls.__left_mouse_down == True:  # 鼠标左键按下
                 bpy.data.objects[op_cls.__mesh_name].hide_set(True)
+                bpy.data.objects[op_cls.__curve_name].hide_set(True)
                 op_cls.__is_modifier = True
                 op_cls.__now_mouse_x = event.mouse_region_x
                 op_cls.__now_mouse_y = event.mouse_region_y
@@ -1183,6 +1187,8 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
                     snaptoobject('dragcurve')
                     join_dragcurve(op_cls.__curve_name, op_cls.__depth)
                     convert_tomesh(op_cls.__curve_name, op_cls.__mesh_name, op_cls.__depth)
+                    bpy.data.objects[op_cls.__mesh_name].hide_set(False)
+                    bpy.data.objects[op_cls.__curve_name].hide_set(False)
                     op_cls.__is_modifier = False
                     op_cls.__is_modifier_right = False
 
@@ -1221,8 +1227,7 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
                     op_cls.__is_moving_right = False
                 return {'RUNNING_MODAL'}
             elif event.type == 'MOUSEMOVE' and op_cls.__left_mouse_down == False and op_cls.__right_mouse_down == False:  # 鼠标移动时选择不同的曲线区域
-                if (
-                        op_cls.__prev_mouse_location_x != event.mouse_region_x or op_cls.__prev_mouse_location_y != event.mouse_region_y):
+                if (op_cls.__prev_mouse_location_x != event.mouse_region_x or op_cls.__prev_mouse_location_y != event.mouse_region_y):
                     op_cls.__prev_mouse_location_x = event.mouse_region_x
                     op_cls.__prev_mouse_location_y = event.mouse_region_y
                     if op_cls.__is_modifier == False:

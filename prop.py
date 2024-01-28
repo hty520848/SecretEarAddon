@@ -588,6 +588,7 @@ def ChangeMouldType(self, context):
         if enum == "OP1":
             print("软耳模")
             apply_soft_eardrum_template()
+            convert_to_mesh('BottomRingBorderR',0.3)
         if enum == "OP2":
             print("硬耳膜")
         if enum == "OP3":
@@ -595,6 +596,8 @@ def ChangeMouldType(self, context):
         if enum == "OP4":
             print("框架式耳膜")
             apply_frame_style_eardrum_template()
+            convert_to_mesh('BottomRingBorderR',0.4)
+            convert_to_mesh('HoleBorderCurveR', 0.18)
         if enum == "OP5":
             print("常规外壳")
         if enum == "OP6":

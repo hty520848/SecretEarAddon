@@ -259,7 +259,7 @@ def recover():
                                           "HoleBorderCurveR", "BottomRingBorderR", "cutPlane",
                                           "BottomRingBorderRForCutR",
                                           "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
-                                          "右耳ForGetFillPlane"]
+                                          "右耳ForGetFillPlane","meshHoleBorderCurveR","meshBottomRingBorderR"]
         delete_useless_object(need_to_delete_model_name_list)
         # 将最开始复制出来的OriginForCreateMould名称改为模型名称
         obj.hide_set(False)
@@ -288,7 +288,7 @@ def complete():
                                       "HoleBorderCurveR", "BottomRingBorderR", "cutPlane",
                                       "BottomRingBorderRForCutR",
                                       "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
-                                      "右耳ForGetFillPlane"]
+                                      "右耳ForGetFillPlane","meshHoleBorderCurveR","meshBottomRingBorderR"]
     delete_useless_object(need_to_delete_model_name_list)
     enum = bpy.context.scene.muJuTypeEnum
     if enum == "OP1":

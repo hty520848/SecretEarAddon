@@ -4,6 +4,7 @@ import mathutils
 from bpy_extras import view3d_utils
 from math import sqrt
 from .tool import newShader
+from .create_mould import point
 
 prev_on_object = 0
 number = 0  #记录管道控制点点的个数
@@ -40,16 +41,14 @@ def get_region_and_space(context, area_type, region_type, space_type):
 
     return (region, space)
 
-def is_changed(context, event):
+def on_which_shpere(context, event):
     '''
-    判断鼠标状态是否发生改变
+    判断鼠标在哪个圆球上
     '''
     global object_list
-    global prev_on_object  # 之前鼠标在哪个物体上
-
+    
     for name in object_list:
         active_obj = bpy.data.objects[name]
-        curr_on_object = 0            # 当前鼠标在那个物体上,初始化为0
         object_index = int(name.replace('cannelsphere',''))
 
         if context.area:
@@ -93,16 +92,20 @@ def is_changed(context, event):
                 _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
 
                 if fidx is not None:
-                    curr_on_object = object_index
-                    print(object_index)                     # 如果发生交叉，将变量设为True
-                    break
+                    return object_index
 
-    if (prev_on_object != curr_on_object):
+    return 0
+    
+     
+def is_changed(context, event):
+    curr_on_object = on_which_shpere(context, event)  # 当前鼠标在哪个物体上
+    global prev_on_object  # 之前鼠标在那个物体上
+
+    if (curr_on_object != prev_on_object):
         prev_on_object = curr_on_object
         return True
     else:
         return False
-    
 
 def cal_co(name, context, event): 
     ''' 
@@ -177,12 +180,13 @@ def select_nearest_point(co):
             distance = sqrt(sum((a - b) ** 2 for a, b in zip(point.co, co)))
             # 更新最小距离和对应的点索引
             if distance < secondmin_dis:
-                secondmin_dis = distance
-                secondmin_dis_index = point_index
                 if distance < min_dis:
                     min_dis = distance
                     min_dis_index = point_index
-
+                else:
+                    secondmin_dis = distance
+                    secondmin_dis_index = point_index
+                    
     return (min_dis_index,secondmin_dis_index)
 
 def initialRedColor():
@@ -225,16 +229,33 @@ def checkmesh():
             return True
     return False
 
+def copy_curve():
+    ''' 复制曲线数据 '''
+    # 选择要复制数据的源曲线对象
+    source_curve = bpy.data.objects['canal']
+    new_name = 'meshcanal'
+    # 创建一个新的曲线对象来存储复制的数据
+    new_curve = bpy.data.curves.new(new_name, 'CURVE')
+    new_curve.dimensions = '3D'
+    new_obj = bpy.data.objects.new(new_name, new_curve)
+    bpy.context.collection.objects.link(new_obj)
+
+    # 复制源曲线的数据到新曲线
+    new_curve.splines.clear()
+    for spline in source_curve.data.splines:
+        new_spline = new_curve.splines.new(spline.type)
+        new_spline.points.add(len(spline.points) - 1)
+        # new_spline.use_cyclic_u = True
+        new_spline.use_smooth = True
+        new_spline.order_u = 2
+        for i, point in enumerate(spline.points):
+            new_spline.points[i].co = point.co
+
 def convert_to_mesh():
-    active_obj = bpy.data.objects['canal']
-    duplicate_obj = active_obj.copy()
     if(checkmesh() == True):
         bpy.data.objects.remove(bpy.data.objects['meshcanal'], do_unlink=True)  # 删除原有网格
-    duplicate_obj.data = active_obj.data.copy()
-    duplicate_obj.name = "mesh" + active_obj.name 
-    duplicate_obj.animation_data_clear()
-    # 将复制的物体加入到场景集合中
-    bpy.context.collection.objects.link(duplicate_obj)
+    copy_curve()
+    duplicate_obj = bpy.data.objects['meshcanal']
     bpy.context.view_layer.objects.active = duplicate_obj
     bpy.ops.object.select_all(action='DESELECT')
     duplicate_obj.select_set(state=True)
@@ -242,8 +263,9 @@ def convert_to_mesh():
         modifer_name = bpy.context.active_object.modifiers[0].name
         bpy.ops.object.modifier_apply(modifier = modifer_name)
     bpy.context.object.data.bevel_depth = 1 # 设置曲线倒角深度
-    bpy.ops.object.convert(target='MESH')  # 转化为网格
-
+    # bpy.ops.object.convert(target='MESH')  # 转化为网格
+    duplicate_obj.hide_select = True
+    duplicate_obj.data.materials.append(bpy.data.materials["grey"])
 
 def add_sphere(co,index):
     ''' 
@@ -346,10 +368,9 @@ class TEST_OT_qiehuan(bpy.types.Operator):
         return {'RUNNING_MODAL'}
     
     def modal(self, context, event):
-        global prev_on_object
-        if(is_changed(context,event) == True and prev_on_object == 0):
+        if(on_which_shpere(context,event) != 0 and is_changed(context,event) == True):
             bpy.ops.wm.tool_set_by_id(name="builtin.select")
-        elif(is_changed(context,event) == True and prev_on_object != 0):
+        elif(on_which_shpere(context,event) == 0 and is_changed(context,event) == True):
             bpy.ops.wm.tool_set_by_id(name="my_tool.addcanal")
 
         return {'PASS_THROUGH'}
@@ -370,7 +391,7 @@ def generate_canal(co):
 
     # 添加一个曲线样条
     spline = curve_data.splines.new('NURBS')
-    spline.order_u = 3
+    spline.order_u = 2
     spline.points[number].co[0:3] = co
     spline.points[number].co[3] = 1
     #spline.use_cyclic_u = True
@@ -392,7 +413,7 @@ def add_canal(min_index, secondmin_index):
     bpy.ops.curve.subdivide(number_cuts=1) #细分次数
     bpy.ops.object.mode_set(mode='OBJECT') #返回对象模式
     add_index = max(min_index,secondmin_index)
-    temp_co = curve_data.splines[0].points[add_index]
+    temp_co = curve_data.splines[0].points[add_index].co[0:3]
     add_sphere(temp_co,add_index)
 
 def finish_canal(co):

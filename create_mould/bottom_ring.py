@@ -257,7 +257,7 @@ def translate_circle_to_object():
     with redirect_stdout(stdout):
         bpy.ops.mesh.remove_doubles(threshold=0.18)
     del stdout
-
+    duplicate_obj.hide_set(True)
 
 def boolean_apply():
     for obj in bpy.data.objects:
