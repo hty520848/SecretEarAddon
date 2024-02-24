@@ -81,24 +81,27 @@ def utils_draw_curve(order_border_co, name, depth):
 
 
 def utils_re_color(target_object_name, color):
+    flag = False
     '''为模型重新上色'''
     # 遍历场景中的所有对象，并根据名称选择目标物体
     for obj in bpy.context.view_layer.objects:
         if obj.name == target_object_name:
+            flag = True
             break
-    me = obj.data
-    # 创建bmesh对象
-    bm = bmesh.new()
-    # 将网格数据复制到bmesh对象
-    bm.from_mesh(me)
-    color_lay = bm.verts.layers.float_color["Color"]
-    for vert in bm.verts:
-        colvert = vert[color_lay]
-        colvert.x = color[0]
-        colvert.y = color[1]
-        colvert.z = color[2]
-    bm.to_mesh(me)
-    bm.free()
+    if flag:
+        me = obj.data
+        # 创建bmesh对象
+        bm = bmesh.new()
+        # 将网格数据复制到bmesh对象
+        bm.from_mesh(me)
+        color_lay = bm.verts.layers.float_color["Color"]
+        for vert in bm.verts:
+            colvert = vert[color_lay]
+            colvert.x = color[0]
+            colvert.y = color[1]
+            colvert.z = color[2]
+        bm.to_mesh(me)
+        bm.free()
 
 
 def utils_copy_object(origin_name, copy_name):

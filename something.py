@@ -36,25 +36,3 @@ def smooth_stepcut():
         TRANSFORM_OT_shrink_fatten={"value": pianyi})
     bpy.ops.mesh.bevel(offset=pianyi, segments=8)
     bpy.ops.object.mode_set(mode='OBJECT')
-
-
-    # # 创建一个新的集合
-    # collection = bpy.data.collections.new("MyCollection")
-
-    # # 将新的集合添加到场景中
-    # bpy.context.scene.collection.children.link(collection)
-
-    # # 获取当前场景
-    # scene = bpy.context.scene
-
-    # # 遍历场景中的所有集合
-    # for collection in scene.collection.children:
-    #     if collection.name == "MyCollection":
-    #         bpy.context.view_layer.active_layer_collection =  bpy.context.view_layer.layer_collection.children[collection.name]
-
-    # # 获取要删除的集合
-    # collection = bpy.data.collections.get("MyCollection")
-
-    # # 如果集合存在，则删除它
-    # if collection:
-    #     bpy.data.collections.remove(collection)

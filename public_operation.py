@@ -97,6 +97,41 @@ class MsgbusCallBack(bpy.types.Operator):
                 for selected_obj in selected_objs:
                     print(selected_obj.name)
 
+                # 左右窗口切换
+                if (current_tab == 'MATERIAL'):
+                    print('MATERIAL')
+                    print('prev_context',prev_properties_context)
+                    override1 =getOverride()
+                    with bpy.context.temp_override(**override1):
+                        active_obj = bpy.context.active_object
+                        print('active_obj',active_obj.name)
+                        bpy.ops.object.hide_collection(collection_index=2,  extend=False,toggle=True)
+                        bpy.ops.object.hide_collection(collection_index=1,  extend=False,toggle=True)
+                        active_layer_collection = bpy.context.view_layer.active_layer_collection
+                        print('active_colletion',active_layer_collection.name)
+                        if active_layer_collection.name == 'Right':
+                            my_layer_collection = get_layer_collection(bpy.context.view_layer.layer_collection, 'Left')
+                            bpy.context.view_layer.active_layer_collection = my_layer_collection
+                        elif active_layer_collection.name == 'Left':
+                            my_layer_collection = get_layer_collection(bpy.context.view_layer.layer_collection, 'Right')
+                            bpy.context.view_layer.active_layer_collection = my_layer_collection
+                        override2 =getOverride2()    
+                        with bpy.context.temp_override(**override2):
+                            active_obj = bpy.context.active_object
+                            print('active_obj',active_obj.name)
+                            bpy.ops.object.hide_collection(collection_index=2,  extend=False,toggle=True)
+                            bpy.ops.object.hide_collection(collection_index=1,  extend=False,toggle=True)
+                    if prev_properties_context == None:
+                        if workspace == '布局':
+                            bpy.context.screen.areas[1].spaces.active.context = 'RENDER'
+                        elif workspace == '布局.001':
+                            bpy.context.screen.areas[0].spaces.active.context = 'RENDER'
+                    else:
+                        if workspace == '布局':
+                            bpy.context.screen.areas[1].spaces.active.context = prev_properties_context
+                        elif workspace == '布局.001':
+                            bpy.context.screen.areas[0].spaces.active.context = prev_properties_context
+
                 if (current_tab == 'OUTPUT'):
                     if (prev_properties_context == 'RENDER' or prev_properties_context == None):
                         print("DamoToLocalThick")

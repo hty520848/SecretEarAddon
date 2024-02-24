@@ -43,28 +43,73 @@ font_info = {
     "handler": None,
 }
 
+# 绘制右窗口标识R
+def draw_right(self,text):
+    """Draw on the viewports"""
+    # BLF drawing routine
+    override = getOverride()
+    region = override['region']
+    if bpy.context.window.workspace.name == '布局.001' and region.x == 0:
+        font_id = font_info["font_id"]
+        blf.color(0, 0.0, 0.0, 0.0, 1.0)
+        blf.position(font_id, region.width - 100, region.height -100, 0)
+        blf.size(font_id, 50)
+        blf.draw(font_id, text)
+
+# 绘制左窗口标识L
+def draw_left(self,text):
+    """Draw on the viewports"""
+    # BLF drawing routine
+    override = getOverride2()
+    region = override['region']
+    if bpy.context.window.workspace.name == '布局.001' and region.x != 0:
+        font_id = font_info["font_id"]
+        blf.color(0, 0.0, 0.0, 0.0, 1.0)
+        blf.position(font_id, region.width - 100, region.height -100, 0)
+        blf.size(font_id, 50)
+        blf.draw(font_id, text)
+
+# 根据集合名称获取layer_collection
+def get_layer_collection(layer_collection, collection_name):
+    if layer_collection.name == collection_name:
+        return layer_collection
+    for child in layer_collection.children:
+        found = get_layer_collection(child, collection_name)
+        if found:
+            return found
+    return None
 
 # 将物体移动到Right集合
 def moveToRight(obj):
     collection = bpy.data.collections['Right']
+    collection2 = bpy.data.collections['Left']
     if obj.name not in collection.objects:
         collection.objects.link(obj)
+    if obj.name in collection2.objects:
+        collection2.objects.unlink(obj)
     # 物体在根集合下
     if obj.name in bpy.context.scene.collection.objects: 
         bpy.context.scene.collection.objects.unlink(obj) 
-    print('start')
-    for obj in collection.objects:
-                print('Right',obj.name)
-    print('end')
+    # print('start')
+    # for obj in collection.objects:
+    #             print('Right',obj.name)
+    # print('end')
 
 # 将物体移动到Left集合
 def moveToLeft(obj):
     collection = bpy.data.collections['Left']
+    collection2 = bpy.data.collections['Right']
     if obj.name not in collection.objects:
         collection.objects.link(obj)
+    if obj.name in collection2.objects:
+        collection2.objects.unlink(obj)
     # 物体在根集合下
     if obj.name in bpy.context.scene.collection.objects: 
         bpy.context.scene.collection.objects.unlink(obj) 
+    # print('start')
+    # for obj in collection.objects:
+    #             print('Left',obj.name)
+    # print('end')
 
 
 # 获取VIEW_3D区域的上下文
@@ -80,6 +125,23 @@ def getOverride():
         'screen': bpy.context.window.screen,
         'area': areas[0],
         'region': [region for region in areas[0].regions if region.type == 'WINDOW'][0],
+    }
+
+    return override
+
+# 第二个3d区域上下文
+def getOverride2():
+    area_type = 'VIEW_3D' # change this to use the correct Area Type context you want to process in
+    areas  = [area for area in bpy.context.window.screen.areas if area.type == area_type]
+
+    if len(areas) <= 0:
+        raise Exception(f"Make sure an Area of type {area_type} is open or visible in your screen!")
+
+    override = {
+        'window': bpy.context.window,
+        'screen': bpy.context.window.screen,
+        'area': areas[1],
+        'region': [region for region in areas[1].regions if region.type == 'WINDOW'][0],
     }
 
     return override
@@ -200,6 +262,8 @@ class selectArea(object):
     def draw_border_curve(self):
         active_obj = bpy.context.active_object
 
+        # print('曲线',active_obj.name)
+
 
 
         new_node_list = list()
@@ -213,6 +277,10 @@ class selectArea(object):
 
         obj = bpy.data.objects.new("BorderCurveObject", curve_data)
         bpy.context.collection.objects.link(obj)
+        if active_obj.name == '左耳':
+            moveToLeft(obj)
+        elif active_obj.name == '右耳':
+            moveToRight(obj)
         bpy.context.view_layer.objects.active = obj
 
         # 添加一个曲线样条
@@ -539,12 +607,16 @@ def is_changed_stepcut(context, event):
         return True
     else:
         return False
-    
+
 def convert_to_mesh(curve_name,depth):
     active_obj = bpy.data.objects[curve_name]
     duplicate_obj = active_obj.copy()
     duplicate_obj.data = active_obj.data.copy()
-    duplicate_obj.name = "mesh" + active_obj.name 
+    new_name =  "mesh" + active_obj.name
+    for object in bpy.data.objects:
+        if object.name == new_name:
+            bpy.data.objects.remove(object, do_unlink=True)
+    duplicate_obj.name = new_name
     duplicate_obj.animation_data_clear()
     # 将复制的物体加入到场景集合中
     bpy.context.collection.objects.link(duplicate_obj)
@@ -553,4 +625,113 @@ def convert_to_mesh(curve_name,depth):
     bpy.ops.object.select_all(action='DESELECT')
     duplicate_obj.select_set(state=True)
     bpy.context.object.data.bevel_depth = depth # 设置曲线倒角深度
-    bpy.ops.object.convert(target='MESH')  # 转化为网格
+    bpy.ops.object.convert(target='MESH')  # 转化为网格new
+
+def generate_cutplane():
+    active_obj = bpy.data.objects['BottomRingBorderR']
+    duplicate_obj = active_obj.copy()
+    duplicate_obj.data = active_obj.data.copy()
+    duplicate_obj.name = "CutPlane"
+    duplicate_obj.animation_data_clear()
+    # 将复制的物体加入到场景集合中
+    bpy.context.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
+
+    # 获取曲线对象
+    curve_object = bpy.data.objects['CutPlane']
+    # 获取目标物体
+    target_object = bpy.data.objects["右耳MouldReset"]
+    # 获取数据
+    curve_data = curve_object.data
+
+    # 将曲线的每个顶点吸附到目标物体的表面
+    for spline in curve_data.splines:
+        for point in spline.points:
+            # 获取顶点原位置
+            vertex_co = curve_object.matrix_world @ mathutils.Vector(point.co[0:3])
+
+            # 计算顶点在目标物体面上的 closest point
+            _, closest_co, normal, _ = target_object.closest_point_on_mesh(
+                vertex_co)
+
+            step = 0.2
+            # 将顶点位置设置为 closest point
+            point.co = (closest_co[0] + normal[0] * step, closest_co[1] + normal[1] * step,
+                        closest_co[2] + normal[2] * step, 1)
+    
+    bpy.context.view_layer.objects.active = bpy.data.objects['CutPlane']
+    bpy.context.object.data.bevel_depth = 0
+
+def recover_and_remind_border():
+    '''
+    恢复到进入切割模式并且保留边界线，用于挖孔，切割报错时恢复
+    '''
+    recover_flag = False
+    for obj in bpy.context.view_layer.objects:
+        if obj.name == "右耳OriginForCreateMouldR":
+            recover_flag = True
+            break
+    # 找到最初创建的  OriginForCreateMould 才能进行恢复
+    if recover_flag:
+        # 删除不需要的物体
+        need_to_delete_model_name_list = ["右耳", "HoleCutCylinderBottomR", "cutPlane", "右耳OriginForCutR",
+                                          "右耳OriginForFill", "FillPlane", "右耳ForGetFillPlane", "右耳huanqiecompare",
+                                          "dragcurve"]
+        for selected_obj in bpy.data.objects:
+            if (selected_obj.name in need_to_delete_model_name_list):
+                bpy.data.objects.remove(selected_obj, do_unlink=True)
+            bpy.ops.outliner.orphans_purge(
+                do_local_ids=True, do_linked_ids=True, do_recursive=False)
+        # 将最开始复制出来的OriginForCreateMould名称改为模型名称
+        obj.hide_set(False)
+        obj.name = "右耳"
+
+        bpy.context.view_layer.objects.active = obj
+        # 恢复完后重新复制一份
+        cur_obj = bpy.context.active_object
+        duplicate_obj = cur_obj.copy()
+        duplicate_obj.data = cur_obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = cur_obj.name + "OriginForCreateMouldR"
+        bpy.context.collection.objects.link(duplicate_obj)
+        duplicate_obj.hide_set(True)
+        # todo 先加到右耳集合，后续调整左右耳适配
+        moveToRight(duplicate_obj)
+
+        duplicate_obj = cur_obj.copy()
+        duplicate_obj.data = cur_obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = cur_obj.name + "OriginForCutR"
+        bpy.context.collection.objects.link(duplicate_obj)
+        duplicate_obj.hide_set(True)
+
+
+def utils_re_color(target_object_name, color):
+    flag = False
+    '''为模型重新上色'''
+    # 遍历场景中的所有对象，并根据名称选择目标物体
+    for obj in bpy.context.view_layer.objects:
+        if obj.name == target_object_name:
+            flag = True
+            break
+    if flag:
+        me = obj.data
+        # 创建bmesh对象
+        bm = bmesh.new()
+        # 将网格数据复制到bmesh对象
+        bm.from_mesh(me)
+        color_lay = bm.verts.layers.float_color["Color"]
+        for vert in bm.verts:
+            colvert = vert[color_lay]
+            colvert.x = color[0]
+            colvert.y = color[1]
+            colvert.z = color[2]
+        bm.to_mesh(me)
+        bm.free()
+
+def delete_useless_object(need_to_delete_model_name_list):
+    for selected_obj in bpy.data.objects:
+        if (selected_obj.name in need_to_delete_model_name_list):
+            bpy.data.objects.remove(selected_obj, do_unlink=True)
+        bpy.ops.outliner.orphans_purge(
+            do_local_ids=True, do_linked_ids=True, do_recursive=False)

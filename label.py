@@ -5,6 +5,7 @@ from bpy_extras import view3d_utils
 import mathutils
 import bmesh
 import re
+from .tool import *
 
 default_plane_size_x = 1  # 记录添加字体后平面的x轴默认尺寸,此时默认字体大小为4
 default_plane_size_y = 1  # 记录添加字体后平面的y轴默认尺寸,此时默认字体大小为4
@@ -194,6 +195,7 @@ def frontFromLabel():
     duplicate_obj.animation_data_clear()
     duplicate_obj.name = name
     bpy.context.scene.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
     duplicate_obj.select_set(True)
     bpy.context.view_layer.objects.active = duplicate_obj
 
@@ -223,6 +225,7 @@ def backToLabel():
         duplicate_obj.animation_data_clear()
         duplicate_obj.name = name
         bpy.context.scene.collection.objects.link(duplicate_obj)
+        moveToRight(duplicate_obj)
         duplicate_obj.select_set(True)
         bpy.context.view_layer.objects.active = duplicate_obj
         initial()      #初始化
@@ -281,6 +284,7 @@ def backToLabel():
         duplicate_obj.animation_data_clear()
         duplicate_obj.name = name
         bpy.context.scene.collection.objects.link(duplicate_obj)
+        moveToRight(duplicate_obj)
         duplicate_obj.select_set(True)
         bpy.context.view_layer.objects.active = duplicate_obj
         initial()      #初始化

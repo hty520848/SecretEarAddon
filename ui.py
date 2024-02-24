@@ -171,6 +171,7 @@ class HUIER_PT_MoJuTab(bpy.types.Panel):
         row = col.row(align=True)
         row.prop_tabs_enum(context.scene, 'tabEnum')
 
+
 # 创建模具
 class HUIER_PT_ChuangJianMuJu(bpy.types.Panel):
     bl_label = "创建模具"
@@ -178,7 +179,8 @@ class HUIER_PT_ChuangJianMuJu(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "scene"
-    # bl_options = {'HIDE_HEADER'}
+    bl_options = {'HIDE_HEADER'}
+
     # bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -189,7 +191,7 @@ class HUIER_PT_ChuangJianMuJu(bpy.types.Panel):
         layout = self.layout
         layout.separator()
         col = layout.column(align=True)
-        col.prop(context.scene, 'muJuNameEnum', text="模具类型",icon= 'NONE')
+        col.prop(context.scene, 'muJuNameEnum', text="模具类型", icon='NONE')
         layout.separator()
         col = layout.column(align=True)
         col.prop(context.scene, 'neiBianJiXian', text="内编辑线")
@@ -207,8 +209,8 @@ class HUIER_PT_MuJuHouDu(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "scene"
-    bl_options = {'DEFAULT_CLOSED'}
-    
+
+    # bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
@@ -234,7 +236,7 @@ class HUIER_PT_BianYuanHouDu(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.tabEnum == '参数'
+        return context.scene.tabEnum == '参数' and context.scene.jiHuoBianYuanHouDu == True
 
     def draw(self, context):
         layout = self.layout
@@ -252,9 +254,11 @@ class HUIER_PT_BianYuanHouDu(bpy.types.Panel):
         col.prop(context.scene, 'shiFouShiYongNeiBu', text="是否使用内部")
         layout.separator()
         col = layout.column(align=True)
+        col.active = context.scene.shiFouShiYongNeiBu
         col.prop(context.scene, 'zhongJianQuYuKuanDu', text="中间区域宽度")
         layout.separator()
         col = layout.column(align=True)
+        col.active = context.scene.shiFouShiYongNeiBu
         col.prop(context.scene, 'neiBuHouDu', text="内部厚度")
 
 
@@ -268,7 +272,9 @@ class HUIER_PT_MianBanAndDianZiSheBei(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.tabEnum == '参数'
+        return context.scene.tabEnum == '参数' and (context.scene.muJuTypeEnum == 'OP3' or \
+                                                    context.scene.muJuTypeEnum == 'OP4' or \
+                                                    context.scene.muJuTypeEnum == 'OP6')
 
     def draw(self, context):
         layout = self.layout
@@ -317,6 +323,7 @@ class HUIER_PT_ShangBuQieGeMianBan(bpy.types.Panel):
         col.prop(context.scene, 'shiFouShangBuQieGeMianBan', text="上部切割面板")
         layout.separator()
         col = layout.column(align=True)
+        col.active = context.scene.shiFouShangBuQieGeMianBan
         col.prop(context.scene, 'shangBuQieGeMianBanPianYi', text="上部切割面板偏移")
 
 
@@ -326,11 +333,12 @@ class HUIER_PT_KongQiangMianBan(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "scene"
-    bl_options = {'DEFAULT_CLOSED'}
+
+    # bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        return context.scene.tabEnum == '参数'
+        return context.scene.tabEnum == '参数' and context.scene.muJuTypeEnum == 'OP1'
 
     def draw(self, context):
         layout = self.layout
@@ -339,9 +347,11 @@ class HUIER_PT_KongQiangMianBan(bpy.types.Panel):
         col.prop(context.scene, 'shiFouKongQiangMianBan', text="空腔面板")
         layout.separator()
         col = layout.column(align=True)
+        col.active = context.scene.shiFouKongQiangMianBan
         col.prop(context.scene, 'KongQiangMianBanSheRuPianYi', text="空腔面板舍入")
         layout.separator()
         col = layout.column(align=True)
+        col.active = context.scene.shiFouKongQiangMianBan
         col.prop(context.scene, 'ShangBuQieGeBanPianYi', text="上部切割板偏移")
 
 
@@ -355,7 +365,7 @@ class HUIER_PT_YingErMoCanShu(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.tabEnum == '参数'
+        return context.scene.tabEnum == '参数' and context.scene.muJuTypeEnum == 'OP2'
 
     def draw(self, context):
         layout = self.layout
@@ -383,7 +393,9 @@ class HUIER_PT_TongQiKong1(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.tabEnum == '参数'
+        return context.scene.tabEnum == '参数' and (context.scene.muJuTypeEnum == 'OP3' or \
+                                                    context.scene.muJuTypeEnum == 'OP4' or \
+                                                    context.scene.muJuTypeEnum == 'OP6')
 
     def draw(self, context):
         layout = self.layout
@@ -795,11 +807,11 @@ class OT_ImportFile(bpy.types.Operator, bpy_extras.io_utils.ImportHelper):
     bl_options = {'REGISTER', 'UNDO'}
 
     # # 过滤限制可选择的文件扩展名
-    filter_glob: bpy.props.StringProperty(
-        default='*.stl',
-        options={'HIDDEN'},
-        maxlen=255,
-    )
+    # filter_glob: bpy.props.StringProperty(
+    #     default='*.stl',
+    #     options={'HIDDEN'},
+    #     maxlen=255,
+    # )
 
     """use_setting: bpy.props.BoolProperty(
         name="Example Boolean", 
@@ -999,6 +1011,7 @@ class TOPBAR_MT_edit(bpy.types.Menu):
 
 # ********** 3D视图下的菜单栏 **********
 
+
 def notify_test(context):
     override = []
     if(context.window.workspace.name == '布局.001'):
@@ -1036,8 +1049,18 @@ class Huier_OT_SwitchWorkspace(bpy.types.Operator):
         )
         bpy.msgbus.publish_rna(key=subscribe_to)
 
+        # MyHandleClass.add_handler(
+        #                             draw_right, (None,'R'))
+        # MyHandleClass.add_handler(
+        #                             draw_left, (None,'L'))
+
         if bpy.context.window.workspace.name == '布局':
             bpy.context.window.workspace = bpy.data.workspaces['布局.001']
+            # 获取"MyCollection"的LayerCollection对象
+            my_layer_collection = get_layer_collection(bpy.context.view_layer.layer_collection, 'Right')
+            # 将"MyCollection"设置为活动层集合
+            bpy.context.view_layer.active_layer_collection = my_layer_collection
+            
         if bpy.context.window.workspace.name == '布局.001':
             bpy.context.window.workspace = bpy.data.workspaces['布局']
         return {'FINISHED'}
@@ -1092,6 +1115,7 @@ class HUIER_PT_TestButton(bpy.types.Panel):
         # col.operator("obj.undo", text="撤销")
         # col.operator("obj.redo", text="重做")
         # col.operator("object.switchtestfunc", text="磨具功能测试")
+        col.operator("obj.localthickeningjingxiang", text="加厚镜像")
 
 
 # 注册类
@@ -1112,7 +1136,7 @@ _classes = [
     HUIER_PT_YingErMoCanShu,
     HUIER_PT_TongQiKong1,
     HUIER_PT_ChuanShenKong1,
-    HUIER_PT_ChuanShenKong2,
+    # HUIER_PT_ChuanShenKong2,
     HUIER_PT_TongQiKong,
     HUIER_PT_ErMoFuJian,
     HUIER_PT_Number,

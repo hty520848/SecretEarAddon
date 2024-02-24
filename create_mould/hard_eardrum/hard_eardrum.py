@@ -1,6 +1,115 @@
-from ..normal_projection import normal_projection_to_darw_bottom_ring
-from ..bottom_ring import soft_eardrum_bottom_cut
-from ..thickness import init_thickness
+from ..bottom_ring import bottom_cut
+from ..border_fill import hard_eardrum_extrude_border
+import bpy
+import bmesh
+
+
+def get_border_index():
+    border_index = []
+    obj = bpy.data.objects["ExampleR"]
+    border_mesh = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(border_mesh)
+    bm.verts.ensure_lookup_table()
+
+    for v in bm.verts:
+        if v.select:
+            border_index.append(v.index)
+
+    return border_index
+
+
+def get_start_vert(border_index, bm):
+    border_vert = [v for v in bm.verts if v.select]
+
+    border_vert.sort(key=lambda vert: len(vert.link_edges), reverse=True)
+
+    # index_and_curvature = get_curvature()
+    bpy.ops.mesh.select_all(action='DESELECT')
+    # start_vert = mesh.verts[index_and_curvature[0][0]]
+    start_vert = border_vert[0]
+    start_verts = []
+    start_verts.append(start_vert)
+    for edge in start_vert.link_edges:
+        # 获取边的顶点
+        v1 = edge.verts[0]
+        v2 = edge.verts[1]
+        # 确保获取的顶点不是当前顶点
+        link_vert = v1 if v1 != start_vert else v2
+        if link_vert.index in border_index:
+            break
+
+    start_verts.append(link_vert)
+    return start_verts
+
+def get_out_vert(inside_vert, processed_vert, border_index):
+    out_vert = []
+    for vert in inside_vert:
+        # 遍历这些顶点的相邻节点
+        for edge in vert.link_edges:
+            # 获取边的顶点
+            v1 = edge.verts[0]
+            v2 = edge.verts[1]
+            # 确保获取的顶点不是当前顶点
+            link_vert = v1 if v1 != vert else v2
+
+            if link_vert.index in border_index and link_vert not in processed_vert:
+                out_vert.append(link_vert)
+                processed_vert.append(link_vert)
+
+    return out_vert, processed_vert
+
+
+def sequentially_fill():
+    '''
+   从相邻四个点开始以此填充
+   '''
+
+    # bpy.ops.mesh.select_all(action='DESELECT')
+    border_index = get_border_index()
+
+    obj = bpy.data.objects["ExampleR"]
+    # 进入编辑模式
+    bpy.ops.object.mode_set(mode='EDIT')
+    # 获取编辑模式的网格数据
+    mesh = bmesh.from_edit_mesh(obj.data)
+
+
+
+    # 获取初始化四个点并补面
+    inside_vert = get_start_vert(border_index, mesh)
+    processed_vert = []
+    processed_vert.extend(inside_vert)
+    out_vert, processed_vert = get_out_vert(inside_vert, processed_vert, border_index)
+    for v in out_vert:
+        v.select_set(True)
+    for v in inside_vert:
+        v.select_set(True)
+    bpy.ops.mesh.edge_face_add()
+
+    # for i in range(0,29):
+    while len(out_vert) > 0:
+        # 取消选择
+        bpy.ops.mesh.select_all(action='DESELECT')
+        # 将外边缘顶点设置为内边缘顶点
+        inside_vert = out_vert
+        out_vert, processed_vert = get_out_vert(inside_vert, processed_vert, border_index)
+        for v in out_vert:
+            v.select_set(True)
+        for v in inside_vert:
+            v.select_set(True)
+        # 把边也选上才能填充
+        for vert in inside_vert:
+            for edge in vert.link_edges:
+                # 检查边的两个顶点是否都在选中的顶点中
+                if edge.verts[0].select and edge.verts[1].select:
+                    edge.select_set(True)
+        bpy.ops.mesh.edge_face_add()
+
+
+
+    # 更新网格数据
+    bmesh.update_edit_mesh(obj.data)
 
 
 def apply_hard_eardrum_template():
@@ -220,7 +329,7 @@ def apply_hard_eardrum_template():
             (-0.6839302182197571, -0.0663234293460846, -0.7265264987945557))
     ]
 
-    normal_projection_to_darw_bottom_ring(origin_highest_vert, border_vert_co_and_normal)
-    soft_eardrum_bottom_cut()
-
-    # todo 封底
+    high_percent = 0.25
+    bottom_cut(high_percent)
+    hard_eardrum_extrude_border()
+    # 封底

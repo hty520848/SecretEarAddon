@@ -62,7 +62,7 @@ def get_hole_border(template_highest_point, template_hole_border):
     active_obj = bpy.context.active_object
     if active_obj.type == 'MESH':
         # 获取网格数据
-        me = active_obj.data
+        me = bpy.data.objects["右耳OriginForFitPlace"].data
         # 创建bmesh对象
         bm = bmesh.new()
         # 将网格数据复制到bmesh对象
@@ -182,6 +182,7 @@ def draw_hole_border_curve(order_border_co, name, depth):
         bpy.context.active_object.data.materials.append(bpy.data.materials['blue'])
         bpy.context.view_layer.update()
         bpy.context.view_layer.objects.active = active_obj
+
 
 # 将HoleCutCylinderBottom转化为圆柱用于挖孔
 def translate_circle_to_cylinder():

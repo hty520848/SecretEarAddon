@@ -42,6 +42,7 @@ def backToDamo():
     duplicate_obj.animation_data_clear()
     duplicate_obj.name = name
     bpy.context.scene.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
     bpy.context.view_layer.objects.active = duplicate_obj
 
 
@@ -1094,18 +1095,6 @@ class MyTool8(WorkSpaceTool):
     def draw_settings(context, layout, tool):
         pass
 
-
-class InitialColor(bpy.types.Operator):
-    bl_idname = "obj.dosomething"
-    bl_label = "初始化模型颜色"
-
-    def execute(self, context):
-        override = getOverride()
-        with bpy.context.temp_override(**override):
-            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-        return {'FINISHED'}
-
-
 # 注册类
 _classes = [
 
@@ -1114,7 +1103,6 @@ _classes = [
     Smooth,
     Damo_Reset,
 
-    InitialColor
 ]
 
 

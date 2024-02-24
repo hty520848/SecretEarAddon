@@ -280,6 +280,22 @@ def boolean_apply():
     # 应用修改器
     bpy.ops.object.modifier_apply(modifier="BottomCut", single_user=True)
 
+    # 重新生成网格物体
+    bpy.data.objects.remove(bpy.data.objects['BottomRingBorderRForCutR'], do_unlink=True)
+    bpy.context.view_layer.objects.active = bpy.data.objects['BottomRingBorderR']
+    cur_obj = bpy.context.active_object
+    duplicate_obj = cur_obj.copy()
+    duplicate_obj.data = cur_obj.data.copy()
+    duplicate_obj.animation_data_clear()
+    duplicate_obj.name = cur_obj.name + "ForCutR"
+    bpy.context.collection.objects.link(duplicate_obj)
+    # todo 先加到右耳集合，后续调整左右耳适配
+    moveToRight(duplicate_obj)
+    bpy.context.view_layer.objects.active = duplicate_obj
+    bpy.ops.object.select_all(action='DESELECT')
+    duplicate_obj.select_set(state=True)
+    bpy.ops.object.convert(target='MESH')
+
 
 def cut_bottom_part():
     '''

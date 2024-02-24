@@ -9,6 +9,8 @@ from .create_mould.soft_eardrum.thickness_and_fill import reset_and_refill
 from .create_mould.soft_eardrum.soft_eardrum import apply_soft_eardrum_template
 from .create_mould.frame_style_eardrum.frame_style_eardrum import apply_frame_style_eardrum_template
 from .create_mould.create_mould import recover
+from .create_mould.border_fill import recover_and_refill
+from .sound_canal import convert_canal
 
 import os
 
@@ -193,9 +195,9 @@ def My_Properties():
         name="rightRuanermohoudu", default=True)
 
     bpy.types.Scene.muJuNameEnum = bpy.props.StringProperty(name="",
-                                                         description="",
-                                                         default="软耳模",
-                                                         maxlen=1024)
+                                                            description="",
+                                                            default="软耳模",
+                                                            maxlen=1024)
 
     bpy.types.Scene.muJuTypeEnum = bpy.props.EnumProperty(
         name="",
@@ -269,7 +271,7 @@ def My_Properties():
     bpy.types.Scene.shangBuQieGeMianBanPianYi = bpy.props.FloatProperty(
         name="shangBuQieGeMianBanPianYi", min=-1.0, max=1.0)
     bpy.types.Scene.shiFouKongQiangMianBan = bpy.props.BoolProperty(
-        name="shiFouKongQiangMianBan")
+        name="shiFouKongQiangMianBan",default=True)
     bpy.types.Scene.KongQiangMianBanSheRuPianYi = bpy.props.FloatProperty(
         name="KongQiangMianBanSheRuPianYi", min=-1.0, max=1.0)
     bpy.types.Scene.ShangBuQieGeBanPianYi = bpy.props.FloatProperty(
@@ -293,9 +295,10 @@ def My_Properties():
 
     # 传声孔      管道平滑      传声管道直径         激活   管道形状  偏移
     bpy.types.Scene.gaunDaoPinHua = bpy.props.BoolProperty(
-        name="gaunDaoPinHua")
+        name="gaunDaoPinHua",default=True)
     bpy.types.Scene.chuanShenGuanDaoZhiJing = bpy.props.FloatProperty(
-        name="chuanShenGuanDaoZhiJing", min=-1.0, max=1.0)
+        name="chuanShenGuanDaoZhiJing", min=0.2, max=10, step=10, 
+        default=2, update=soundcanalupdate)
     bpy.types.Scene.active = bpy.props.BoolProperty(name="active")
     bpy.types.Scene.chuanShenKongOffset = bpy.props.FloatProperty(
         name="chuanShenKongOffset", min=-1.0, max=1.0)
@@ -319,7 +322,7 @@ def My_Properties():
 
     # 通气孔     通气管道直径
     bpy.types.Scene.tongQiGuanDaoZhiJing = bpy.props.FloatProperty(
-        name="tongQiGuanDaoZhiJing", min=-1.0, max=1.0)
+        name="tongQiGuanDaoZhiJing", min=0.2, max=10, step=10)
 
     # 耳膜附件      耳膜附件类型    偏移
     bpy.types.Scene.erMoFuJianOffset = bpy.props.FloatProperty(
@@ -541,6 +544,7 @@ def LocalThickeningBorderWidthUpdate(self, context):
     else:
         pass
 
+
 def ChangeMouldName(self, context):
     enum_name = bpy.context.scene.muJuNameEnum
     # if enum_name == "OP1":
@@ -556,6 +560,7 @@ def ChangeMouldName(self, context):
     # if enum_name == "OP6":
     #     bpy.context.scene.muJuTypeEnum = 'OP6'
 
+
 # ('OP1', '软耳模', '', 'URL', 1),
 # ('OP2', '硬耳膜', '', 'URL', 2),
 # ('OP3', '一体外壳', '', 'URL', 3),
@@ -569,17 +574,17 @@ def ChangeMouldType(self, context):
 
     # 同步改变模型名称属性
     if enum == "OP1":
-            bpy.context.scene.muJuNameEnum = '软耳模'
+        bpy.context.scene.muJuNameEnum = '软耳模'
     if enum == "OP2":
-            bpy.context.scene.muJuNameEnum = '硬耳膜'
+        bpy.context.scene.muJuNameEnum = '硬耳膜'
     if enum == "OP3":
-            bpy.context.scene.muJuNameEnum = '一体外壳'
+        bpy.context.scene.muJuNameEnum = '一体外壳'
     if enum == "OP4":
-            bpy.context.scene.muJuNameEnum = '框架式耳膜'
+        bpy.context.scene.muJuNameEnum = '框架式耳膜'
     if enum == "OP5":
-            bpy.context.scene.muJuNameEnum = '常规外壳'
+        bpy.context.scene.muJuNameEnum = '常规外壳'
     if enum == "OP6":
-            bpy.context.scene.muJuNameEnum = '实心面板'
+        bpy.context.scene.muJuNameEnum = '实心面板'
 
     # 重置回最开始
     override = getOverride()
@@ -587,8 +592,9 @@ def ChangeMouldType(self, context):
         recover_flag = recover()
         if enum == "OP1":
             print("软耳模")
-            apply_soft_eardrum_template()
+            success = apply_soft_eardrum_template()
             convert_to_mesh('BottomRingBorderR',0.3)
+            bpy.context.scene.neiBianJiXian = False
         if enum == "OP2":
             print("硬耳膜")
         if enum == "OP3":
@@ -596,8 +602,8 @@ def ChangeMouldType(self, context):
         if enum == "OP4":
             print("框架式耳膜")
             apply_frame_style_eardrum_template()
-            convert_to_mesh('BottomRingBorderR',0.4)
             convert_to_mesh('HoleBorderCurveR', 0.18)
+            bpy.context.scene.neiBianJiXian = True
         if enum == "OP5":
             print("常规外壳")
         if enum == "OP6":
@@ -607,11 +613,17 @@ def ChangeMouldType(self, context):
 def CreateMouldThicknessUpdate(self, context):
     bl_description = "更新创建模具中的总厚度"
     thickness = context.scene.zongHouDu
+    enum = bpy.context.scene.muJuTypeEnum
 
-    # todo 根据不同的模具执行不同的逻辑
-    override = getOverride()
-    with bpy.context.temp_override(**override):
-        reset_and_refill()
+    if enum == "OP1":
+        # todo 根据不同的模具执行不同的逻辑
+        override = getOverride()
+        with bpy.context.temp_override(**override):
+            reset_and_refill()
+    elif enum == "OP4":
+        override = getOverride()
+        with bpy.context.temp_override(**override):
+            recover_and_refill()
 
 
 def CreateMouldOuterSmooth(self, context):
@@ -707,21 +719,21 @@ def LabelEnum(self, context):
             text_obj.data.materials.append(red_material)
             bpy.context.view_layer.objects.active = plane_obj
 
-def SupportEnum(self, context):
 
+def SupportEnum(self, context):
     bl_description = "切换支撑的类型"
 
     enum = bpy.context.scene.zhiChengTypeEnum
-    #添加硬耳膜支撑
+    # 添加硬耳膜支撑
     if enum == "OP1":
         override = getOverride()
         with bpy.context.temp_override(**override):
             supportSaveInfo()
-            supportReset()    
+            supportReset()
             # supportInitial()
             print("切换到硬耳膜支撑")
 
-    #添加软耳膜支撑 
+    # 添加软耳膜支撑
     if enum == "OP2":
         override = getOverride()
         with bpy.context.temp_override(**override):
@@ -732,7 +744,6 @@ def SupportEnum(self, context):
 
 
 def SupportOffsetUpdate(self, context):
-
     bl_description = "更新支撑沿法线的偏移值"
 
     offset = bpy.context.scene.zhiChengOffset
@@ -740,7 +751,15 @@ def SupportOffsetUpdate(self, context):
     with bpy.context.temp_override(**override):
         print("offset更新")
 
+def soundcanalupdate(self, context):
+    bl_description = "更新传声孔的直径大小"
+
+    diameter = bpy.context.scene.chuanShenGuanDaoZhiJing
+    for obj in bpy.data.objects:
+        if obj.name == 'canal':
+            obj.data.bevel_depth = diameter / 2
+    #更新网格数据
+    convert_canal()
+    
 def register():
     My_Properties()
-
-

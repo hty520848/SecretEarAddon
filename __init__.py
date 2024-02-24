@@ -50,7 +50,7 @@ if "bpy" in locals():
          "tool",
          "label",
          "handle",
-         "support"
+         "support",
          "sound_canal"
     ]
     #reload()函数重新载入模块，调试时加载的模块发生改变时，

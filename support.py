@@ -6,6 +6,7 @@ from bpy_extras import view3d_utils
 import mathutils
 import bmesh
 import re
+from .tool import *
 
 prev_on_object = False  # 判断鼠标在模型上与否的状态是否改变
 
@@ -195,6 +196,7 @@ def frontFromSupport():
     duplicate_obj.animation_data_clear()
     duplicate_obj.name = name
     bpy.context.scene.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
     duplicate_obj.select_set(True)
     bpy.context.view_layer.objects.active = duplicate_obj
 

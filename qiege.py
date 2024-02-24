@@ -210,7 +210,6 @@ def smooth():
         # 按z坐标倒序排列
         vert_plane.sort(key=lambda vert: vert.co[2], reverse=True)
         highest_vert = vert_plane[0]
-        print(highest_vert.co)
 
         # 从最高点开始 广搜
         # 需要保存的点
@@ -499,11 +498,12 @@ def new_sphere(name, loc):
     # 创建一个新的网格
     mesh = bpy.data.meshes.new("MyMesh")
     obj = bpy.data.objects.new(name, mesh)
-    
+
     # 在场景中添加新的对象
     scene = bpy.context.scene
     scene.collection.objects.link(obj)
     moveToRight(obj)
+
     # 切换到编辑模式
     # bpy.context.view_layer.objects.active = obj
     bpy.ops.object.select_all(action='DESELECT')
@@ -970,6 +970,21 @@ class Circle_Cut(bpy.types.Operator):
                         op_cls.__initial_mouse_y = event.mouse_region_y
                     # 取消
                     elif event.value == 'RELEASE':
+                        normal = active_obj.matrix_world.to_3x3(
+                        ) @ active_obj.data.polygons[0].normal
+                        print('圆环法线',normal)
+                        if normal.z > 0:
+                            print('反转法线')
+                            active_obj.hide_set(False)
+                            bpy.context.view_layer.objects.active = active_obj
+                            bpy.ops.object.mode_set(mode='EDIT')
+                            bpy.ops.mesh.select_all(action='SELECT')
+                            # 翻转圆环法线
+                            bpy.ops.mesh.flip_normals(only_clnors=False)
+                            # 隐藏圆环
+                            active_obj.hide_set(True)
+                            # 返回对象模式
+                            bpy.ops.object.mode_set(mode='OBJECT')
                         smooth()
                         op_cls.__is_moving = False
                         op_cls.__left_mouse_down = False
@@ -977,7 +992,8 @@ class Circle_Cut(bpy.types.Operator):
                         op_cls.__initial_rotation_y = None
                         op_cls.__initial_mouse_x = None
                         op_cls.__initial_mouse_y = None
-
+                        
+                        
                     return {'RUNNING_MODAL'}
 
                 elif event.type == 'RIGHTMOUSE':
@@ -1000,9 +1016,9 @@ class Circle_Cut(bpy.types.Operator):
                     if op_cls.__left_mouse_down:
                         # x轴旋转角度
                         rotate_angle_x = (
-                                                 event.mouse_region_x - op_cls.__initial_mouse_x) * 0.01
+                                                 event.mouse_region_x - op_cls.__initial_mouse_x) * 0.005
                         rotate_angle_y = (
-                                                 event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01
+                                                 event.mouse_region_y - op_cls.__initial_mouse_y) * 0.005
                         active_obj.rotation_euler[0] = op_cls.__initial_rotation_x + \
                                                        rotate_angle_x
                         active_obj.rotation_euler[1] = op_cls.__initial_rotation_y + \
@@ -1017,7 +1033,7 @@ class Circle_Cut(bpy.types.Operator):
                         obj_circle = bpy.data.objects['Circle']
                         op_cls.__now_mouse_y = event.mouse_region_y
                         op_cls.__now_mouse_x = event.mouse_region_x
-                        dis = 0.5
+                        dis = 0.25
                         # 平面法线方向
                         normal = obj_circle.matrix_world.to_3x3(
                         ) @ obj_circle.data.polygons[0].normal
@@ -1043,7 +1059,21 @@ class Circle_Cut(bpy.types.Operator):
                 obj_torus = bpy.data.objects['Torus']
                 active_obj = bpy.data.objects['Circle']
                 if event.value == 'RELEASE' and op_cls.__is_moving:
-                    # getRadius()
+                    normal = active_obj.matrix_world.to_3x3(
+                        ) @ active_obj.data.polygons[0].normal
+                    print('圆环法线',normal)
+                    if normal.z > 0:
+                        print('反转法线')
+                        active_obj.hide_set(False)
+                        bpy.context.view_layer.objects.active = active_obj
+                        bpy.ops.object.mode_set(mode='EDIT')
+                        bpy.ops.mesh.select_all(action='SELECT')
+                        # 翻转圆环法线
+                        bpy.ops.mesh.flip_normals(only_clnors=False)
+                        # 隐藏圆环
+                        active_obj.hide_set(True)
+                        # 返回对象模式
+                        bpy.ops.object.mode_set(mode='OBJECT')
                     smooth()
                     op_cls.__is_moving = False
                     op_cls.__left_mouse_down = False
@@ -1057,9 +1087,9 @@ class Circle_Cut(bpy.types.Operator):
                     if op_cls.__left_mouse_down:
                         # x轴旋转角度
                         rotate_angle_x = (
-                                                 event.mouse_region_x - op_cls.__initial_mouse_x) * 0.01
+                                                 event.mouse_region_x - op_cls.__initial_mouse_x) * 0.005
                         rotate_angle_y = (
-                                                 event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01
+                                                 event.mouse_region_y - op_cls.__initial_mouse_y) * 0.005
                         active_obj.rotation_euler[0] = op_cls.__initial_rotation_x + \
                                                        rotate_angle_x
                         active_obj.rotation_euler[1] = op_cls.__initial_rotation_y + \
@@ -1075,7 +1105,7 @@ class Circle_Cut(bpy.types.Operator):
                         obj_circle = bpy.data.objects['Circle']
                         op_cls.__now_mouse_y = event.mouse_region_y
                         op_cls.__now_mouse_x = event.mouse_region_x
-                        dis = 0.5
+                        dis = 0.25
                         # 平面法线方向
                         normal = obj_circle.matrix_world.to_3x3(
                         ) @ obj_circle.data.polygons[0].normal
@@ -1331,6 +1361,7 @@ def frontToQieGe():
     duplicate_obj1.animation_data_clear()
     duplicate_obj1.name = name + "QieGeCopy"
     bpy.context.collection.objects.link(duplicate_obj1)
+    moveToRight(duplicate_obj1)
     duplicate_obj1.hide_set(True)
     duplicate_obj1.hide_set(False)
     duplicate_obj1.hide_set(True)
@@ -1386,12 +1417,14 @@ def backToQieGe():
             copy_obj.name = name + "QieGeCopy"
             bpy.context.collection.objects.link(copy_obj)
             copy_obj.hide_set(True)
+    moveToRight(copy_obj)
     bpy.data.objects.remove(obj, do_unlink=True)
     duplicate_obj = copy_obj.copy()
     duplicate_obj.data = copy_obj.data.copy()
     duplicate_obj.animation_data_clear()
     duplicate_obj.name = name
     bpy.context.scene.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
     duplicate_obj.select_set(True)
     bpy.context.view_layer.objects.active = duplicate_obj
 
@@ -1419,6 +1452,7 @@ def backFromQieGe():
     duplicate_obj1.animation_data_clear()
     duplicate_obj1.name = name + "QieGeLast"
     bpy.context.collection.objects.link(duplicate_obj1)
+    moveToRight(duplicate_obj1)
     duplicate_obj1.hide_set(True)
 
 

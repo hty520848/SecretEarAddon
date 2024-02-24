@@ -205,6 +205,7 @@ def frontToLocalThickening():
     duplicate_obj1.animation_data_clear()
     duplicate_obj1.name = name + "LocalThickCompare"
     bpy.context.collection.objects.link(duplicate_obj1)
+    moveToRight(duplicate_obj1)
     duplicate_obj1.hide_set(True)
     duplicate_obj1.hide_set(False)
     duplicate_obj2 = active_obj.copy()
@@ -212,6 +213,7 @@ def frontToLocalThickening():
     duplicate_obj2.animation_data_clear()
     duplicate_obj2.name = name + "LocalThickCopy"
     bpy.context.collection.objects.link(duplicate_obj2)
+    moveToRight(duplicate_obj2)
     duplicate_obj2.hide_set(True)  # 将LocalThickCopy隐藏
     active_obj = bpy.data.objects[name]  # 将右耳设置为当前激活物体
     bpy.context.view_layer.objects.active = active_obj
@@ -239,36 +241,252 @@ def frontToLocalThickening():
         draw_border_curve()
     # 从当前的局部加厚切换到前面的打磨时
 
+
+# 计算原点与给定坐标点之间的角度（弧度）
+def calculate_angle(x, y):
+    # 弧度
+    angle_radians = math.atan2(y, x)
+
+    # 将弧度转换为角度
+    angle_degrees = math.degrees(angle_radians)
+
+    # 将角度限制在 [0, 360) 范围内
+    angle_degrees = (angle_degrees + 360) % 360
+
+    return angle_degrees
+
+# 获取模型最高点索引
+def get_highest_vert(name):
+    obj = bpy.data.objects[name]
+    # 获取网格数据
+    me = obj.data
+    # 创建bmesh对象
+    bm = bmesh.new()
+    # 将网格数据复制到bmesh对象
+    bm.from_mesh(me)
+    bm.verts.ensure_lookup_table()
+
+    vert_order_by_z = []
+    for vert in bm.verts:
+        vert_order_by_z.append(vert)
+    # 按z坐标倒序排列
+    vert_order_by_z.sort(key=lambda vert: vert.co[2], reverse=True)
+    return vert_order_by_z[0].index
+
+# 获取投影参数
+def get_change_parameters():
+    obj_right = bpy.data.objects['右耳']
+    obj_left = bpy.data.objects['左耳']
+
+    # 获取模型最高点
+    origin_highest_vert_index = get_highest_vert("右耳")
+    target_highest_vert_index = get_highest_vert("左耳")
+
+    origin_highest_vert = obj_right.data.vertices[origin_highest_vert_index].co @ obj_right.matrix_world
+    target_highest_vert = obj_left.data.vertices[target_highest_vert_index].co @ obj_left.matrix_world
+    print('origin_highest_vert',origin_highest_vert)
+    print('target_highest_vert',target_highest_vert)
+    # 计算旋转角度
+    angle_origin = calculate_angle(origin_highest_vert[0], origin_highest_vert[1])
+    angle_target = calculate_angle(target_highest_vert[0], target_highest_vert[1])
+    rotate_angle = angle_target - angle_origin
+
+    return rotate_angle, target_highest_vert[2] - origin_highest_vert[2]
+
+def normal_ray_cast(index, rotate_angle, height_difference):
+
+    closest_vert_index = None
+    
+    origin_obj = bpy.data.objects["右耳"]
+    me = origin_obj.data
+    ori_bm = bmesh.new()
+    ori_bm.from_mesh(me)
+#    ori_bm.transform(origin_obj.matrix_world)
+    ori_bm.verts.ensure_lookup_table()
+    
+    # 根据index获取相应顶点
+    vert = ori_bm.verts[index]
+    # 获取顶点的法向
+    origin_normal = vert.normal
+    origin_co = vert.co
+
+    # 计算得到实际的起点坐标
+    xx_co = origin_co[0] * math.cos(math.radians(rotate_angle)) - origin_co[1] * math.sin(math.radians(rotate_angle))
+    yy_co = origin_co[0] * math.sin(math.radians(rotate_angle)) + origin_co[1] * math.cos(math.radians(rotate_angle))
+    zz_co = origin_co[2] + height_difference
+    actual_co = (xx_co, yy_co, zz_co)
+    actual_co = Vector(actual_co)
+    
+    xx_normal = origin_normal[0] * math.cos(math.radians(rotate_angle)) - origin_normal[1] * math.sin(
+        math.radians(rotate_angle))
+    yy_normal = origin_normal[0] * math.sin(math.radians(rotate_angle)) + origin_normal[1] * math.cos(
+        math.radians(rotate_angle))
+    actual_normal = (xx_normal, yy_normal, origin_normal[2])
+    
+    target_obj = bpy.data.objects["左耳"]
+    target_mesh = target_obj.data
+
+    # 创建bmesh对象
+    target_bm = bmesh.new()
+    # 将网格数据复制到bmesh对象
+    target_bm.from_mesh(target_mesh)
+    target_bm.transform(target_obj.matrix_world)
+    target_bm.verts.ensure_lookup_table()
+    target_bm.faces.ensure_lookup_table()
+    target_bm.to_mesh(target_obj.data)
+    target_obj.data.update()
+
+    hit, loc, normal, index = target_obj.ray_cast(actual_co, actual_normal)
+    # 没有命中，那就反向向内尝试一下
+    if not hit:
+        reverse_normal = (-xx_normal, -yy_normal, -origin_normal[2])
+        hit, loc, normal, index = target_obj.ray_cast(actual_co, reverse_normal)
+
+    if hit:
+        target_bm.transform(target_obj.matrix_world.inverted())
+        target_bm.to_mesh(target_obj.data)
+        target_obj.data.update()
+        # 返回命中面索引
+        return index
+
 class Local_Thickening_Mirror(bpy.types.Operator):
-    bl_idname = "obj.jingxiang"
-    bl_label = "加厚镜像"
-    bl_options = {'REGISTER', 'UNDO'}
+    bl_idname = "obj.localthickeningjingxiang"
+    bl_label = "将右耳加厚区域镜像到左耳"
+
+    def invoke(self, context, event):
+        bpy.context.scene.var = 30
+        # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        self.execute(context)
+        return {'FINISHED'}
 
     def execute(self, context):
+        global switch_selected_vertex_index
 
-        # # 若存在LocalThickCopy,则将其删除并重新生成
-        # all_objs = bpy.data.objects
-        # for selected_obj in all_objs:
-        #     if (selected_obj.name == "右耳LocalThickCopy" or selected_obj.name == "右耳LocalThickCompare"):
-        #         bpy.data.objects.remove(selected_obj, do_unlink=True)
-        # # 根据当前激活物体复制得到用于重置的LocalThickCopy和初始时的参照物LocalThickCompare
-        # active_obj = bpy.context.active_object
-        # name = active_obj.name
-        # duplicate_obj1 = active_obj.copy()
-        # duplicate_obj1.data = active_obj.data.copy()
-        # duplicate_obj1.animation_data_clear()
-        # duplicate_obj1.name = name + "LocalThickCompare"
-        # bpy.context.collection.objects.link(duplicate_obj1)
-        # duplicate_obj1.hide_set(True)
-        # duplicate_obj1.hide_set(False)
-        # duplicate_obj2 = active_obj.copy()
-        # duplicate_obj2.data = active_obj.data.copy()
-        # duplicate_obj2.animation_data_clear()
-        # duplicate_obj2.name = name + "LocalThickCopy"
-        # bpy.context.collection.objects.link(duplicate_obj2)
-        # duplicate_obj2.hide_set(True)  # 将LocalThickCopy隐藏
-        # active_obj = bpy.data.objects[name]  # 将右耳设置为当前激活物体
-        # bpy.context.view_layer.objects.active = active_obj
+        cast_vertex_index = []
+        obj_right = bpy.data.objects['右耳']
+        obj_left = bpy.data.objects['左耳']
+
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.context.view_layer.objects.active = obj_left
+        obj_left.select_set(True)
+
+
+        # 若存在LocalThickCopy,则将其删除并重新生成
+        all_objs = bpy.data.objects
+        for selected_obj in all_objs:
+            if (selected_obj.name == "左耳LocalThickCopy" or selected_obj.name == "左耳LocalThickCompare"):
+                bpy.data.objects.remove(selected_obj, do_unlink=True)
+        
+        # 根据当前激活物体复制得到用于重置的LocalThickCopy和初始时的参照物LocalThickCompare
+        active_obj = bpy.context.active_object
+        name = active_obj.name
+        duplicate_obj1 = active_obj.copy()
+        duplicate_obj1.data = active_obj.data.copy()
+        duplicate_obj1.animation_data_clear()
+        duplicate_obj1.name = name + "LocalThickCompare"
+        bpy.context.collection.objects.link(duplicate_obj1)
+        moveToLeft(duplicate_obj1)
+        duplicate_obj1.hide_set(True)
+        duplicate_obj1.hide_set(False)
+        duplicate_obj2 = active_obj.copy()
+        duplicate_obj2.data = active_obj.data.copy()
+        duplicate_obj2.animation_data_clear()
+        duplicate_obj2.name = name + "LocalThickCopy"
+        bpy.context.collection.objects.link(duplicate_obj2)
+        moveToLeft(duplicate_obj2)
+        duplicate_obj2.hide_set(True)  # 将LocalThickCopy隐藏
+        active_obj = bpy.data.objects[name]  # 将右耳设置为当前激活物体
+        bpy.context.view_layer.objects.active = active_obj
+
+        # y轴镜像
+        bpy.ops.transform.mirror(orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL', constraint_axis=(False, True, False))
+
+        if obj_right.type == 'MESH':
+            left_me = obj_left.data
+            left_bm = bmesh.new()
+            left_bm.from_mesh(left_me)         
+                                
+        print('before num',len(switch_selected_vertex_index))
+
+        rotate_angle, height_difference = get_change_parameters()
+        print('rotate_angle',rotate_angle)
+        print('height_difference',height_difference)
+
+        # 计算投影点
+        for i in switch_selected_vertex_index:
+            face_index = normal_ray_cast(i,rotate_angle, height_difference)
+            if face_index is not None:
+                left_bm.faces.ensure_lookup_table()
+                face = left_bm.faces[face_index]
+                face_verts = face.verts
+                for vert in face_verts:
+                    if vert.index not in cast_vertex_index:
+                        cast_vertex_index.append(vert.index)
+
+        print('after num',len(cast_vertex_index))
+
+        # 填充中心未被选中的点
+        for index in cast_vertex_index:
+            left_bm.verts.ensure_lookup_table()
+            vert = left_bm.verts[index]
+            # 遍历这些顶点的相邻节点
+            for edge in vert.link_edges:
+                # 获取边的顶点
+                v1 = edge.verts[0]
+                v2 = edge.verts[1]
+                # 确保获取的顶点不是当前顶点
+                link_vert = v1 if v1 != vert else v2
+                if link_vert.index not in cast_vertex_index:
+                    edge_num = len(link_vert.link_edges)
+                    num = 0
+                    for edge in link_vert.link_edges:
+                        v1 = edge.verts[0]
+                        v2 = edge.verts[1]
+                        link = v1 if v1 != link_vert else v2
+                        if link.index in cast_vertex_index:
+                            num += 1
+                    if num >= edge_num - 2:
+                        cast_vertex_index.append(link_vert.index)
+        
+        # 去除边界点
+        for index in cast_vertex_index:
+            left_bm.verts.ensure_lookup_table()
+            vert = left_bm.verts[index]
+            vert.select_set(True)
+
+        border_vert_index = []
+        for index in cast_vertex_index:
+            left_bm.verts.ensure_lookup_table()
+            vert = left_bm.verts[index]
+        #    print('sel',vert.select)
+            # 遍历这些顶点的相邻节点
+            for edge in vert.link_edges:
+                # 获取边的顶点
+                v1 = edge.verts[0]
+                v2 = edge.verts[1]
+                # 确保获取的顶点不是当前顶点
+                link_vert = v1 if v1 != vert else v2
+                if link_vert.select == False and index not in border_vert_index:
+                    border_vert_index.append(index)
+
+        print('boder num',len(border_vert_index))
+        for index in border_vert_index:
+            if index in cast_vertex_index:
+                cast_vertex_index.remove(index)
+
+        print('after num3',len(cast_vertex_index))
+
+        # 给投影点上色
+        left_bm.verts.ensure_lookup_table()
+        color_lay = left_bm.verts.layers.float_color["Color"]
+        for vert_index in cast_vertex_index:
+            colvert = left_bm.verts[vert_index][color_lay]
+            colvert.x = 0.133
+            colvert.y = 1.000
+            colvert.z = 1.000
+        left_bm.to_mesh(left_me)
+        left_bm.free()
 
         initialTransparency()
         offset = bpy.context.scene.localThicking_offset  # 获取局部加厚面板中的偏移量参数
@@ -282,6 +500,20 @@ class Local_Thickening_Mirror(bpy.types.Operator):
         draw_border_curve()
         # 绘制局部加厚区域圆环
         draw_border_curve()
+
+        # 镜像还原
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.context.view_layer.objects.active = obj_left
+        obj_left.select_set(True)
+        bpy.ops.transform.mirror(orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL', constraint_axis=(False, True, False))
+
+        collection1 = bpy.data.collections['Right']
+        collection2 = bpy.data.collections['Left']
+        for obj in collection1.objects:
+                    print('Right',obj.name)
+        for obj in collection2.objects:
+                    print('Left',obj.name)
+        
 
         return {'FINISHED'}
 
@@ -317,6 +549,7 @@ def frontFromLocalThickening():
     duplicate_obj.animation_data_clear()
     duplicate_obj.name = name
     bpy.context.scene.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
     bpy.context.view_layer.objects.active = duplicate_obj
 
     # 删除场景中局部加厚相关的用于重置的LocalThickCopy和初始时的参照物LocalThickCompare
@@ -362,6 +595,7 @@ def backToLocalThickening():
         duplicate_obj.animation_data_clear()
         duplicate_obj.name = name
         bpy.context.scene.collection.objects.link(duplicate_obj)
+        moveToRight(duplicate_obj)
         duplicate_obj.select_set(True)
         bpy.context.view_layer.objects.active = duplicate_obj
 
@@ -371,6 +605,7 @@ def backToLocalThickening():
         duplicate_obj1.animation_data_clear()
         duplicate_obj1.name = name + "LocalThickCompare"
         bpy.context.scene.collection.objects.link(duplicate_obj1)
+        moveToRight(duplicate_obj1)
 
         # 根据switch_selected_vertex中保存的模型上的已选中顶点,将其置为局部加厚中已选中顶点并根据offset和borderWidth进行加厚,进行初始化处理
         active_obj = bpy.context.active_object
@@ -410,12 +645,14 @@ def backToLocalThickening():
         duplicate_obj1.animation_data_clear()
         duplicate_obj1.name = name + "LocalThickCompare"
         bpy.context.scene.collection.objects.link(duplicate_obj1)
+        moveToRight(duplicate_obj1)
         # 删除当前激活物体并根据DamoCopy重新生成当前激活物体
         bpy.data.objects.remove(active_obj, do_unlink=True)
         duplicate_obj2 = ori_obj.copy()
         duplicate_obj2.data = ori_obj.data.copy()
         duplicate_obj2.animation_data_clear()
         bpy.context.scene.collection.objects.link(duplicate_obj2)
+        moveToRight(duplicate_obj2)
         duplicate_obj2.name = name
         bpy.context.view_layer.objects.active = duplicate_obj2
 
@@ -1746,25 +1983,66 @@ class MyTool10_JiaHou(WorkSpaceTool):
         pass
 
 
+# class MyTool11_JiaHou(WorkSpaceTool):
+#     bl_space_type = 'VIEW_3D'
+#     bl_context_mode = 'PAINT_VERTEX'
+
+#     # The prefix of the idname should be your add-on name.
+#     bl_idname = "my_tool.vertexpainttest"
+#     bl_label = "顶点绘制测试"
+#     bl_description = (
+#         "确认所作的改变"
+#     )
+#     bl_icon = "ops.mesh.extrude_faces_move"
+#     bl_widget = None
+#     bl_keymap = (
+#         ("obj.testfunc", {"type": 'RIGHTMOUSE', "value": 'PRESS'},
+#          {}),
+#     )
+
+#     def draw_settings(context, layout, tool):
+#         pass
+
 class MyTool11_JiaHou(WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
     bl_context_mode = 'PAINT_VERTEX'
 
     # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.vertexpainttest"
-    bl_label = "顶点绘制测试"
+    bl_idname = "my_tool.localthickeningjingxiang"
+    bl_label = "镜像"
     bl_description = (
-        "确认所作的改变"
+        "镜像加厚区域"
     )
-    bl_icon = "ops.mesh.extrude_faces_move"
+    bl_icon = "ops.mesh.dupli_extrude_cursor"
     bl_widget = None
     bl_keymap = (
-        ("obj.testfunc", {"type": 'RIGHTMOUSE', "value": 'PRESS'},
+        ("obj.localthickeningjingxiang", {"type": 'MOUSEMOVE', "value": 'ANY'},
          {}),
     )
 
     def draw_settings(context, layout, tool):
         pass
+
+class MyTool12_JiaHou(WorkSpaceTool):
+    bl_space_type = 'VIEW_3D'
+    bl_context_mode = 'OBJECT'
+
+    # The prefix of the idname should be your add-on name.
+    bl_idname = "my_tool.localthickeningjingxiang2"
+    bl_label = "镜像"
+    bl_description = (
+        "镜像加厚区域"
+    )
+    bl_icon = "ops.mesh.dupli_extrude_cursor"
+    bl_widget = None
+    bl_keymap = (
+        ("obj.localthickeningjingxiang", {"type": 'MOUSEMOVE', "value": 'ANY'},
+         {}),
+    )
+
+    def draw_settings(context, layout, tool):
+        pass
+
 
     # 注册类
 
@@ -1801,6 +2079,7 @@ def register():
     # bpy.utils.register_tool(MyTool6_JiaHou, separator=True, group=False, after={MyTool4_JiaHou.bl_idname})
     # bpy.utils.register_tool(MyTool8_JiaHou, separator=True, group=False, after={MyTool6_JiaHou.bl_idname})
     # bpy.utils.register_tool(MyTool10_JiaHou, separator=True, group=False, after={MyTool8_JiaHou.bl_idname})
+    # bpy.utils.register_tool(MyTool12_JiaHou,separator=True, group=False,after={MyTool10_JiaHou.bl_idname})
 
 
 def unregister():
@@ -1818,3 +2097,4 @@ def unregister():
     # bpy.utils.unregister_tool(MyTool6_JiaHou)
     # bpy.utils.unregister_tool(MyTool8_JiaHou)
     # bpy.utils.unregister_tool(MyTool10_JiaHou)
+    # bpy.utils.unregister_tool(MyTool12_JiaHou)

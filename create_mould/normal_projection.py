@@ -1,7 +1,8 @@
 import bpy
 import bmesh
 import math
-from ..tool import moveToRight
+from ..tool import moveToRight,convert_to_mesh
+
 
 def checkinitialBlueColor():
     ''' 确认是否生成蓝色材质 '''
@@ -11,6 +12,7 @@ def checkinitialBlueColor():
             return True
     return False
 
+
 def initialBlueColor():
     ''' 生成蓝色材质 '''
     material = bpy.data.materials.new(name="blue")
@@ -19,6 +21,7 @@ def initialBlueColor():
         0, 0, 1, 1.0)
     material.blend_method = "BLEND"
     material.use_backface_culling = True
+
 
 def calculate_angle(x, y):
     # 计算原点与给定坐标点之间的角度（弧度）
@@ -55,7 +58,7 @@ def get_change_parameters(origin_highest_vert):
     angle_origin = calculate_angle(origin_highest_vert[0], origin_highest_vert[1])
     origin_highest_z = origin_highest_vert[2]
 
-    target_highest_vert = get_highest_vert("右耳")
+    target_highest_vert = get_highest_vert("右耳OriginForFitPlace")
     angle_target = calculate_angle(target_highest_vert[0], target_highest_vert[1])
     target_highest_z = target_highest_vert[2]
 
@@ -118,9 +121,10 @@ def normal_ray_cast(template_vert, rotate_angle, height_difference, target_bm):
             distance = (loc[0] - vert.co[0]) ** 2 + (loc[1] - vert.co[1]) ** 2 + (loc[2] - vert.co[2]) ** 2
             if distance < min_distance:
                 closest_vert = vert
+                closest_normal = normal
                 min_distance = distance
 
-        return closest_vert
+        return closest_vert, closest_normal
 
 
 # 对顶点进行排序用于画圈
@@ -192,6 +196,7 @@ def draw_border_curve(order_border_co, name, depth):
         bpy.context.view_layer.update()
         bpy.context.view_layer.objects.active = active_obj
 
+
 # 获取VIEW_3D区域的上下文
 def getOverride():
     area_type = 'VIEW_3D'  # change this to use the correct Area Type context you want to process in
@@ -237,3 +242,41 @@ def normal_projection_to_darw_bottom_ring(origin_highest_vert, border_vert_co_an
     order_border_vert = get_order_border_vert(border_vert_co)
     draw_border_curve(order_border_vert, "BottomRingBorderR", 0.3)
     moveToRight(bpy.data.objects["BottomRingBorderR"])
+
+
+def normal_projection_to_darw_cut_plane(origin_highest_vert, border_vert_co_and_normal):
+    # 存储模板耳道口边界的坐标与法向以及最高点坐标
+
+    # 为了解决节点dead的问题，把bmesh信息获取拿出来，作为传参进去
+    target_obj = bpy.data.objects["右耳"]
+    # 获取网格数据
+    target_me = target_obj.data
+
+    # 创建bmesh对象
+    target_bm = bmesh.new()
+    # 将网格数据复制到bmesh对象
+    target_bm.from_mesh(target_me)
+    target_bm.verts.ensure_lookup_table()
+
+    border_vert = list()
+    border_vert_co = list()
+    plane_border_co = list()
+    rotate_angle, height_difference = get_change_parameters(origin_highest_vert)
+
+    for vert in border_vert_co_and_normal:
+        cast_vert, cast_normal = normal_ray_cast(vert, rotate_angle, height_difference, target_bm)
+        if cast_vert is not None and cast_vert not in border_vert:
+            border_vert.append(cast_vert)
+            border_vert_co.append(cast_vert.co)
+            step = 0.2
+            plane_co = (cast_vert.co[0] + cast_normal[0] * step, cast_vert.co[1] + cast_normal[1] * step,
+                        cast_vert.co[2] + cast_normal[2] * step)
+            plane_border_co.append(plane_co)
+
+    order_border_vert = get_order_border_vert(plane_border_co)
+    draw_border_curve(get_order_border_vert(border_vert_co), "BottomRingBorderR", 0.3)
+    convert_to_mesh('BottomRingBorderR',0.3)
+    draw_border_curve(order_border_vert, "CutPlane", 0)
+
+    moveToRight(bpy.data.objects["BottomRingBorderR"])
+    moveToRight(bpy.data.objects["CutPlane"])

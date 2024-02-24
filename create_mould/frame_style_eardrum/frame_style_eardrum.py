@@ -204,6 +204,8 @@ def apply_frame_style_eardrum_template():
 
         applySmooth()
 
+        utils_re_color("右耳", (1, 0.319, 0.133))
+
     except:
         recover_and_remind_border()
         utils_re_color("右耳", (1, 1, 0))

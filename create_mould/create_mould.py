@@ -2,17 +2,16 @@ import bpy
 import bmesh
 
 from ..utils.utils import *
-from ..tool import moveToRight, newShader
+from ..tool import moveToRight, newShader, convert_to_mesh
 from .frame_style_eardrum.frame_style_eardrum import apply_frame_style_eardrum_template
 from .soft_eardrum.soft_eardrum import apply_soft_eardrum_template
 from .soft_eardrum.thickness_and_fill import set_finish
-from ..tool import convert_to_mesh
+
 
 def initialTransparency():
     mat = newShader("Transparency")  # 创建材质
     mat.blend_method = "BLEND"
     mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
-
 
 def initialBlueColor():
     ''' 生成蓝色材质 '''
@@ -83,7 +82,7 @@ def frontFromCreateMould():
     need_to_delete_model_name_list = ["右耳OriginForCreateMouldR", "HoleCutCylinderBottomR",
                                       "HoleBorderCurveR", "BottomRingBorderR", "cutPlane", "BottomRingBorderRForCutR",
                                       "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
-                                      "右耳ForGetFillPlane"]
+                                      "右耳ForGetFillPlane", "dragcurve"]
     delete_useless_object(need_to_delete_model_name_list)
     enum = bpy.context.scene.muJuTypeEnum
     if enum == "OP1":
@@ -188,7 +187,7 @@ def backFromCreateMould():
     need_to_delete_model_name_list = ["右耳OriginForCreateMouldR", "HoleCutCylinderBottomR",
                                       "HoleBorderCurveR", "BottomRingBorderR", "cutPlane", "BottomRingBorderRForCutR",
                                       "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
-                                      "右耳ForGetFillPlane"]
+                                      "右耳ForGetFillPlane", "dragcurve"]
 
     delete_useless_object(need_to_delete_model_name_list)
 
@@ -198,6 +197,7 @@ def backFromCreateMould():
 
 
 def apply_template():
+    success = True
     # 复制一份挖孔前的模型以备用
     cur_obj = bpy.context.active_object
     duplicate_obj = cur_obj.copy()
@@ -213,8 +213,8 @@ def apply_template():
     # 根据选择的模板调用对应的模板
     if mould_type == "OP1":
         print("软耳模")
-        apply_soft_eardrum_template()
-        convert_to_mesh('BottomRingBorderR',0.3)
+        success = apply_soft_eardrum_template()
+        bpy.context.scene.neiBianJiXian = False
     elif mould_type == "OP2":
         print("硬耳膜")
     elif mould_type == "OP3":
@@ -222,8 +222,8 @@ def apply_template():
     elif mould_type == "OP4":
         print("框架式耳膜")
         apply_frame_style_eardrum_template()
-        convert_to_mesh('BottomRingBorderR',0.4)
         convert_to_mesh('HoleBorderCurveR', 0.18)
+        bpy.context.scene.neiBianJiXian = True
     elif mould_type == "OP5":
         print("常规外壳")
     elif mould_type == "OP6":
@@ -232,7 +232,8 @@ def apply_template():
     for obj in bpy.context.view_layer.objects:
         obj.select_set(False)
         # 布尔后，需要重新上色
-    utils_re_color("右耳", (1, 0.319, 0.133))
+    if success:
+        utils_re_color("右耳", (1, 0.319, 0.133))
 
 
 def delete_useless_object(need_to_delete_model_name_list):
@@ -259,7 +260,7 @@ def recover():
                                           "HoleBorderCurveR", "BottomRingBorderR", "cutPlane",
                                           "BottomRingBorderRForCutR",
                                           "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
-                                          "右耳ForGetFillPlane","meshHoleBorderCurveR","meshBottomRingBorderR"]
+                                          "右耳ForGetFillPlane","meshHoleBorderCurveR","meshBottomRingBorderR", "dragcurve"]
         delete_useless_object(need_to_delete_model_name_list)
         # 将最开始复制出来的OriginForCreateMould名称改为模型名称
         obj.hide_set(False)
@@ -288,7 +289,7 @@ def complete():
                                       "HoleBorderCurveR", "BottomRingBorderR", "cutPlane",
                                       "BottomRingBorderRForCutR",
                                       "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
-                                      "右耳ForGetFillPlane","meshHoleBorderCurveR","meshBottomRingBorderR"]
+                                      "右耳ForGetFillPlane","meshHoleBorderCurveR","meshBottomRingBorderR", "dragcurve"]
     delete_useless_object(need_to_delete_model_name_list)
     enum = bpy.context.scene.muJuTypeEnum
     if enum == "OP1":

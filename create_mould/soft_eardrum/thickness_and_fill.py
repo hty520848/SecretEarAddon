@@ -500,6 +500,7 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
 
         context.window_manager.modal_handler_add(self)
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        # bpy.context.scene.var = 22
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
@@ -507,6 +508,9 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
         global scale_ratio, zmax, zmin, on_obj
         op_cls = Soft_Eardrum_Circle_Cut
         mould_type = bpy.context.scene.muJuTypeEnum
+        # if bpy.context.scene.var != 22:
+        #     print('ruanermo finish')
+        #     return {'FINISHED'}
         if context.area:
             context.area.tag_redraw()
         # 未切割时起效
@@ -535,7 +539,21 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                         op_cls.__initial_mouse_y = event.mouse_region_y
                     # 取消
                     elif event.value == 'RELEASE':
-
+                        normal = active_obj.matrix_world.to_3x3(
+                        ) @ active_obj.data.polygons[0].normal
+                        print('圆环法线',normal)
+                        if normal.z > 0:
+                            print('反转法线')
+                            active_obj.hide_set(False)
+                            bpy.context.view_layer.objects.active = active_obj
+                            bpy.ops.object.mode_set(mode='EDIT')
+                            bpy.ops.mesh.select_all(action='SELECT')
+                            # 翻转圆环法线
+                            bpy.ops.mesh.flip_normals(only_clnors=False)
+                            # 隐藏圆环
+                            active_obj.hide_set(True)
+                            # 返回对象模式
+                            bpy.ops.object.mode_set(mode='OBJECT')
                         reset_and_refill()
                         op_cls.__is_moving = False
                         op_cls.__left_mouse_down = False
@@ -583,7 +601,7 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                         obj_circle = bpy.data.objects['Circle']
                         op_cls.__now_mouse_y = event.mouse_region_y
                         op_cls.__now_mouse_x = event.mouse_region_x
-                        dis = 0.5
+                        dis = 0.25
                         # 平面法线方向
                         normal = obj_circle.matrix_world.to_3x3(
                         ) @ obj_circle.data.polygons[0].normal
@@ -609,7 +627,21 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                 obj_torus = bpy.data.objects['Torus']
                 active_obj = bpy.data.objects['Circle']
                 if event.value == 'RELEASE' and op_cls.__is_moving:
-                    # getRadius()
+                    normal = active_obj.matrix_world.to_3x3(
+                        ) @ active_obj.data.polygons[0].normal
+                    print('圆环法线',normal)
+                    if normal.z > 0:
+                        print('反转法线')
+                        active_obj.hide_set(False)
+                        bpy.context.view_layer.objects.active = active_obj
+                        bpy.ops.object.mode_set(mode='EDIT')
+                        bpy.ops.mesh.select_all(action='SELECT')
+                        # 翻转圆环法线
+                        bpy.ops.mesh.flip_normals(only_clnors=False)
+                        # 隐藏圆环
+                        active_obj.hide_set(True)
+                        # 返回对象模式
+                        bpy.ops.object.mode_set(mode='OBJECT')
                     reset_and_refill()
                     op_cls.__is_moving = False
                     op_cls.__left_mouse_down = False
@@ -641,7 +673,7 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                         obj_circle = bpy.data.objects['Circle']
                         op_cls.__now_mouse_y = event.mouse_region_y
                         op_cls.__now_mouse_x = event.mouse_region_x
-                        dis = 0.5
+                        dis = 0.25
                         # 平面法线方向
                         normal = obj_circle.matrix_world.to_3x3(
                         ) @ obj_circle.data.polygons[0].normal

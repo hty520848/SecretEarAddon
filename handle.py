@@ -1,10 +1,10 @@
 from asyncio import Handle
+from .tool import *
 import bpy
 from bpy.types import WorkSpaceTool
 from bpy_extras import view3d_utils
 import mathutils
 import bmesh
-import re
 
 prev_on_object = False  # 判断鼠标在模型上与否的状态是否改变
 
@@ -166,6 +166,7 @@ def frontToHandle():
     duplicate_obj1.animation_data_clear()
     duplicate_obj1.name = name + "HandleReset"
     bpy.context.collection.objects.link(duplicate_obj1)
+    moveToRight(duplicate_obj1)
     duplicate_obj1.hide_set(True)
 
     initial()
@@ -192,6 +193,7 @@ def frontFromHandle():
     duplicate_obj.animation_data_clear()
     duplicate_obj.name = name
     bpy.context.scene.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
     duplicate_obj.select_set(True)
     bpy.context.view_layer.objects.active = duplicate_obj
 
@@ -218,6 +220,8 @@ def backToHandle():
         duplicate_obj.animation_data_clear()
         duplicate_obj.name = name
         bpy.context.scene.collection.objects.link(duplicate_obj)
+        moveToRight(duplicate_obj)
+        
         duplicate_obj.select_set(True)
         bpy.context.view_layer.objects.active = duplicate_obj
 
@@ -267,6 +271,7 @@ def backToHandle():
         duplicate_obj.animation_data_clear()
         duplicate_obj.name = name
         bpy.context.scene.collection.objects.link(duplicate_obj)
+        moveToRight(duplicate_obj)
         duplicate_obj.select_set(True)
         bpy.context.view_layer.objects.active = duplicate_obj
 
@@ -402,8 +407,10 @@ def addHandle():
     obj = bpy.data.objects[name]
     cubename = "Cube"
     cube_obj = bpy.data.objects[cubename]
+    moveToRight(cube_obj)
     planename = "Plane"
     plane_obj = bpy.data.objects[planename]
+    moveToRight(plane_obj)
 
     # 为附件添加材质
     bpy.context.view_layer.objects.active = cube_obj
