@@ -2,33 +2,11 @@ import bpy
 import bmesh
 
 from ..utils.utils import *
-from ..tool import moveToRight, newShader, convert_to_mesh
+from ..tool import moveToRight, initialTransparency, newColor
 from .frame_style_eardrum.frame_style_eardrum import apply_frame_style_eardrum_template
 from .soft_eardrum.soft_eardrum import apply_soft_eardrum_template
 from .soft_eardrum.thickness_and_fill import set_finish
 
-
-def initialTransparency():
-    mat = newShader("Transparency")  # 创建材质
-    mat.blend_method = "BLEND"
-    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
-
-def initialBlueColor():
-    ''' 生成蓝色材质 '''
-    material = bpy.data.materials.new(name="blue")
-    material.use_nodes = True
-    bpy.data.materials["blue"].node_tree.nodes["Principled BSDF"].inputs[0].default_value = (
-        0, 0, 1, 1.0)
-    material.blend_method = "BLEND"
-    material.use_backface_culling = True
-
-def checkinitialBlueColor():
-    ''' 确认是否生成蓝色材质 '''
-    materials = bpy.data.materials
-    for material in materials:
-        if material.name == 'blue':
-            return True
-    return False
 
 def frontToCreateMould():
     # 创建MouldReset,用于模型重置  与 模块向前返回时的恢复(若存在MouldReset则先删除)
@@ -46,8 +24,7 @@ def frontToCreateMould():
     duplicate_obj1.name = name + "MouldReset"
     bpy.context.collection.objects.link(duplicate_obj1)
     # duplicate_obj1.hide_set(True)
-    if checkinitialBlueColor() == False:
-        initialBlueColor()
+    newColor('blue', 0, 0, 1, 1, 1)
     initialTransparency()
     duplicate_obj1.data.materials.clear()
     duplicate_obj1.data.materials.append(bpy.data.materials['Transparency'])
@@ -222,7 +199,6 @@ def apply_template():
     elif mould_type == "OP4":
         print("框架式耳膜")
         apply_frame_style_eardrum_template()
-        convert_to_mesh('HoleBorderCurveR', 0.18)
         bpy.context.scene.neiBianJiXian = True
     elif mould_type == "OP5":
         print("常规外壳")

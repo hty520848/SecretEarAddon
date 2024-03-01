@@ -1,26 +1,10 @@
 import bpy
 import math
 import bmesh
-from ..tool import moveToRight
+from ..tool import moveToRight, newColor
 from contextlib import redirect_stdout
 import io
 
-def checkinitialBlueColor():
-    ''' 确认是否生成蓝色材质 '''
-    materials = bpy.data.materials
-    for material in materials:
-        if material.name == 'blue':
-            return True
-    return False
-
-def initialBlueColor():
-    ''' 生成蓝色材质 '''
-    material = bpy.data.materials.new(name="blue")
-    material.use_nodes = True
-    bpy.data.materials["blue"].node_tree.nodes["Principled BSDF"].inputs[0].default_value = (
-        0, 0, 1, 1.0)
-    material.blend_method = "BLEND"
-    material.use_backface_culling = True
 
 # 获取VIEW_3D区域的上下文
 def getOverride():
@@ -164,11 +148,13 @@ def get_lowest_point(angle_degrees, z_co, count, origin_loc, origin_normal):
 
 # 对顶点进行排序用于画圈
 def get_order_border_vert(selected_verts):
+    size = len(selected_verts)
+    finish = False
     # 尝试使用距离最近的点
     order_border_vert = []
     now_vert = selected_verts[0]
     unprocessed_vertex = selected_verts  # 未处理顶点
-    while len(unprocessed_vertex) > 1:
+    while len(unprocessed_vertex) > 1 and not finish:
         order_border_vert.append(now_vert)
         unprocessed_vertex.remove(now_vert)
 
@@ -181,7 +167,8 @@ def get_order_border_vert(selected_verts):
             if distance < min_distance:
                 min_distance = distance
                 now_vert = vert
-
+        if min_distance > 3 and len(unprocessed_vertex) < 0.1 * size:
+            finish = True
     return order_border_vert
 
 
@@ -220,8 +207,7 @@ def draw_cut_border_curve(order_border_co, name, depth):
         # color_matercal = bpy.data.materials.new(name="BottomRingColor")
         # color_matercal.diffuse_color = (0.0, 0.0, 1.0, 1.0)
         # bpy.context.active_object.data.materials.append(color_matercal)
-        if checkinitialBlueColor() == False:
-            initialBlueColor()
+        newColor('blue', 0, 0, 1, 1, 1)
         bpy.context.active_object.data.materials.append(bpy.data.materials['blue'])
         bpy.context.view_layer.update()
         bpy.context.view_layer.objects.active = active_obj
@@ -258,6 +244,7 @@ def translate_circle_to_object():
         bpy.ops.mesh.remove_doubles(threshold=0.18)
     del stdout
     duplicate_obj.hide_set(True)
+
 
 def boolean_apply():
     for obj in bpy.data.objects:
@@ -434,10 +421,14 @@ def get_cut_border(high_percent):
                     # todo 找到附近最凹处，并实现曲面切割
                     # todo 注意注意注意，如果之前加厚的时候设置了蜡厚度，那么模型就是一有内外壁的壳，必须判断交点是否在内外壁上
                     last_loc = loc
-
+                    step = 0.5
                     lowest_point, lowest_normal = get_lowest_point(angle_degrees, origin_z_co, count,
                                                                    (loc[0], loc[1], loc[2]),
                                                                    (normal[0], normal[1], normal[2]))
+                    border = (lowest_point[0] + lowest_normal[0] * step, lowest_point[1] + lowest_normal[1] * step,
+                              lowest_point[2] + lowest_normal[2] * 0)
+
+                    cut_plane.append(border)
                     order_border_co.append(lowest_point)
                     # 去找下一个交点
                     # 注意 这里起始位置要往前走一点，否则一直会交在同一个点
@@ -448,9 +439,129 @@ def get_cut_border(high_percent):
                     count = count + 1
             angle_degrees = angle_degrees + 0.5
         # 2024/1/6 使用exact，曲线深度小于0.39也会有问题，这里设置为0.4
-        draw_cut_border_curve(get_order_border_vert(order_border_co), "BottomRingBorderR", 0.4)
+        draw_cut_border_curve(get_order_border_vert(order_border_co), "BottomRingBorderR", 0.18)
+        draw_cut_border_curve(get_order_border_vert(cut_plane), "CutPlane", 0)
         # todo 先加到右耳集合，后续调整左右耳适配
         moveToRight(bpy.data.objects["BottomRingBorderR"])
+        moveToRight(bpy.data.objects["CutPlane"])
+
+
+def judge_normals():
+    flag = True
+    cut_plane = bpy.data.objects["CutPlane"]
+    cut_plane_mesh = bmesh.from_edit_mesh(cut_plane.data)
+
+    for v in cut_plane_mesh.verts:
+        if v.normal[2] > 0:
+            flag = False
+
+    return flag
+
+
+def get_cut_plane():
+    bpy.data.objects["右耳"].select_set(False)
+    cut_plane = bpy.data.objects["CutPlane"]
+    bpy.context.view_layer.objects.active = cut_plane
+    cut_plane.select_set(True)
+    bpy.ops.object.convert(target='MESH')
+
+    # 填充平面
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    # bpy.ops.mesh.fill()
+    bpy.ops.mesh.remove_doubles(threshold=0.5)
+    bpy.ops.mesh.edge_face_add()
+
+    if judge_normals():
+        bpy.ops.mesh.flip_normals()
+
+    bpy.data.objects["CutPlane"].select_set(False)
+    bpy.context.view_layer.objects.active = bpy.data.objects["右耳"]
+    bpy.data.objects["右耳"].select_set(True)
+    cut_plane.hide_set(True)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def plane_cut():
+    for obj in bpy.data.objects:
+        obj.select_set(False)
+        if obj.name == "右耳":
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+    # 获取活动对象
+    obj = bpy.context.active_object
+    # 添加一个修饰器
+    modifier = obj.modifiers.new(name="BottomCut", type='BOOLEAN')
+    bpy.context.object.modifiers["BottomCut"].operation = 'DIFFERENCE'
+    bpy.context.object.modifiers["BottomCut"].object = bpy.data.objects["CutPlane"]
+
+    bpy.context.object.modifiers["BottomCut"].solver = 'EXACT'
+    # 应用修改器
+    bpy.ops.object.modifier_apply(modifier="BottomCut", single_user=True)
+
+    # 获取下边界顶点用于挤出
+    bpy.ops.object.mode_set(mode='EDIT')
+    # 创建bmesh对象
+    bm = bmesh.from_edit_mesh(bpy.data.objects["右耳"].data)
+    bottom_outer_border_index = [v.index for v in bm.verts if v.select]
+    # bpy.ops.mesh.delete(type='FACE')
+
+    ori_obj = bpy.data.objects["右耳"]
+    bpy.ops.object.mode_set(mode='OBJECT')
+    # 将下边界加入顶点组
+    bottom_outer_border_vertex = ori_obj.vertex_groups.get("BottomOuterBorderVertex")
+    if (bottom_outer_border_vertex == None):
+        bottom_outer_border_vertex = ori_obj.vertex_groups.new(name="BottomOuterBorderVertex")
+    for vert_index in bottom_outer_border_index:
+        bottom_outer_border_vertex.add([vert_index], 1, 'ADD')
+
+
+def judge_if_need_invert():
+    obj = bpy.data.objects["右耳"]
+    bm = bmesh.from_edit_mesh(obj.data)
+
+    # 获取最低点
+    vert_order_by_z = []
+    for vert in bm.verts:
+        vert_order_by_z.append(vert)
+    # 按z坐标排列
+    vert_order_by_z.sort(key=lambda vert: vert.co[2])
+    return not vert_order_by_z[0].select
+
+
+def delete_useless_part():
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.loop_to_region(select_bigger=True)
+
+    obj = bpy.data.objects["右耳"]
+    bm = bmesh.from_edit_mesh(obj.data)
+    select_vert = [v.index for v in bm.verts if v.select]
+    if not len(select_vert) == len(bm.verts):  # 如果相等，说明切割成功了，不需要删除多余部分
+        # 判断最低点是否被选择
+        invert_flag = judge_if_need_invert()
+
+        if not invert_flag:
+            # 不需要反转，直接删除面即可
+            bpy.ops.mesh.delete(type='FACE')
+        else:
+            # 反转一下，删除顶点
+            bpy.ops.mesh.select_all(action='INVERT')
+            bpy.ops.mesh.delete(type='VERT')
+
+    # 最后，删一下边界的直接的面
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bottom_outer_border_vertex = bpy.data.objects["右耳"].vertex_groups.get("BottomOuterBorderVertex")
+    bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
+    if (bottom_outer_border_vertex != None):
+        bpy.ops.object.vertex_group_select()
+        bpy.ops.mesh.delete(type='FACE')
+        bpy.ops.mesh.select_all(action='DESELECT')
+
+    bmesh.update_edit_mesh(obj.data)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    # 最后删掉没用的CutPlane
+    bpy.data.objects.remove(bpy.data.objects["CutPlane"], do_unlink=True)
 
 
 def soft_eardrum_bottom_cut():
@@ -483,6 +594,10 @@ def bottom_cut(high_percent):
     moveToRight(duplicate_obj)
 
     get_cut_border(high_percent)
-    translate_circle_to_object()
-    boolean_apply()
-    cut_bottom_part()
+    get_cut_plane()
+    plane_cut()
+    delete_useless_part()
+
+    # translate_circle_to_object()
+    # boolean_apply()
+    # cut_bottom_part()

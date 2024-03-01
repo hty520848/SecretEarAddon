@@ -12,18 +12,29 @@ from .handle import *
 from .support import *
 from .create_mould.create_mould import *
 from .create_mould.frame_style_eardrum.frame_style_eardrum import *
+from .sound_canal import *
+from .vent_canal import *
 from .utils.utils import *
 import time
 
-prev_properties_context = None  # 保存Properties窗口切换时上次Properties窗口中的上下文,记录由哪个模式切换而来
+prev_properties_context = "RENDER"  # 保存Properties窗口切换时上次Properties窗口中的上下文,记录由哪个模式切换而来
 
 is_msgbus_start = False         #模块切换操作符是否启动
 
 processing_stage_dict = {
-    "OUTPUT": "局部加厚",
     "RENDER": "打磨",
-    "SCENE": "切割",
-    "WORLD": "创建模具",
+    "OUTPUT": "局部加厚",
+    "VIEW_LAYER": "切割",
+    "SCENE": "创建模具",
+    "WORLD": "传声孔",
+    "COLLECTION": "通气孔",
+    "OBJECT": "耳膜附件",
+    "MODIFIER": "编号",
+    "PARTICLES": "铸造法软耳模",
+    "PHYSICS": "支撑",
+    "CONSTRAINT": "排气孔",
+    "DATA": "后期打磨"
+
 }
 
 
@@ -77,6 +88,7 @@ class MsgbusCallBack(bpy.types.Operator):
 
     def modal(self, context, event):
         global prev_properties_context
+        global processing_stage_dict
 
         workspace = context.window.workspace.name
 
@@ -131,53 +143,56 @@ class MsgbusCallBack(bpy.types.Operator):
                             bpy.context.screen.areas[1].spaces.active.context = prev_properties_context
                         elif workspace == '布局.001':
                             bpy.context.screen.areas[0].spaces.active.context = prev_properties_context
-
-                if (current_tab == 'OUTPUT'):
-                    if (prev_properties_context == 'RENDER' or prev_properties_context == None):
+                # 模块切换
+                current_process = processing_stage_dict[current_tab]
+                prev_process = processing_stage_dict[prev_properties_context]
+                if (current_process == '局部加厚'):
+                    if (prev_process == '打磨'):
                         print("DamoToLocalThick")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromDamo()  # 打磨保存状态
                             frontToLocalThickening()  # 局部加厚初始化
-                    elif (prev_properties_context == 'VIEW_LAYER'):
+                    elif (prev_process == '切割'):
                         print("qieGeToLocalThick")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromQieGe()  # 退出切割
                             backToLocalThickening()  # 局部加厚初始化
-                    elif (prev_properties_context == 'MODIFIER'):
+                    elif (prev_process == '编号'):
                         print("labelToLocalThick")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromLabel()
                             backToLocalThickening()
-                    elif (prev_properties_context == 'SCENE'):
+                    elif (prev_process == '创建模具'):
                         print("createMouldToLocalThick")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromCreateMould()
                             backToLocalThickening()
-                    elif (prev_properties_context == 'OBJECT'):
+                    elif (prev_process == '耳膜附件'):
                         print("HandleToLocalThick")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromHandle()
                             backToLocalThickening()
-                    elif (prev_properties_context == 'PHYSICS'):
+                    elif (prev_process == '支撑'):
                         print("SupportToLocalThick")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromSupport()
                             backToLocalThickening()
-
-                elif (current_tab == 'RENDER'):
-                    if (prev_properties_context == 'OUTPUT'):
+                    
+    
+                elif (current_process == '打磨'):
+                    if (prev_process == '局部加厚'):
                         print("LocalThickToDaMo")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromLocalThickening()  # 退出局部加厚
                             backToDamo()  # 打磨初始化,保存到打磨保存的状态
-                    elif (prev_properties_context == 'VIEW_LAYER'):
+                    elif (prev_process == '切割'):
                         print("QieGeToDamo")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
@@ -185,64 +200,76 @@ class MsgbusCallBack(bpy.types.Operator):
                             print("当前激活物体", bpy.context.active_object)
                             bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
                             backToDamo()  # 打磨初始化,保存到打磨保存的状态
-                    elif (prev_properties_context == 'MODIFIER'):
+                    elif (prev_process == '编号'):
                         print("labelToDaMo")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromLabel()
                             backToDamo()
-                    elif (prev_properties_context == 'SCENE'):
+                    elif (prev_process == '创建模具'):
                         print("createMouldToDamo")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromCreateMould()
                             backToDamo()
-                    elif (prev_properties_context == 'OBJECT'):
+                    elif (prev_process == '耳膜附件'):
                         print("HandleToDamo")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromHandle()
                             backToDamo()
-                    elif (prev_properties_context == 'PHYSICS'):
+                    elif (prev_process == '支撑'):
                         print("SupportToDamo")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromSupport()
                             backToDamo()
+                    elif (prev_process == '传声孔'):
+                        print("SoundCanalToDamo")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromSoundCanal()
+                            backToDamo()
+                    elif (prev_process == '通气孔'):
+                        print("SoundCanalToDamo")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromVentCanal()
+                            backToDamo()
 
 
-                elif (current_tab == 'VIEW_LAYER'):
-                    if (prev_properties_context == 'OUTPUT'):
+                elif (current_process == '切割'):
+                    if (prev_process == '局部加厚'):
                         print("LocalThickToQieGe")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromLocalThickening()  # 局部加厚完成
                             frontToQieGe()  # 切割初始化
-                    elif (prev_properties_context == 'RENDER' or prev_properties_context == None):
+                    elif (prev_process == '打磨'):
                         print("damoToQieGe")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromDamo()  # 打磨保存状态
                             frontToQieGe()  # 切割初始化
-                    elif (prev_properties_context == 'MODIFIER'):
+                    elif (prev_process == '编号'):
                         print("labelToQieGe")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromLabel()
                             backToQieGe()
-                    elif (prev_properties_context == 'SCENE'):
+                    elif (prev_process == '创建模具'):
                         print("createMouldToQieGe")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromCreateMould()
                             backToQieGe()
-                    elif (prev_properties_context == 'OBJECT'):
+                    elif (prev_process == '耳膜附件'):
                         print("HandleToQieGe")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromHandle()
                             backToQieGe()
-                    elif (prev_properties_context == 'PHYSICS'):
+                    elif (prev_process == '支撑'):
                         print("SupportToQieGe")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
@@ -250,76 +277,76 @@ class MsgbusCallBack(bpy.types.Operator):
                             backToQieGe()
 
 
-                elif (current_tab == 'MODIFIER'):
-                    if (prev_properties_context == 'OUTPUT'):
+                elif (current_process == '编号'):
+                    if (prev_process == '局部加厚'):
                         print("LocalThickToLabel")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromLocalThickening()  # 局部加厚完成
                             frontToLabel()
-                    elif (prev_properties_context == 'RENDER' or prev_properties_context == None):
+                    elif (prev_process == '打磨'):
                         print("DamoToLabel")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromDamo()  # 打磨保存状态
                             frontToLabel()
-                    elif (prev_properties_context == 'VIEW_LAYER'):
+                    elif (prev_process == '切割'):
                         print("QieGeToLabel")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromQieGe()
                             frontToLabel()
-                    elif (prev_properties_context == 'SCENE'):
+                    elif (prev_process == '创建模具'):
                         print("createMouldToLabel")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromCreateMould()
                             frontToLabel()
-                    elif (prev_properties_context == 'OBJECT'):
+                    elif (prev_process == '耳膜附件'):
                         print("HandleToLabel")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromHandle()
                             frontToLabel()
-                    elif (prev_properties_context == 'PHYSICS'):
+                    elif (prev_process == '支撑'):
                         print("SupportToLabel")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromSupport()
                             backToLabel()
 
-                elif (current_tab == 'SCENE'):
-                    if (prev_properties_context == 'OUTPUT'):
+                elif (current_process == '创建模具'):
+                    if (prev_process == '局部加厚'):
                         print("LocalThickToCreateMould")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromLocalThickening()
                             frontToCreateMould()
-                    elif (prev_properties_context == 'RENDER' or prev_properties_context == None):
+                    elif (prev_process == '打磨'):
                         print("DamoToCreateMould")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromDamo()
                             frontToCreateMould()
-                    elif (prev_properties_context == 'VIEW_LAYER'):
+                    elif (prev_process == '切割'):
                         print("QieGeToCreateMould")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromQieGe()
                             frontToCreateMould()
-                    elif (prev_properties_context == 'MODIFIER'):
+                    elif (prev_process == '编号'):
                         print("LabelToCreateMould")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromLabel()
                             backToCreateMould()
-                    elif (prev_properties_context == 'OBJECT'):
+                    elif (prev_process == '耳膜附件'):
                         print("HandleToCreateMould")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromHandle()
                             backToCreateMould()
-                    elif (prev_properties_context == 'PHYSICS'):
+                    elif (prev_process == '支撑'):
                         print("SupportToCreateMould")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
@@ -327,38 +354,38 @@ class MsgbusCallBack(bpy.types.Operator):
                             backToCreateMould()
 
 
-                elif (current_tab == 'OBJECT'):
-                    if (prev_properties_context == 'OUTPUT'):
+                elif (current_process == '耳膜附件'):
+                    if (prev_process == '局部加厚'):
                         print("LocalThickToHandle")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromLocalThickening()
                             frontToHandle()
-                    elif (prev_properties_context == 'RENDER' or prev_properties_context == None):
+                    elif (prev_process == '打磨'):
                         print("DamoToHandle")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromDamo()
                             frontToHandle()
-                    elif (prev_properties_context == 'VIEW_LAYER'):
+                    elif (prev_process == '切割'):
                         print("QieGeToHandle")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromQieGe()
                             frontToHandle()
-                    elif (prev_properties_context == 'MODIFIER'):
+                    elif (prev_process == '编号'):
                         print("LabelToHandle")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromLabel()
                             backToHandle()
-                    elif (prev_properties_context == 'SCENE'):
+                    elif (prev_process == '创建模具'):
                         print("CreateMouldToHandle")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromCreateMould()
                             frontToHandle()
-                    elif (prev_properties_context == 'PHYSICS'):
+                    elif (prev_process == '支撑'):
                         print("SupportToHandle")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
@@ -366,43 +393,144 @@ class MsgbusCallBack(bpy.types.Operator):
                             backToHandle()
 
 
-                elif (current_tab == 'PHYSICS'):
-                    if (prev_properties_context == 'OUTPUT'):
+                elif (current_process == '支撑'):
+                    if (prev_process == '局部加厚'):
                         print("LocalThickToSupport")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromLocalThickening()
                             frontToSupport()
-                    elif (prev_properties_context == 'RENDER' or prev_properties_context == None):
+                    elif (prev_process == '打磨'):
                         print("DamoToSupport")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromDamo()
                             frontToSupport()
-                    elif (prev_properties_context == 'VIEW_LAYER'):
+                    elif (prev_process == '切割'):
                         print("QieGeToSupport")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromQieGe()
                             frontToSupport()
-                    elif (prev_properties_context == 'MODIFIER'):
+                    elif (prev_process == '编号'):
                         print("LabelToSupport")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromLabel()
                             frontToSupport()
-                    elif (prev_properties_context == 'SCENE'):
+                    elif (prev_process == '创建模具'):
                         print("CreateMouldToSupport")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromCreateMould()
                             frontToSupport()
-                    elif (prev_properties_context == 'OBJECT'):
+                    elif (prev_process == '耳膜附件'):
                         print("HandleToSupport")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromHandle()
                             frontToSupport()
+
+                elif (current_process == '传声孔'):
+                    if (prev_process == '局部加厚'):
+                        print("LocalThickToSoundCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromLocalThickening()
+                            frontToSoundCanal()
+                    elif (prev_process == '打磨'):
+                        print("DamoToSoundCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromDamo()
+                            frontToSoundCanal()
+                    elif (prev_process == '切割'):
+                        print("QieGeToSoundCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromQieGe()
+                            frontToSoundCanal()
+                    elif (prev_process == '编号'):
+                        print("LabelToSoundCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromLabel()
+                            backToSoundCanal()
+                    elif (prev_process == '创建模具'):
+                        print("CreateMouldToSoundCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromCreateMould()
+                            frontToSoundCanal()
+                    elif (prev_process == '耳膜附件'):
+                        print("HandleToSoundCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromHandle()
+                            backToSoundCanal()
+                    elif (prev_process == '支撑'):
+                        print("SupportToSoundCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromSupport()
+                            backToSoundCanal()
+                    elif (prev_process == '通气孔'):
+                        print("SupportToSoundCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromVentCanal()
+                            backToSoundCanal()
+
+                    elif (current_process == '通气孔'):
+                        if (prev_process == '局部加厚'):
+                            print("LocalThickToVentCanal")
+                            override = getOverride()
+                            with bpy.context.temp_override(**override):
+                                backFromLocalThickening()
+                                frontToVentCanal()
+                        elif (prev_process == '打磨'):
+                            print("DamoToVentCanal")
+                            override = getOverride()
+                            with bpy.context.temp_override(**override):
+                                backFromDamo()
+                                frontToVentCanal()
+                        elif (prev_process == '切割'):
+                            print("QieGeToVentCanal")
+                            override = getOverride()
+                            with bpy.context.temp_override(**override):
+                                backFromQieGe()
+                                frontToVentCanal()
+                        elif (prev_process == '编号'):
+                            print("LabelToVentCanal")
+                            override = getOverride()
+                            with bpy.context.temp_override(**override):
+                                frontFromLabel()
+                                backToVentCanal()
+                        elif (prev_process == '创建模具'):
+                            print("CreateMouldToVentCanal")
+                            override = getOverride()
+                            with bpy.context.temp_override(**override):
+                                backFromCreateMould()
+                                frontToVentCanal()
+                        elif (prev_process == '耳膜附件'):
+                            print("HandleToVentCanal")
+                            override = getOverride()
+                            with bpy.context.temp_override(**override):
+                                frontFromHandle()
+                                backToVentCanal()
+                        elif (prev_process == '支撑'):
+                            print("SupportToVentCanal")
+                            override = getOverride()
+                            with bpy.context.temp_override(**override):
+                                frontFromSupport()
+                                backToVentCanal()
+                        elif (prev_process == '传声孔'):
+                            print("SoundCanalToVentCanal")
+                            override = getOverride()
+                            with bpy.context.temp_override(**override):
+                                backFromSoundCanal()
+                                frontToVentCanal()
+
 
                 print("---------")
                 selected_objs = bpy.data.objects

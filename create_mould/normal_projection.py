@@ -1,26 +1,7 @@
 import bpy
 import bmesh
 import math
-from ..tool import moveToRight,convert_to_mesh
-
-
-def checkinitialBlueColor():
-    ''' 确认是否生成蓝色材质 '''
-    materials = bpy.data.materials
-    for material in materials:
-        if material.name == 'blue':
-            return True
-    return False
-
-
-def initialBlueColor():
-    ''' 生成蓝色材质 '''
-    material = bpy.data.materials.new(name="blue")
-    material.use_nodes = True
-    bpy.data.materials["blue"].node_tree.nodes["Principled BSDF"].inputs[0].default_value = (
-        0, 0, 1, 1.0)
-    material.blend_method = "BLEND"
-    material.use_backface_culling = True
+from ..tool import moveToRight, newColor
 
 
 def calculate_angle(x, y):
@@ -190,8 +171,7 @@ def draw_border_curve(order_border_co, name, depth):
         # color_matercal = bpy.data.materials.new(name="BottomRingColor")
         # color_matercal.diffuse_color = (0.0, 0.0, 1.0, 1.0)
         # bpy.context.active_object.data.materials.append(color_matercal)
-        if checkinitialBlueColor() == False:
-            initialBlueColor()
+        newColor('blue', 0, 0, 1, 1, 1)
         bpy.context.active_object.data.materials.append(bpy.data.materials['blue'])
         bpy.context.view_layer.update()
         bpy.context.view_layer.objects.active = active_obj
@@ -275,7 +255,6 @@ def normal_projection_to_darw_cut_plane(origin_highest_vert, border_vert_co_and_
 
     order_border_vert = get_order_border_vert(plane_border_co)
     draw_border_curve(get_order_border_vert(border_vert_co), "BottomRingBorderR", 0.3)
-    convert_to_mesh('BottomRingBorderR',0.3)
     draw_border_curve(order_border_vert, "CutPlane", 0)
 
     moveToRight(bpy.data.objects["BottomRingBorderR"])

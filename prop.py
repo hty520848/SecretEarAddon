@@ -10,7 +10,8 @@ from .create_mould.soft_eardrum.soft_eardrum import apply_soft_eardrum_template
 from .create_mould.frame_style_eardrum.frame_style_eardrum import apply_frame_style_eardrum_template
 from .create_mould.create_mould import recover
 from .create_mould.border_fill import recover_and_refill
-from .sound_canal import convert_canal
+from .sound_canal import convert_soundcanal
+from .vent_canal import convert_ventcanal
 
 import os
 
@@ -322,7 +323,8 @@ def My_Properties():
 
     # 通气孔     通气管道直径
     bpy.types.Scene.tongQiGuanDaoZhiJing = bpy.props.FloatProperty(
-        name="tongQiGuanDaoZhiJing", min=0.2, max=10, step=10)
+        name="tongQiGuanDaoZhiJing", min=0.2, max=10, step=10,
+        default=1, update=ventcanalupdate)
 
     # 耳膜附件      耳膜附件类型    偏移
     bpy.types.Scene.erMoFuJianOffset = bpy.props.FloatProperty(
@@ -593,7 +595,6 @@ def ChangeMouldType(self, context):
         if enum == "OP1":
             print("软耳模")
             success = apply_soft_eardrum_template()
-            convert_to_mesh('BottomRingBorderR',0.3)
             bpy.context.scene.neiBianJiXian = False
         if enum == "OP2":
             print("硬耳膜")
@@ -602,7 +603,6 @@ def ChangeMouldType(self, context):
         if enum == "OP4":
             print("框架式耳膜")
             apply_frame_style_eardrum_template()
-            convert_to_mesh('HoleBorderCurveR', 0.18)
             bpy.context.scene.neiBianJiXian = True
         if enum == "OP5":
             print("常规外壳")
@@ -756,10 +756,20 @@ def soundcanalupdate(self, context):
 
     diameter = bpy.context.scene.chuanShenGuanDaoZhiJing
     for obj in bpy.data.objects:
-        if obj.name == 'canal':
+        if obj.name == 'soundcanal':
             obj.data.bevel_depth = diameter / 2
     #更新网格数据
-    convert_canal()
+    convert_soundcanal()
+
+def ventcanalupdate(self, context):
+    bl_description = "更新通气孔的直径大小"
+
+    diameter = bpy.context.scene.tongQiGuanDaoZhiJing
+    for obj in bpy.data.objects:
+        if obj.name == 'ventcanal':
+            obj.data.bevel_depth = diameter / 2
+    #更新网格数据
+    convert_ventcanal()
     
 def register():
     My_Properties()

@@ -9,7 +9,7 @@ from .thickness_and_fill import soft_eardrum
 from .thickness_and_fill import reset_to_after_cut
 from ...utils.utils import *
 from ..frame_style_eardrum.frame_style_eardrum import recover_and_remind_border
-
+from ...tool import convert_to_mesh
 
 def apply_soft_eardrum_template():
     cut_success = True
@@ -232,6 +232,7 @@ def apply_soft_eardrum_template():
     try:
         normal_projection_to_darw_cut_plane(origin_highest_vert, border_vert_co_and_normal)
         soft_eardrum()
+        convert_to_mesh('BottomRingBorderR', 'meshBottomRingBorderR', 0.3)
     except:
         cut_success = False
 

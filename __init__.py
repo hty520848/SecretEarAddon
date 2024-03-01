@@ -52,6 +52,7 @@ if "bpy" in locals():
          "handle",
          "support",
          "sound_canal"
+         "vent_canal"
     ]
     #reload()函数重新载入模块，调试时加载的模块发生改变时，
     for module in reloadable_modules:
@@ -70,7 +71,8 @@ from . import  (
                 label,
                 handle,
                 support,
-                sound_canal
+                sound_canal,
+                vent_canal
                 )
 from .create_mould.soft_eardrum import thickness_and_fill
 from .create_mould import point
@@ -87,6 +89,7 @@ def register():
     thickness_and_fill.register()
     point.register()
     sound_canal.register()
+    vent_canal.register()
 
 def unregister():
     ui.unregister()
@@ -100,6 +103,7 @@ def unregister():
     thickness_and_fill.unregister()
     point.unregister()
     sound_canal.unregister()
+    vent_canal.unregister()
 
 if __name__ == "__main__":
     register()

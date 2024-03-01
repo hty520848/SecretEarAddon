@@ -12,7 +12,7 @@ prev_on_object_old = False
 prev_on_object_now = False
 number = 0  #记录管道控制点点的个数
 object_dic = { }  #记录当前圆球以及对应控制点
-soundcanal_data = [ ] #记录当前控制点的坐标
+ventcanal_data = [ ] #记录当前控制点的坐标
 
 def initialTransparency():
     mat = newShader("Transparency")  # 创建材质
@@ -53,7 +53,7 @@ def on_which_shpere(context, event):
     
     for key in object_dic:
         active_obj = bpy.data.objects[key]
-        object_index = int(key.replace('soundcanalsphere',''))
+        object_index = int(key.replace('ventcanalsphere',''))
 
         if context.area:
             context.area.tag_redraw()
@@ -161,7 +161,7 @@ def is_changed_old(context, event):
     
 def is_changed_now(context, event):
     ''' 创建圆球后鼠标位置的判断 '''
-    curr_on_object_now = is_mouse_on_object('meshsoundcanal',context, event)  # 当前鼠标在哪个物体上
+    curr_on_object_now = is_mouse_on_object('meshventcanal',context, event)  # 当前鼠标在哪个物体上
     global prev_on_object_now  # 之前鼠标在那个物体上
     if (curr_on_object_now != prev_on_object_now):
         prev_on_object_now = curr_on_object_now
@@ -237,7 +237,7 @@ def select_nearest_point(co):
     :return: 最近两个点的坐标以及要插入的下标
     '''
     # 获取当前选择的曲线对象
-    curve_obj = bpy.data.objects['soundcanal']
+    curve_obj = bpy.data.objects['ventcanal']
     # 获取曲线的数据
     curve_data = curve_obj.data
     # 遍历曲线的所有点
@@ -259,7 +259,7 @@ def select_nearest_point(co):
             second_min_distance = distance
             second_nearest_index = point_index
     insert_index = max(nearest_index,second_nearest_index) 
-    curve_object = bpy.data.objects['soundcanal']
+    curve_object = bpy.data.objects['ventcanal']
     curve_data = curve_object.data
     min_co = Vector(curve_data.splines[0].points[nearest_index].co[0:3])
     secondmin_co = Vector(curve_data.splines[0].points[second_nearest_index].co[0:3])
@@ -279,8 +279,8 @@ def select_nearest_point(co):
 def copy_curve():
     ''' 复制曲线数据 '''
     # 选择要复制数据的源曲线对象
-    source_curve = bpy.data.objects['soundcanal']
-    target_curve = new_curve('meshsoundcanal')
+    source_curve = bpy.data.objects['ventcanal']
+    target_curve = new_curve('meshventcanal')
     # 复制源曲线的数据到新曲线
     target_curve.data.splines.clear()
     for spline in source_curve.data.splines:
@@ -293,18 +293,18 @@ def copy_curve():
         for i, point in enumerate(spline.points):
             new_spline.points[i].co = point.co
 
-def convert_soundcanal():
-    if(bpy.data.objects.get('meshsoundcanal')):
-        bpy.data.objects.remove(bpy.data.objects['meshsoundcanal'], do_unlink=True)  # 删除原有网格
+def convert_ventcanal():
+    if(bpy.data.objects.get('meshventcanal')):
+        bpy.data.objects.remove(bpy.data.objects['meshventcanal'], do_unlink=True)  # 删除原有网格
     copy_curve()
-    duplicate_obj = bpy.data.objects['meshsoundcanal']
+    duplicate_obj = bpy.data.objects['meshventcanal']
     bpy.context.view_layer.objects.active = duplicate_obj
     bpy.ops.object.select_all(action='DESELECT')
     duplicate_obj.select_set(state=True)
     # while(bpy.context.active_object.modifiers):
     #     modifer_name = bpy.context.active_object.modifiers[0].name
     #     bpy.ops.object.modifier_apply(modifier = modifer_name)
-    bpy.context.active_object.data.bevel_depth = bpy.context.scene.chuanShenGuanDaoZhiJing / 2 # 设置曲线倒角深度
+    bpy.context.active_object.data.bevel_depth = bpy.context.scene.tongQiGuanDaoZhiJing / 2  # 设置曲线倒角深度
     bpy.context.active_object.data.bevel_resolution = 16
     bpy.context.active_object.data.use_fill_caps = True # 封盖
     bpy.ops.object.convert(target='MESH')  # 转化为网格
@@ -321,8 +321,8 @@ def add_sphere(co,index):
     global number
     number += 1
     # 创建一个新的网格
-    mesh = bpy.data.meshes.new("soundcanalsphere")
-    name = 'soundcanalsphere' + str(number)
+    mesh = bpy.data.meshes.new("ventcanalsphere")
+    name = 'ventcanalsphere' + str(number)
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.collection.objects.link(obj)
     moveToRight(obj)
@@ -354,17 +354,17 @@ def add_sphere(co,index):
     obj.location = co  # 指定的位置坐标
     hooktoobject(index) # 绑定到指定下标
 
-class TEST_OT_addsoundcanal(bpy.types.Operator):
+class TEST_OT_addventcanal(bpy.types.Operator):
 
-    bl_idname = "object.addsoundcanal"
-    bl_label = "addsoundcanal"
+    bl_idname = "object.addventcanal"
+    bl_label = "addventcanal"
     bl_description = "双击添加管道控制点"
 
     def excute(self, context, event):
         
         global number
         name = '右耳'
-        mesh_name = 'meshsoundcanal'
+        mesh_name = 'meshventcanal'
 
         if number == 0 :  # 如果number等于0，初始化
             co = cal_co(name, context, event)
@@ -376,7 +376,7 @@ class TEST_OT_addsoundcanal(bpy.types.Operator):
             bpy.data.objects['右耳'].data.materials.clear()  #清除材质
             bpy.data.objects['右耳'].data.materials.append(bpy.data.materials["Transparency"])
             bpy.ops.object.select_all(action='DESELECT')
-            # bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
+            # bpy.ops.object.ventcanalqiehuan('INVOKE_DEFAULT')
 
         else: # 如果numberd大于1，双击添加控制点 
             co = cal_co(mesh_name, context, event)
@@ -391,17 +391,17 @@ class TEST_OT_addsoundcanal(bpy.types.Operator):
         self.excute(context, event)
         return {'FINISHED'}
     
-class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
+class TEST_OT_ventcanalqiehuan(bpy.types.Operator):
 
-    bl_idname = "object.soundcanalqiehuan"
-    bl_label = "soundcanalqiehuan"
+    bl_idname = "object.ventcanalqiehuan"
+    bl_label = "ventcanalqiehuan"
     bl_description = "鼠标行为切换"
 
     __timer = None
     
     def invoke(self, context, event): #初始化
-        print('soundcanalqiehuan invoke')
-        TEST_OT_soundcanalqiehuan.__timer = context.window_manager.event_timer_add(0.5, window=context.window)
+        print('ventcanalqiehuan invoke')
+        TEST_OT_ventcanalqiehuan.__timer = context.window_manager.event_timer_add(0.5, window=context.window)
         context.window_manager.modal_handler_add(self)
         bpy.ops.wm.tool_set_by_id(name="builtin.select")
         bpy.context.scene.var = 23
@@ -410,10 +410,10 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
     def modal(self, context, event):
         global object_dic
         if bpy.context.scene.var != 23:
-            context.window_manager.event_timer_remove(TEST_OT_soundcanalqiehuan.__timer)
-            TEST_OT_soundcanalqiehuan.__timer = None
+            context.window_manager.event_timer_remove(TEST_OT_ventcanalqiehuan.__timer)
+            TEST_OT_ventcanalqiehuan.__timer = None
             bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-            print('soundcanalqiehuan finish')
+            print('ventcanalqiehuan finish')
             return {'FINISHED'}
 
         if context.area:
@@ -429,34 +429,34 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
                     bpy.context.scene.tool_settings.use_snap = True
                 else:
                     bpy.context.scene.tool_settings.use_snap = False
-                bpy.context.view_layer.objects.active = bpy.data.objects['soundcanalsphere' + str(sphere_number)]
+                bpy.context.view_layer.objects.active = bpy.data.objects['ventcanalsphere' + str(sphere_number)]
                 obj = context.active_object
-                if re.match('soundcanalsphere', obj.name)!= None:
-                    flag = save_soundcanal_info(obj.location)
+                if re.match('ventcanalsphere', obj.name)!= None:
+                    flag = save_ventcanal_info(obj.location)
                     if flag:
-                        sphere_name = 'soundcanalsphere' + str(sphere_number)
+                        sphere_name = 'ventcanalsphere' + str(sphere_number)
                         index = int(object_dic[sphere_name])
-                        bpy.data.objects['soundcanal'].data.splines[0].points[index].co[0:3] = bpy.data.objects[sphere_name].location
-                        bpy.data.objects['soundcanal'].data.splines[0].points[index].co[3] = 1
-                        convert_soundcanal()
+                        bpy.data.objects['ventcanal'].data.splines[0].points[index].co[0:3] = bpy.data.objects[sphere_name].location
+                        bpy.data.objects['ventcanal'].data.splines[0].points[index].co[3] = 1
+                        convert_ventcanal()
                 return {'PASS_THROUGH'}
 
-            if(cal_co('meshsoundcanal', context, event) == -1 and is_changed_now(context,event) == True):
+            if(cal_co('meshventcanal', context, event) == -1 and is_changed_now(context,event) == True):
                 if sphere_number == 0:
-                    bpy.data.objects['meshsoundcanal'].data.materials.clear()
-                    bpy.data.objects['meshsoundcanal'].data.materials.append(bpy.data.materials["grey"])
+                    bpy.data.objects['meshventcanal'].data.materials.clear()
+                    bpy.data.objects['meshventcanal'].data.materials.append(bpy.data.materials["grey"])
                     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
-            elif cal_co('meshsoundcanal', context, event) != -1:
+            elif cal_co('meshventcanal', context, event) != -1:
                 if is_changed_now(context,event) == True:
-                    bpy.data.objects['meshsoundcanal'].data.materials.clear()
-                    bpy.data.objects['meshsoundcanal'].data.materials.append(bpy.data.materials["grey2"])
+                    bpy.data.objects['meshventcanal'].data.materials.clear()
+                    bpy.data.objects['meshventcanal'].data.materials.append(bpy.data.materials["grey2"])
                 
                 if(sphere_number != 0 and is_changed(context,event) == True):
                     bpy.ops.wm.tool_set_by_id(name="builtin.select")
 
                 elif(sphere_number == 0 and is_changed(context,event) == True):
-                    bpy.ops.wm.tool_set_by_id(name="my_tool.addsoundcanal2")
+                    bpy.ops.wm.tool_set_by_id(name="my_tool.addventcanal2")
             
         else:
             name = '右耳'
@@ -464,12 +464,12 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             else:
                 if is_changed_old(context,event) == True:
-                    bpy.ops.wm.tool_set_by_id(name="my_tool.addsoundcanal2")
+                    bpy.ops.wm.tool_set_by_id(name="my_tool.addventcanal2")
 
         return {'PASS_THROUGH'}
 
-class TEST_OT_finishsoundcanal(bpy.types.Operator):
-    bl_idname = "object.finishsoundcanal"
+class TEST_OT_finishventcanal(bpy.types.Operator):
+    bl_idname = "object.finishventcanal"
     bl_label = "完成操作"
     bl_description = "点击按钮完成管道制作"
 
@@ -480,11 +480,11 @@ class TEST_OT_finishsoundcanal(bpy.types.Operator):
         return {'FINISHED'}
 
     def excute(self, context, event):
-        submit_soundcanal()
+        submit_ventcanal()
         
 
-class TEST_OT_resetsoundcanal(bpy.types.Operator):
-    bl_idname = "object.resetsoundcanal"
+class TEST_OT_resetventcanal(bpy.types.Operator):
+    bl_idname = "object.resetventcanal"
     bl_label = "重置操作"
     bl_description = "点击按钮重置管道制作"
 
@@ -497,15 +497,15 @@ class TEST_OT_resetsoundcanal(bpy.types.Operator):
     def excute(self, context, event):
         # 删除多余的物体
         global object_dic
-        need_to_delete_model_name_list = ['meshsoundcanal','soundcanal']
+        need_to_delete_model_name_list = ['meshventcanal','ventcanal']
         for key in object_dic:
             bpy.data.objects.remove(bpy.data.objects[key], do_unlink=True)
         delete_useless_object(need_to_delete_model_name_list)
         object_dic.clear()
-        # 将SoundCanalReset复制并替代当前操作模型
+        # 将VentCanalReset复制并替代当前操作模型
         oriname = "右耳"  # TODO    右耳最终需要替换为导入时的文件名
         ori_obj = bpy.data.objects.get(oriname)
-        copyname = "右耳SoundCanalReset"
+        copyname = "右耳VentCanalReset"
         copy_obj = bpy.data.objects.get(copyname)
         if (ori_obj != None and copy_obj != None):
             bpy.data.objects.remove(ori_obj, do_unlink=True)
@@ -529,7 +529,7 @@ def new_curve(curve_name):
     bpy.context.collection.objects.link(obj)
     bpy.context.view_layer.objects.active = obj
     moveToRight(obj)
-    obj.data.bevel_depth = bpy.context.scene.chuanShenGuanDaoZhiJing / 2   #管道孔径
+    obj.data.bevel_depth = bpy.context.scene.tongQiGuanDaoZhiJing / 2   #管道孔径
     obj.data.bevel_resolution = 16
     obj.data.use_fill_caps = True # 封盖
     return obj
@@ -537,7 +537,7 @@ def new_curve(curve_name):
 def generate_canal(co):
     ''' 初始化管道 '''
     global number
-    obj = new_curve('soundcanal')
+    obj = new_curve('ventcanal')
     obj.data.materials.append(bpy.data.materials["grey"])
     # 添加一个曲线样条
     spline = obj.data.splines.new(type = 'NURBS')
@@ -575,7 +575,7 @@ def add_canal(min_co,secondmin_co,co,insert_index):
 def add_point(index,co):
     global number
     global object_dic
-    curve_object = bpy.data.objects['soundcanal']
+    curve_object = bpy.data.objects['ventcanal']
     curve_data = curve_object.data
     new_curve_data = new_curve('newcurve').data
     # 在曲线上插入新的控制点
@@ -598,8 +598,8 @@ def add_point(index,co):
             spline.points[i+1].co = point.co
     
     bpy.data.objects.remove(curve_object, do_unlink=True)
-    bpy.data.objects['newcurve'].name = 'soundcanal'
-    bpy.data.objects['soundcanal'].hide_set(True)
+    bpy.data.objects['newcurve'].name = 'ventcanal'
+    bpy.data.objects['ventcanal'].hide_set(True)
 
     for key in object_dic:
         if object_dic[key] >= index:
@@ -609,7 +609,7 @@ def add_point(index,co):
 def finish_canal(co):
     ''' 完成管道的初始化 '''
     global number
-    curve_object = bpy.data.objects['soundcanal']
+    curve_object = bpy.data.objects['ventcanal']
     curve_data = curve_object.data
     curve_data.splines[0].points.add(count = 1)
     curve_data.splines[0].points[number].co[0:3] = co
@@ -628,43 +628,43 @@ def finish_canal(co):
     add_sphere(co,2) 
     temp_co = curve_data.splines[0].points[1].co[0:3]
     add_sphere(temp_co,1)
-    convert_soundcanal()
-    save_soundcanal_info(temp_co)
+    convert_ventcanal()
+    save_ventcanal_info(temp_co)
 
 def hooktoobject(index):
     ''' 建立指定下标的控制点到圆球的字典 '''
     global number
     global object_dic
-    sphere_name = 'soundcanalsphere' + str(number)
+    sphere_name = 'ventcanalsphere' + str(number)
     object_dic.update({sphere_name :index})
 
-def save_soundcanal_info(co):
-    global soundcanal_data
+def save_ventcanal_info(co):
+    global ventcanal_data
     cox = round(co[0], 3)
     coy = round(co[1], 3)
     coz = round(co[2], 3)
-    if (cox not in soundcanal_data) or (coy not in soundcanal_data) or (coz not in soundcanal_data):
+    if (cox not in ventcanal_data) or (coy not in ventcanal_data) or (coz not in ventcanal_data):
         for object in bpy.data.objects:
-            if object.name == 'soundcanal':
-                soundcanal_data = []
+            if object.name == 'ventcanal':
+                ventcanal_data = []
                 curve_data = object.data
                 for point in curve_data.splines[0].points:
-                    soundcanal_data.append(round(point.co[0], 3))
-                    soundcanal_data.append(round(point.co[1], 3))
-                    soundcanal_data.append(round(point.co[2], 3))
+                    ventcanal_data.append(round(point.co[0], 3))
+                    ventcanal_data.append(round(point.co[1], 3))
+                    ventcanal_data.append(round(point.co[2], 3))
         return True
     return False
 
-def initial_soundcanal():
+def initial_ventcanal():
     #初始化
     global object_dic
-    global soundcanal_data
+    global ventcanal_data
     if len(object_dic) > 2:    #存在已保存的圆球位置,复原原有的管道
         initialTransparency()
         newColor('red', 1, 0, 0, 1, 0.8)
         newColor('grey', 0.8, 0.8, 0.8, 0, 1)
         newColor('grey2', 0.8, 0.8, 0.8, 1, 0.8)
-        obj = new_curve('soundcanal')
+        obj = new_curve('ventcanal')
         obj.data.materials.append(bpy.data.materials["grey"])
 
         # 添加一个曲线样条
@@ -673,11 +673,11 @@ def initial_soundcanal():
         spline.use_smooth = True
         spline.points.add(count = len(object_dic) - 1)
         for i, point in enumerate(spline.points):
-            point.co = (soundcanal_data[3*i],soundcanal_data[3*i+1],soundcanal_data[3*i+2],1)
+            point.co = (ventcanal_data[3*i],ventcanal_data[3*i+1],ventcanal_data[3*i+2],1)
         
         # 生成圆球
         for key in object_dic:
-            mesh = bpy.data.meshes.new("soundcanalsphere")
+            mesh = bpy.data.meshes.new("ventcanalsphere")
             obj = bpy.data.objects.new(key, mesh)
             bpy.context.collection.objects.link(obj)
             moveToRight(obj)
@@ -710,23 +710,23 @@ def initial_soundcanal():
 
         bpy.data.objects['右耳'].data.materials.append(bpy.data.materials["Transparency"])
         bpy.data.objects['右耳'].hide_select = True
-        bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
+        bpy.ops.object.ventcanalqiehuan('INVOKE_DEFAULT')
         
     else: #不存在已保存的圆球位置
         pass
 
-def submit_soundcanal():
+def submit_ventcanal():
     # 应用修改器，删除多余的物体
     global object_dic
     if len(object_dic) >0 :
         adjustpoint()
         bpy.context.view_layer.objects.active = bpy.data.objects['右耳']
         bool_modifier = bpy.context.active_object.modifiers.new(
-        name="Soundcanal Boolean Modifier", type='BOOLEAN')
+        name="Ventcanal Boolean Modifier", type='BOOLEAN')
         bool_modifier.operation = 'DIFFERENCE'
-        bool_modifier.object = bpy.data.objects['meshsoundcanal']
-        bpy.ops.object.modifier_apply(modifier="Soundcanal Boolean Modifier", single_user=True)
-        need_to_delete_model_name_list = ['meshsoundcanal','soundcanal']
+        bool_modifier.object = bpy.data.objects['meshventcanal']
+        bpy.ops.object.modifier_apply(modifier="Ventcanal Boolean Modifier", single_user=True)
+        need_to_delete_model_name_list = ['meshventcanal','ventcanal']
         for key in object_dic:
             need_to_delete_model_name_list.append(key)
         delete_useless_object(need_to_delete_model_name_list)
@@ -736,7 +736,7 @@ def submit_soundcanal():
         bpy.context.active_object.data.use_auto_smooth = True
 
 def adjustpoint():
-    curve_object = bpy.data.objects['soundcanal']
+    curve_object = bpy.data.objects['ventcanal']
     curve_data = curve_object.data
     last_index = len(curve_data.splines[0].points) - 1
     first_point = curve_data.splines[0].points[0]
@@ -748,11 +748,11 @@ def adjustpoint():
     normal = Vector(last_point.co[0:3]) - Vector(curve_data.splines[0].points[last_index - 1].co[0:3])  
     last_point.co = (last_point.co[0] + normal[0] * step, last_point.co[1] + normal[1] * step,
                       last_point.co[2] + normal[2] * step, 1)
-    convert_soundcanal()
+    convert_ventcanal()
 
 
 def checkposition():
-    object = bpy.data.objects['meshsoundcanal']
+    object = bpy.data.objects['meshventcanal']
     target_object = bpy.data.objects['右耳']
     bm = bmesh.new()
     bm.from_mesh(object.data) #获取网格数据
@@ -773,31 +773,31 @@ def checkposition():
     bm.to_mesh(object.data)
     bm.free()
            
-def frontToSoundCanal():
+def frontToVentCanal():
     all_objs = bpy.data.objects
     for selected_obj in all_objs:
-        if (selected_obj.name == "右耳SoundCanalReset"):
+        if (selected_obj.name == "右耳VentCanalReset"):
             bpy.data.objects.remove(selected_obj, do_unlink=True)
     name = "右耳"  # TODO    根据导入文件名称更改
     obj = bpy.data.objects[name]
     duplicate_obj = obj.copy()
     duplicate_obj.data = obj.data.copy()
     duplicate_obj.animation_data_clear()
-    duplicate_obj.name = name + "SoundCanalReset"
+    duplicate_obj.name = name + "VentCanalReset"
     bpy.context.collection.objects.link(duplicate_obj)
     duplicate_obj.hide_set(True)
 
-    initial_soundcanal()
+    initial_ventcanal()
 
-def frontFromSoundCanal():
-    save_soundcanal_info()
-    need_to_delete_model_name_list = ['meshsoundcanal','soundcanal']
+def frontFromVentCanal():
+    save_ventcanal_info()
+    need_to_delete_model_name_list = ['meshventcanal','ventcanal']
     for key in object_dic:
         need_to_delete_model_name_list.append(key)
     delete_useless_object(need_to_delete_model_name_list)
     name = "右耳"  # TODO    根据导入文件名称更改
     obj = bpy.data.objects[name]
-    resetname = name + "SoundCanalReset"
+    resetname = name + "VentCanalReset"
     ori_obj = bpy.data.objects[resetname]
     bpy.data.objects.remove(obj, do_unlink=True)
     duplicate_obj = ori_obj.copy()
@@ -811,19 +811,19 @@ def frontFromSoundCanal():
 
     all_objs = bpy.data.objects
     for selected_obj in all_objs:
-        if (selected_obj.name == "右耳SoundCanalReset" or selected_obj.name == "右耳SoundCanalLast"):
+        if (selected_obj.name == "右耳VentCanalReset" or selected_obj.name == "右耳VentCanalLast"):
             bpy.data.objects.remove(selected_obj, do_unlink=True)
 
-def backToSoundCanal():
-    exist_SoundCanalReset = False
+def backToVentCanal():
+    exist_VentCanalReset = False
     all_objs = bpy.data.objects
     for selected_obj in all_objs:
-        if (selected_obj.name == "右耳SoundCanalReset"):
-            exist_SoundCanalReset = True
-    if (exist_SoundCanalReset):
+        if (selected_obj.name == "右耳VentCanalReset"):
+            exist_VentCanalReset = True
+    if (exist_VentCanalReset):
         name = "右耳"  # TODO    根据导入文件名称更改
         obj = bpy.data.objects[name]
-        resetname = name + "SoundCanalReset"
+        resetname = name + "VentCanalReset"
         ori_obj = bpy.data.objects[resetname]
         bpy.data.objects.remove(obj, do_unlink=True)
         duplicate_obj = ori_obj.copy()
@@ -835,17 +835,27 @@ def backToSoundCanal():
         duplicate_obj.select_set(True)
         bpy.context.view_layer.objects.active = duplicate_obj
 
-        initial_soundcanal()
+        initial_ventcanal()
     else:
         name = "右耳"  # TODO    根据导入文件名称更改
         obj = bpy.data.objects[name]
-        lastname = "右耳SoundCanalLast"
+        lastname = "右耳VentCanalLast"
         last_obj = bpy.data.objects.get(lastname)
         if (last_obj != None):
             ori_obj = last_obj.copy()
             ori_obj.data = last_obj.data.copy()
             ori_obj.animation_data_clear()
-            ori_obj.name = name + "SoundCanalReset"
+            ori_obj.name = name + "VentCanalReset"
+            bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
+            ori_obj.hide_set(True)
+        elif (bpy.data.objects.get("右耳SoundCanalLast") != None):
+            lastname = "右耳SoundCanalLast"
+            last_obj = bpy.data.objects.get(lastname)
+            ori_obj = last_obj.copy()
+            ori_obj.data = last_obj.data.copy()
+            ori_obj.animation_data_clear()
+            ori_obj.name = name + "VentCanalReset"
             bpy.context.collection.objects.link(ori_obj)
             moveToRight(ori_obj)
             ori_obj.hide_set(True)
@@ -855,7 +865,7 @@ def backToSoundCanal():
             ori_obj = last_obj.copy()
             ori_obj.data = last_obj.data.copy()
             ori_obj.animation_data_clear()
-            ori_obj.name = name + "SoundCanalReset"
+            ori_obj.name = name + "VentCanalReset"
             bpy.context.collection.objects.link(ori_obj)
             moveToRight(ori_obj)
             ori_obj.hide_set(True)
@@ -865,7 +875,7 @@ def backToSoundCanal():
             ori_obj = last_obj.copy()
             ori_obj.data = last_obj.data.copy()
             ori_obj.animation_data_clear()
-            ori_obj.name = name + "SoundCanalReset"
+            ori_obj.name = name + "VentCanalReset"
             bpy.context.collection.objects.link(ori_obj)
             moveToRight(ori_obj)
             ori_obj.hide_set(True)
@@ -875,7 +885,7 @@ def backToSoundCanal():
             ori_obj = last_obj.copy()
             ori_obj.data = last_obj.data.copy()
             ori_obj.animation_data_clear()
-            ori_obj.name = name + "SoundCanalReset"
+            ori_obj.name = name + "VentCanalReset"
             bpy.context.collection.objects.link(ori_obj)
             moveToRight(ori_obj)
             ori_obj.hide_set(True)
@@ -885,7 +895,7 @@ def backToSoundCanal():
             ori_obj = last_obj.copy()
             ori_obj.data = last_obj.data.copy()
             ori_obj.animation_data_clear()
-            ori_obj.name = name + "SoundCanalReset"
+            ori_obj.name = name + "VentCanalReset"
             bpy.context.collection.objects.link(ori_obj)
             moveToRight(ori_obj)
             ori_obj.hide_set(True)
@@ -899,98 +909,98 @@ def backToSoundCanal():
         duplicate_obj.select_set(True)
         bpy.context.view_layer.objects.active = duplicate_obj
 
-        initial_soundcanal()
+        initial_ventcanal()
 
-def backFromSoundCanal():
-    save_soundcanal_info()
-    submit_soundcanal()
+def backFromVentCanal():
+    save_ventcanal_info()
+    submit_ventcanal()
     all_objs = bpy.data.objects
     for selected_obj in all_objs:
-        if (selected_obj.name == "右耳SoundCanalLast"):
+        if (selected_obj.name == "右耳VentCanalLast"):
             bpy.data.objects.remove(selected_obj, do_unlink=True)
     name = "右耳"  # TODO    根据导入文件名称更改
     obj = bpy.data.objects[name]
     duplicate_obj = obj.copy()
     duplicate_obj.data = obj.data.copy()
     duplicate_obj.animation_data_clear()
-    duplicate_obj.name = name + "SoundCanalLast"
+    duplicate_obj.name = name + "VentCanalLast"
     bpy.context.collection.objects.link(duplicate_obj)
     duplicate_obj.hide_set(True)
 
-class addsoundcanal_MyTool(bpy.types.WorkSpaceTool):
+class addventcanal_MyTool(bpy.types.WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
     bl_context_mode = 'OBJECT'
 
     # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.addsoundcanal"
-    bl_label = "传声孔双击添加控制点"
+    bl_idname = "my_tool.addventcanal"
+    bl_label = "通气孔双击添加控制点"
     bl_description = (
         "使用鼠标双击添加控制点"
     )
     bl_icon = "ops.curves.sculpt_pinch"
     bl_widget = None
     bl_keymap = (
-        ("object.soundcanalqiehuan", {"type": 'MOUSEMOVE', "value": 'ANY'},
+        ("object.ventcanalqiehuan", {"type": 'MOUSEMOVE', "value": 'ANY'},
          {}),
     )
 
     def draw_settings(context, layout, tool):
         pass
 
-class addsoundcanal_MyTool2(bpy.types.WorkSpaceTool):
+class addventcanal_MyTool2(bpy.types.WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
     bl_context_mode = 'OBJECT'
 
     # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.addsoundcanal2"
-    bl_label = "传声孔添加控制点操作"
+    bl_idname = "my_tool.addventcanal2"
+    bl_label = "通气孔添加控制点操作"
     bl_description = (
         "实现鼠标双击添加控制点操作"
     )
     bl_icon = "ops.curves.sculpt_pinch"
     bl_widget = None
     bl_keymap = (
-        ("object.addsoundcanal", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'},
+        ("object.addventcanal", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'},
          {}),
     )
 
     def draw_settings(context, layout, tool):
         pass
 
-class finishsoundcanal_MyTool(bpy.types.WorkSpaceTool):
+class finishventcanal_MyTool(bpy.types.WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
     bl_context_mode = 'OBJECT'
 
     # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.finishsoundcanal"
-    bl_label = "传声孔完成"
+    bl_idname = "my_tool.finishventcanal"
+    bl_label = "通气孔完成"
     bl_description = (
         "完成管道的绘制"
     )
     bl_icon = "ops.curves.sculpt_puff" 
     bl_widget = None
     bl_keymap = (
-        ("object.finishsoundcanal", {"type": 'MOUSEMOVE', "value": 'ANY'},
+        ("object.finishventcanal", {"type": 'MOUSEMOVE', "value": 'ANY'},
          {}),
     )
 
     def draw_settings(context, layout, tool):
         pass
 
-class resetsoundcanal_MyTool(bpy.types.WorkSpaceTool):
+class resetventcanal_MyTool(bpy.types.WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
     bl_context_mode = 'OBJECT'
 
     # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.resetsoundcanal"
-    bl_label = "传声孔重置"
+    bl_idname = "my_tool.resetventcanal"
+    bl_label = "通气孔重置"
     bl_description = (
         "重置管道的绘制"
     )
     bl_icon = "ops.curves.sculpt_slide"
     bl_widget = None
     bl_keymap = (
-        ("object.resetsoundcanal", {"type": 'MOUSEMOVE', "value": 'ANY'},
+        ("object.resetventcanal", {"type": 'MOUSEMOVE', "value": 'ANY'},
          {}),
     )
 
@@ -998,29 +1008,29 @@ class resetsoundcanal_MyTool(bpy.types.WorkSpaceTool):
         pass
 
 _classes = [
-    TEST_OT_addsoundcanal,
-    TEST_OT_soundcanalqiehuan,
-    TEST_OT_finishsoundcanal,
-    TEST_OT_resetsoundcanal
+    TEST_OT_addventcanal,
+    TEST_OT_ventcanalqiehuan,
+    TEST_OT_finishventcanal,
+    TEST_OT_resetventcanal
 ]
 
 
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
-    bpy.utils.register_tool(addsoundcanal_MyTool, separator=True, group=False)
-    bpy.utils.register_tool(resetsoundcanal_MyTool, separator=True, group=False,
-                            after={addsoundcanal_MyTool.bl_idname})
-    bpy.utils.register_tool(finishsoundcanal_MyTool, separator=True, group=False,
-                            after={resetsoundcanal_MyTool.bl_idname})
+    bpy.utils.register_tool(addventcanal_MyTool, separator=True, group=False)
+    bpy.utils.register_tool(resetventcanal_MyTool, separator=True, group=False,
+                            after={addventcanal_MyTool.bl_idname})
+    bpy.utils.register_tool(finishventcanal_MyTool, separator=True, group=False,
+                            after={resetventcanal_MyTool.bl_idname})
     
-    bpy.utils.register_tool(addsoundcanal_MyTool2, separator=True, group=False)
+    bpy.utils.register_tool(addventcanal_MyTool2, separator=True, group=False)
     
 def unregister():
     for cls in _classes:
         bpy.utils.unregister_class(cls)
-    bpy.utils.unregister_tool(addsoundcanal_MyTool)
-    bpy.utils.unregister_tool(resetsoundcanal_MyTool)
-    bpy.utils.unregister_tool(finishsoundcanal_MyTool)
+    bpy.utils.unregister_tool(addventcanal_MyTool)
+    bpy.utils.unregister_tool(resetventcanal_MyTool)
+    bpy.utils.unregister_tool(finishventcanal_MyTool)
 
-    bpy.utils.unregister_tool(addsoundcanal_MyTool2)
+    bpy.utils.unregister_tool(addventcanal_MyTool2)

@@ -148,29 +148,53 @@ def getOverride2():
 
 # 新建材质节点，模型颜色相关
 def newMaterial(id):
-        mat = bpy.data.materials.get(id)
-        if mat is None:
-            mat = bpy.data.materials.new(name=id)
-        mat.use_nodes = True
-        if mat.node_tree:
-            mat.node_tree.links.clear()
-            mat.node_tree.nodes.clear()
-        return mat
+    mat = bpy.data.materials.get(id)
+    if mat is None:
+        mat = bpy.data.materials.new(name=id)
+    mat.use_nodes = True
+    if mat.node_tree:
+        mat.node_tree.links.clear()
+        mat.node_tree.nodes.clear()
+    return mat
 
 
-
+# 新建与顶点颜色相同的材质
 def newShader(id):
-        mat = newMaterial(id)
-        nodes = mat.node_tree.nodes
-        links = mat.node_tree.links
-        output = nodes.new(type='ShaderNodeOutputMaterial')
-        shader = nodes.new(type='ShaderNodeBsdfPrincipled')
-        color = nodes.new(type="ShaderNodeVertexColor")
-        links.new(color.outputs[0], nodes["Principled BSDF"].inputs[0])
-        links.new(shader.outputs[0], output.inputs[0])
-        return mat
+    mat = newMaterial(id)
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    output = nodes.new(type='ShaderNodeOutputMaterial')
+    shader = nodes.new(type='ShaderNodeBsdfPrincipled')
+    color = nodes.new(type="ShaderNodeVertexColor")
+    links.new(color.outputs[0], nodes["Principled BSDF"].inputs[0])
+    links.new(shader.outputs[0], output.inputs[0])
+    return mat
 
+# 新建与RGB颜色相同的材质
+def newColor(id, r, g, b, is_transparency, transparency_degree):
+    mat = newMaterial(id)
+    mat.use_backface_culling = True
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    output = nodes.new(type='ShaderNodeOutputMaterial')
+    shader = nodes.new(type='ShaderNodeBsdfPrincipled')
+    shader.inputs[0].default_value = (r, g, b, 1)
+    links.new(shader.outputs[0], output.inputs[0])
+    if is_transparency:
+        mat.blend_method = "BLEND"
+        shader.inputs[21].default_value = transparency_degree
+    return mat
 
+#为指定物体添加材质
+def appendColor(object_name, material_name):
+    obj = bpy.data.objects.get(object_name)
+    obj.data.materials.clear()
+    obj.data.materials.append(bpy.data.materials.get(material_name))
+
+def initialTransparency():
+    mat = newShader("Transparency")  # 创建材质
+    mat.blend_method = "BLEND"
+    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
 
 #根据传入的选中顶点组,将顶点组划分为边界点,内圈,外圈,并保存再对象中
 class selectArea(object):
@@ -608,15 +632,14 @@ def is_changed_stepcut(context, event):
     else:
         return False
 
-def convert_to_mesh(curve_name,depth):
+def convert_to_mesh(curve_name,mesh_name,depth):
     active_obj = bpy.data.objects[curve_name]
     duplicate_obj = active_obj.copy()
     duplicate_obj.data = active_obj.data.copy()
-    new_name =  "mesh" + active_obj.name
     for object in bpy.data.objects:
-        if object.name == new_name:
+        if object.name == mesh_name:
             bpy.data.objects.remove(object, do_unlink=True)
-    duplicate_obj.name = new_name
+    duplicate_obj.name = mesh_name
     duplicate_obj.animation_data_clear()
     # 将复制的物体加入到场景集合中
     bpy.context.collection.objects.link(duplicate_obj)
@@ -625,7 +648,7 @@ def convert_to_mesh(curve_name,depth):
     bpy.ops.object.select_all(action='DESELECT')
     duplicate_obj.select_set(state=True)
     bpy.context.object.data.bevel_depth = depth # 设置曲线倒角深度
-    bpy.ops.object.convert(target='MESH')  # 转化为网格new
+    bpy.ops.object.convert(target='MESH')  # 转化为网格
 
 def generate_cutplane():
     active_obj = bpy.data.objects['BottomRingBorderR']
@@ -674,7 +697,7 @@ def recover_and_remind_border():
     # 找到最初创建的  OriginForCreateMould 才能进行恢复
     if recover_flag:
         # 删除不需要的物体
-        need_to_delete_model_name_list = ["右耳", "HoleCutCylinderBottomR", "cutPlane", "右耳OriginForCutR",
+        need_to_delete_model_name_list = ["右耳", "cutPlane", "右耳OriginForCutR",
                                           "右耳OriginForFill", "FillPlane", "右耳ForGetFillPlane", "右耳huanqiecompare",
                                           "dragcurve"]
         for selected_obj in bpy.data.objects:
@@ -704,6 +727,51 @@ def recover_and_remind_border():
         duplicate_obj.name = cur_obj.name + "OriginForCutR"
         bpy.context.collection.objects.link(duplicate_obj)
         duplicate_obj.hide_set(True)
+        moveToRight(duplicate_obj)
+    
+def recover_to_dig():
+    '''
+    恢复到挖孔前的状态
+    '''
+    recover_flag = False
+    for obj in bpy.context.view_layer.objects:
+        if obj.name == "右耳OriginForDigHole":
+            recover_flag = True
+            break
+    # 找到最初创建的  OriginForDigHole 才能进行恢复
+    if recover_flag:
+        # 删除不需要的物体
+        need_to_delete_model_name_list = ["右耳","cutPlane", 
+                                          "右耳OriginForFill", "FillPlane", "右耳ForGetFillPlane", "右耳huanqiecompare",
+                                          "dragcurve"]
+        for selected_obj in bpy.data.objects:
+            if (selected_obj.name in need_to_delete_model_name_list):
+                bpy.data.objects.remove(selected_obj, do_unlink=True)
+            bpy.ops.outliner.orphans_purge(
+                do_local_ids=True, do_linked_ids=True, do_recursive=False)
+        # 将最开始复制出来的OriginForDigHole名称改为模型名称
+        obj.hide_set(False)
+        obj.name = "右耳"
+
+        bpy.context.view_layer.objects.active = obj
+        # 恢复完后重新复制一份
+        cur_obj = bpy.context.active_object
+        duplicate_obj = cur_obj.copy()
+        duplicate_obj.data = cur_obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = cur_obj.name + "OriginForDigHole"
+        bpy.context.collection.objects.link(duplicate_obj)
+        duplicate_obj.hide_set(True)
+        # todo 先加到右耳集合，后续调整左右耳适配
+        moveToRight(duplicate_obj)
+
+        duplicate_obj = cur_obj.copy()
+        duplicate_obj.data = cur_obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = cur_obj.name + "OriginForFill"
+        bpy.context.collection.objects.link(duplicate_obj)
+        duplicate_obj.hide_set(True)
+        moveToRight(duplicate_obj)
 
 
 def utils_re_color(target_object_name, color):
@@ -735,3 +803,11 @@ def delete_useless_object(need_to_delete_model_name_list):
             bpy.data.objects.remove(selected_obj, do_unlink=True)
         bpy.ops.outliner.orphans_purge(
             do_local_ids=True, do_linked_ids=True, do_recursive=False)
+        
+def subdivide(curve_name,subdivide_number):
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = bpy.data.objects[curve_name]
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.curve.select_all(action='SELECT')
+    bpy.ops.curve.subdivide(number_cuts=subdivide_number)  # 细分次数
+    bpy.ops.object.mode_set(mode='OBJECT')
