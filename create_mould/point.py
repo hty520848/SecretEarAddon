@@ -5,11 +5,11 @@ from bpy_extras import view3d_utils
 from math import sqrt, fabs
 from mathutils import Vector
 from .bottom_ring import boolean_apply, cut_bottom_part
-from .dig_hole import boolean_dig,get_hole_border,get_order_border_vert
+from .dig_hole import boolean_dig, get_hole_border, get_order_border_vert
 from .soft_eardrum.thickness_and_fill import set_finish, get_fill_plane, fill
 from .soft_eardrum.soft_eardrum import soft_eardrum, get_cut_plane, plane_cut, delete_useless_part
 from .frame_style_eardrum.frame_style_eardrum import getSmoothVertexGroup, border_fill, applySmooth
-from ..tool import recover_and_remind_border, moveToRight, utils_re_color, generate_cutplane, convert_to_mesh,\
+from ..tool import recover_and_remind_border, moveToRight, utils_re_color, generate_cutplane, convert_to_mesh, \
     recover_to_dig
 import re
 
@@ -102,12 +102,12 @@ def is_changed(context, event):
         return False
 
 
-class MuJudict: #Todo :切换时需要删除物体
+class MuJudict:  # Todo :切换时需要删除物体
     ruanermolist = ['BottomRingBorderR', 0.3]
     ruanermodict = {'meshBottomRingBorderR': ruanermolist}
     yingermodict = {}
     yitidict = {}
-    kuangjialist1 = ['BottomRingBorderR', 0.4]
+    kuangjialist1 = ['BottomRingBorderR', 0.18]
     kuangjialist2 = ['HoleBorderCurve1', 0.18]
     kuangjialist3 = ['HoleBorderCurve2', 0.18]
     kuangjiadict = {'meshBottomRingBorderR': kuangjialist1, 'meshHoleBorderCurve1': kuangjialist2,
@@ -451,18 +451,18 @@ def update_cut(curve_name, mesh_name, depth):
     :param depth:曲线倒角深度
     '''
 
-    #根据选择模板进入不同的切割方式
+    # 根据选择模板进入不同的切割方式
     enum_name = bpy.context.scene.muJuNameEnum
-   
+
     if (enum_name == '软耳模'):
         set_finish(True)
         bpy.ops.object.select_all(action='DESELECT')
         recover_and_remind_border()
         generate_cutplane()  # 生成曲线
-        soft_eardrum()
-        # get_cut_plane()
-        # plane_cut()
-        # delete_useless_part()
+        # soft_eardrum()
+        get_cut_plane()
+        plane_cut()
+        delete_useless_part()
         # 复制一份右耳
         cur_obj = bpy.data.objects["右耳"]
         duplicate_obj = cur_obj.copy()
@@ -478,17 +478,17 @@ def update_cut(curve_name, mesh_name, depth):
         utils_re_color("右耳", (1, 0.319, 0.133))
         utils_re_color("右耳huanqiecompare", (1, 0.319, 0.133))
 
-        convert_to_mesh(curve_name, mesh_name, depth) #重新生成网格
+        convert_to_mesh(curve_name, mesh_name, depth)  # 重新生成网格
         set_finish(False)
 
     if (enum_name == '框架式耳膜'):
-        if(re.match('HoleBorderCurve',curve_name) != None):   #上部曲线改变
+        if (re.match('HoleBorderCurve', curve_name) != None):  # 上部曲线改变
             recover_to_dig()
             number = 0
             for obj in bpy.data.objects:
-                if re.match('HoleBorderCurve',obj.name) != None:
+                if re.match('HoleBorderCurve', obj.name) != None:
                     number += 1
-            while(number > 0):
+            while (number > 0):
                 local_curve_name = 'HoleBorderCurve' + str(number)
                 dig_border = []
                 for point in bpy.data.objects[local_curve_name].data.splines[0].points:
@@ -501,22 +501,22 @@ def update_cut(curve_name, mesh_name, depth):
                 number -= 1
 
             for obj in bpy.data.objects:
-                if re.match('HoleBorderCurve',obj.name) != None:
+                if re.match('HoleBorderCurve', obj.name) != None:
                     local_mesh_name = 'mesh' + obj.name
-                    convert_to_mesh(obj.name, local_mesh_name, depth)  #重新生成网格
+                    convert_to_mesh(obj.name, local_mesh_name, depth)  # 重新生成网格
 
             utils_re_color("右耳", (1, 0.319, 0.133))
 
-        else:   #下部曲线改变
+        else:  # 下部曲线改变
             recover_and_remind_border()
             generate_cutplane()
             soft_eardrum()
 
             number = 0
             for obj in bpy.data.objects:
-                if re.match('HoleBorderCurve',obj.name) != None:
+                if re.match('HoleBorderCurve', obj.name) != None:
                     number += 1
-            while(number > 0):
+            while (number > 0):
                 local_curve_name = 'HoleBorderCurve' + str(number)
                 dig_border = []
                 for point in bpy.data.objects[local_curve_name].data.splines[0].points:
@@ -529,12 +529,11 @@ def update_cut(curve_name, mesh_name, depth):
                 number -= 1
 
             for obj in bpy.data.objects:
-                if re.match('HoleBorderCurve',obj.name) != None:
+                if re.match('HoleBorderCurve', obj.name) != None:
                     local_mesh_name = 'mesh' + obj.name
-                    convert_to_mesh(obj.name, local_mesh_name, depth)  #重新生成网格
+                    convert_to_mesh(obj.name, local_mesh_name, depth)  # 重新生成网格
 
             utils_re_color("右耳", (1, 0.319, 0.133))
-            
 
 
 def join_object(curve_name, mesh_name, depth, index_start, index_finish):
@@ -839,7 +838,7 @@ def movecurve(co, initial_co, curve_name, index, number):
         for i in range(start_index, point_number, 1):
             if (curve_number == 0):
                 break
-            if(i - mid_index >= curve_number):
+            if (i - mid_index >= curve_number):
                 insert_index = point_number - i + mid_index
             else:
                 insert_index = i - mid_index
@@ -866,7 +865,7 @@ def get_len(start_index, finish_index, point_number):
     else:
         curve_number = int(point_number - start_index + finish_index + 1) / 2
         mid_index = (start_index + curve_number) % point_number
-        return (curve_number,mid_index)
+        return (curve_number, mid_index)
 
 
 def disfunc(x, y):
@@ -1007,7 +1006,7 @@ class TEST_OT_addcurve(bpy.types.Operator):
                         # 将曲线转换成网格，切割
                         local_curve_name = curve_obj.name
                         local_mesh_name = 'mesh' + curve_obj.name
-                        update_cut(local_curve_name,local_mesh_name,0.18)
+                        update_cut(local_curve_name, local_mesh_name, 0.18)
 
         else:
             if bpy.context.mode == 'OBJECT':  # 如果处于物体模式下，蓝线双击开始绘制
@@ -1239,7 +1238,8 @@ class TEST_OT_dragcurve(bpy.types.Operator):
         else:
             global prev_mesh_name
             _, op_cls.__mesh_name, curve_list = co_on_object(mujudict, context, event)
-            if (prev_mesh_name != op_cls.__mesh_name and op_cls.__is_modifier == False and op_cls.__is_modifier_right == False) or op_cls.__curve_name == '':
+            if (
+                    prev_mesh_name != op_cls.__mesh_name and op_cls.__is_modifier == False and op_cls.__is_modifier_right == False) or op_cls.__curve_name == '':
                 prev_mesh_name = op_cls.__mesh_name
                 op_cls.__curve_name = curve_list[0]
                 op_cls.__depth = curve_list[1]
@@ -1277,7 +1277,8 @@ class TEST_OT_dragcurve(bpy.types.Operator):
                     op_cls.__is_moving_right = False
                 return {'RUNNING_MODAL'}
             elif event.type == 'MOUSEMOVE' and op_cls.__left_mouse_down == False and op_cls.__right_mouse_down == False:  # 鼠标移动时选择不同的曲线区域
-                if (op_cls.__prev_mouse_location_x != event.mouse_region_x or op_cls.__prev_mouse_location_y != event.mouse_region_y):
+                if (
+                        op_cls.__prev_mouse_location_x != event.mouse_region_x or op_cls.__prev_mouse_location_y != event.mouse_region_y):
                     op_cls.__prev_mouse_location_x = event.mouse_region_x
                     op_cls.__prev_mouse_location_y = event.mouse_region_y
                     op_cls.__index = selectcurve(context, event, op_cls.__curve_name, op_cls.__mesh_name,
@@ -1435,7 +1436,8 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
         else:
             global prev_mesh_name
             _, op_cls.__mesh_name, curve_list = co_on_object(mujudict, context, event)
-            if (prev_mesh_name != op_cls.__mesh_name and op_cls.__is_modifier == False and op_cls.__is_modifier_right == False) or op_cls.__curve_name == '':
+            if (
+                    prev_mesh_name != op_cls.__mesh_name and op_cls.__is_modifier == False and op_cls.__is_modifier_right == False) or op_cls.__curve_name == '':
                 prev_mesh_name = op_cls.__mesh_name
                 op_cls.__curve_name = curve_list[0]
                 op_cls.__depth = curve_list[1]
@@ -1475,11 +1477,12 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
                     op_cls.__is_moving_right = False
                 return {'RUNNING_MODAL'}
             elif event.type == 'MOUSEMOVE' and op_cls.__left_mouse_down == False and op_cls.__right_mouse_down == False:  # 鼠标移动时选择不同的曲线区域
-                if (op_cls.__prev_mouse_location_x != event.mouse_region_x or op_cls.__prev_mouse_location_y != event.mouse_region_y):
+                if (
+                        op_cls.__prev_mouse_location_x != event.mouse_region_x or op_cls.__prev_mouse_location_y != event.mouse_region_y):
                     op_cls.__prev_mouse_location_x = event.mouse_region_x
                     op_cls.__prev_mouse_location_y = event.mouse_region_y
                     op_cls.__index = selectcurve(context, event, op_cls.__curve_name, op_cls.__mesh_name,
-                                                    op_cls.__depth, op_cls.__number)
+                                                 op_cls.__depth, op_cls.__number)
 
         return {'PASS_THROUGH'}
 

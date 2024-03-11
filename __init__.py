@@ -51,8 +51,9 @@ if "bpy" in locals():
          "label",
          "handle",
          "support",
-         "sound_canal"
-         "vent_canal"
+         "sound_canal",
+         "vent_canal",
+         "casting",
     ]
     #reload()函数重新载入模块，调试时加载的模块发生改变时，
     for module in reloadable_modules:
@@ -72,10 +73,12 @@ from . import  (
                 handle,
                 support,
                 sound_canal,
-                vent_canal
+                vent_canal,
+                casting,
                 )
 from .create_mould.soft_eardrum import thickness_and_fill
 from .create_mould import point
+from .create_mould.hard_eardrum import hard_eardrum
 def register():
     ui.register()
     damo.register()
@@ -90,6 +93,8 @@ def register():
     point.register()
     sound_canal.register()
     vent_canal.register()
+    casting.register()
+    hard_eardrum.register()
 
 def unregister():
     ui.unregister()
@@ -104,6 +109,8 @@ def unregister():
     point.unregister()
     sound_canal.unregister()
     vent_canal.unregister()
+    casting.unregister()
+    hard_eardrum.unregister()
 
 if __name__ == "__main__":
     register()

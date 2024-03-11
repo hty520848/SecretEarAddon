@@ -38,24 +38,27 @@ def calculate_angle(x, y):
 
 # 对顶点进行排序用于画圈
 def get_order_border_vert(selected_verts):
+    size = len(selected_verts)
+    finish = False
     # 尝试使用距离最近的点
     order_border_vert = []
     now_vert = selected_verts[0]
     unprocessed_vertex = selected_verts  # 未处理顶点
-    while len(unprocessed_vertex) > 1:
+    while len(unprocessed_vertex) > 1 and not finish:
         order_border_vert.append(now_vert)
         unprocessed_vertex.remove(now_vert)
 
         min_distance = math.inf
         now_vert_co = now_vert
 
+        # 2024/1/2 z轴落差过大会导致问题，这里只考虑xy坐标
         for vert in unprocessed_vertex:
-            distance = math.sqrt((vert[0] - now_vert_co[0]) ** 2 + (vert[1] - now_vert_co[1]) ** 2 + (
-                    vert[2] - now_vert_co[2]) ** 2)  # 计算欧几里得距离
+            distance = math.sqrt((vert[0] - now_vert_co[0]) ** 2 + (vert[1] - now_vert_co[1]) ** 2)  # 计算欧几里得距离
             if distance < min_distance:
                 min_distance = distance
                 now_vert = vert
-
+        if min_distance > 3 and len(unprocessed_vertex) < 0.1 * size:
+            finish = True
     return order_border_vert
 
 
@@ -126,11 +129,11 @@ def darw_cylinder(outer_dig_border, inner_dig_border):
     order_inner_bottom = []
 
     for v in order_outer_dig_border:
-        order_outer_top.append((v[0], v[1], 10))
-        order_outer_bottom.append((v[0], v[1], v[2] - 0.2))
+        order_outer_top.append((v[0],v[1],10))
+        order_outer_bottom.append((v[0],v[1],v[2]-0.2))
     for v in order_inner_dig_border:
-        order_inner_bottom.append((v[0], v[1], -4.5))
-        order_inner_top.append((v[0], v[1], v[2] + 0.8))
+        order_inner_bottom.append((v[0],v[1],-5))
+        order_inner_top.append((v[0],v[1],v[2]+ 1))
 
     draw_border_curve(order_outer_dig_border, "HoleBorderCurve", 0.18)
     draw_border_curve(order_outer_dig_border, "CylinderOuter", 0)
@@ -490,13 +493,14 @@ def dig_hole():
     for obj in bpy.data.objects:
         if obj.name == 'HoleBorderCurve':
             obj.name = 'HoleBorderCurve1'
-            subdivide('HoleBorderCurve1',3)
+            subdivide('HoleBorderCurve1', 3)
             convert_to_mesh('HoleBorderCurve1', 'meshHoleBorderCurve1', 0.18)
 
         if obj.name == 'HoleBorderCurve.001':
             obj.name = 'HoleBorderCurve2'
-            subdivide('HoleBorderCurve2',3)
+            subdivide('HoleBorderCurve2', 3)
             convert_to_mesh('HoleBorderCurve2', 'meshHoleBorderCurve2', 0.18)
+
 
 '''
     以下函数已弃用

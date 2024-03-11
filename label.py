@@ -242,6 +242,24 @@ def backToLabel():
             ori_obj.name = name + "LabelReset"
             bpy.context.collection.objects.link(ori_obj)
             ori_obj.hide_set(True)
+        elif (bpy.data.objects.get("右耳VentCanalLast") != None):
+            lastname = "右耳VentCanalLast"
+            last_obj = bpy.data.objects.get(lastname)
+            ori_obj = last_obj.copy()
+            ori_obj.data = last_obj.data.copy()
+            ori_obj.animation_data_clear()
+            ori_obj.name = name + "LabelReset"
+            bpy.context.collection.objects.link(ori_obj)
+            ori_obj.hide_set(True)
+        elif (bpy.data.objects.get("右耳SoundCanalLast") != None):
+            lastname = "右耳SoundCanalLast"
+            last_obj = bpy.data.objects.get(lastname)
+            ori_obj = last_obj.copy()
+            ori_obj.data = last_obj.data.copy()
+            ori_obj.animation_data_clear()
+            ori_obj.name = name + "LabelReset"
+            bpy.context.collection.objects.link(ori_obj)
+            ori_obj.hide_set(True)
         elif (bpy.data.objects.get("右耳MouldLast") != None):
             lastname = "右耳MouldLast"
             last_obj = bpy.data.objects.get(lastname)

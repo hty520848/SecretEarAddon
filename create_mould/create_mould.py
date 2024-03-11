@@ -6,6 +6,8 @@ from ..tool import moveToRight, initialTransparency, newColor
 from .frame_style_eardrum.frame_style_eardrum import apply_frame_style_eardrum_template
 from .soft_eardrum.soft_eardrum import apply_soft_eardrum_template
 from .soft_eardrum.thickness_and_fill import set_finish
+from .hard_eardrum.hard_eardrum import apply_hard_eardrum_template
+from .hard_eardrum.hard_eardrum import bottom_smooth
 
 
 def frontToCreateMould():
@@ -194,6 +196,7 @@ def apply_template():
         bpy.context.scene.neiBianJiXian = False
     elif mould_type == "OP2":
         print("硬耳膜")
+        apply_hard_eardrum_template()
     elif mould_type == "OP3":
         print("一体外壳")
     elif mould_type == "OP4":
@@ -270,3 +273,10 @@ def complete():
     enum = bpy.context.scene.muJuTypeEnum
     if enum == "OP1":
         set_finish(True)
+
+
+
+
+
+
+

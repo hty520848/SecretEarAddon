@@ -444,7 +444,7 @@ def get_cut_border(high_percent):
         # todo 先加到右耳集合，后续调整左右耳适配
         moveToRight(bpy.data.objects["BottomRingBorderR"])
         moveToRight(bpy.data.objects["CutPlane"])
-
+        return origin_z_co
 
 def judge_normals():
     flag = True
@@ -593,7 +593,7 @@ def bottom_cut(high_percent):
     # todo 先加到右耳集合，后续调整左右耳适配
     moveToRight(duplicate_obj)
 
-    get_cut_border(high_percent)
+    lowest_z_co = get_cut_border(high_percent)
     get_cut_plane()
     plane_cut()
     delete_useless_part()
@@ -601,3 +601,5 @@ def bottom_cut(high_percent):
     # translate_circle_to_object()
     # boolean_apply()
     # cut_bottom_part()
+
+    return lowest_z_co

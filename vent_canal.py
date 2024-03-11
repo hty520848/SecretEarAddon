@@ -4,20 +4,24 @@ import mathutils
 from mathutils import Vector
 from bpy_extras import view3d_utils
 from math import sqrt
-from .tool import newShader,moveToRight,utils_re_color,delete_useless_object,newColor
+from .tool import newShader, moveToRight, utils_re_color, delete_useless_object, newColor
 import re
 
 prev_on_object = 0
 prev_on_object_old = False
 prev_on_object_now = False
-number = 0  #记录管道控制点点的个数
-object_dic = { }  #记录当前圆球以及对应控制点
-ventcanal_data = [ ] #记录当前控制点的坐标
+number = 0  # 记录管道控制点点的个数
+object_dic = {}  # 记录当前圆球以及对应控制点
+ventcanal_data = []  # 记录当前控制点的坐标
+ventcanal_finish = False
+
 
 def initialTransparency():
     mat = newShader("Transparency")  # 创建材质
+    mat.use_backface_culling = True
     mat.blend_method = "BLEND"
-    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
+    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.4
+
 
 def get_region_and_space(context, area_type, region_type, space_type):
     ''' 获得当前区域的信息 '''
@@ -45,15 +49,16 @@ def get_region_and_space(context, area_type, region_type, space_type):
 
     return (region, space)
 
+
 def on_which_shpere(context, event):
     '''
     判断鼠标在哪个圆球上
     '''
     global object_dic
-    
+
     for key in object_dic:
         active_obj = bpy.data.objects[key]
-        object_index = int(key.replace('ventcanalsphere',''))
+        object_index = int(key.replace('ventcanalsphere', ''))
 
         if context.area:
             context.area.tag_redraw()
@@ -99,6 +104,7 @@ def on_which_shpere(context, event):
                     return object_index
 
     return 0
+
 
 def is_mouse_on_object(name, context, event):
     active_obj = bpy.data.objects[name]
@@ -149,26 +155,29 @@ def is_mouse_on_object(name, context, event):
                 is_on_object = True  # 如果发生交叉，将变量设为True
     return is_on_object
 
+
 def is_changed_old(context, event):
     ''' 创建圆球前鼠标位置的判断 '''
-    curr_on_object_old = is_mouse_on_object('右耳',context, event)  # 当前鼠标在哪个物体上
+    curr_on_object_old = is_mouse_on_object('右耳', context, event)  # 当前鼠标在哪个物体上
     global prev_on_object_old  # 之前鼠标在那个物体上
     if (curr_on_object_old != prev_on_object_old):
         prev_on_object_old = curr_on_object_old
         return True
     else:
         return False
-    
+
+
 def is_changed_now(context, event):
     ''' 创建圆球后鼠标位置的判断 '''
-    curr_on_object_now = is_mouse_on_object('meshventcanal',context, event)  # 当前鼠标在哪个物体上
+    curr_on_object_now = is_mouse_on_object('meshventcanal', context, event)  # 当前鼠标在哪个物体上
     global prev_on_object_now  # 之前鼠标在那个物体上
     if (curr_on_object_now != prev_on_object_now):
         prev_on_object_now = curr_on_object_now
         return True
     else:
         return False
-         
+
+
 def is_changed(context, event):
     curr_on_object = on_which_shpere(context, event)  # 当前鼠标在哪个物体上
     global prev_on_object  # 之前鼠标在那个物体上
@@ -179,8 +188,9 @@ def is_changed(context, event):
     else:
         return False
 
-def cal_co(name, context, event): 
-    ''' 
+
+def cal_co(name, context, event):
+    '''
     返回鼠标点击位置的坐标，没有相交则返回-1
     :param name: 要检测物体的名字
     :return: 相交的坐标
@@ -226,9 +236,10 @@ def cal_co(name, context, event):
             co, _, _, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
 
             if co is not None:
-                return co   # 如果发生交叉，返回坐标的值
+                return co  # 如果发生交叉，返回坐标的值
 
     return -1
+
 
 def select_nearest_point(co):
     '''
@@ -258,7 +269,7 @@ def select_nearest_point(co):
         elif distance < second_min_distance:
             second_min_distance = distance
             second_nearest_index = point_index
-    insert_index = max(nearest_index,second_nearest_index) 
+    insert_index = max(nearest_index, second_nearest_index)
     curve_object = bpy.data.objects['ventcanal']
     curve_data = curve_object.data
     min_co = Vector(curve_data.splines[0].points[nearest_index].co[0:3])
@@ -266,15 +277,15 @@ def select_nearest_point(co):
     dis_vector1 = Vector(secondmin_co - co)
     dis_vector2 = Vector(min_co - co)
     if dis_vector1.dot(dis_vector2) < 0:
-        return (min_co,secondmin_co,insert_index)
+        return (min_co, secondmin_co, insert_index)
     else:
-        if insert_index > nearest_index: 
+        if insert_index > nearest_index:
             insert_index = nearest_index
-            secondmin_co = Vector(curve_data.splines[0].points[second_nearest_index-2].co[0:3])
+            secondmin_co = Vector(curve_data.splines[0].points[second_nearest_index - 2].co[0:3])
         else:
-            secondmin_co = Vector(curve_data.splines[0].points[second_nearest_index+2].co[0:3])
-        return (min_co,secondmin_co,insert_index)
-        
+            secondmin_co = Vector(curve_data.splines[0].points[second_nearest_index + 2].co[0:3])
+        return (min_co, secondmin_co, insert_index)
+
 
 def copy_curve():
     ''' 复制曲线数据 '''
@@ -293,8 +304,9 @@ def copy_curve():
         for i, point in enumerate(spline.points):
             new_spline.points[i].co = point.co
 
+
 def convert_ventcanal():
-    if(bpy.data.objects.get('meshventcanal')):
+    if (bpy.data.objects.get('meshventcanal')):
         bpy.data.objects.remove(bpy.data.objects['meshventcanal'], do_unlink=True)  # 删除原有网格
     copy_curve()
     duplicate_obj = bpy.data.objects['meshventcanal']
@@ -306,15 +318,16 @@ def convert_ventcanal():
     #     bpy.ops.object.modifier_apply(modifier = modifer_name)
     bpy.context.active_object.data.bevel_depth = bpy.context.scene.tongQiGuanDaoZhiJing / 2  # 设置曲线倒角深度
     bpy.context.active_object.data.bevel_resolution = 16
-    bpy.context.active_object.data.use_fill_caps = True # 封盖
+    bpy.context.active_object.data.use_fill_caps = True  # 封盖
     bpy.ops.object.convert(target='MESH')  # 转化为网格
     duplicate_obj.hide_select = True
     duplicate_obj.data.materials.clear()
     duplicate_obj.data.materials.append(bpy.data.materials["grey"])
 
-def add_sphere(co,index):
-    ''' 
-    在指定位置生成圆球用于控制管道曲线的移动 
+
+def add_sphere(co, index):
+    '''
+    在指定位置生成圆球用于控制管道曲线的移动
     :param co:指定的坐标
     :param index:指定要钩挂的控制点的下标
     '''
@@ -336,7 +349,7 @@ def add_sphere(co,index):
     bm = bmesh.from_edit_mesh(obj.data)
 
     # 设置圆球的参数
-    radius = 0.4  # 半径
+    radius = 0.2  # 半径
     segments = 32  # 分段数
 
     # 在指定位置生成圆球
@@ -352,64 +365,67 @@ def add_sphere(co,index):
 
     # 设置圆球的位置
     obj.location = co  # 指定的位置坐标
-    hooktoobject(index) # 绑定到指定下标
+    hooktoobject(index)  # 绑定到指定下标
+
 
 class TEST_OT_addventcanal(bpy.types.Operator):
-
     bl_idname = "object.addventcanal"
     bl_label = "addventcanal"
     bl_description = "双击添加管道控制点"
 
     def excute(self, context, event):
-        
+
         global number
         name = '右耳'
         mesh_name = 'meshventcanal'
 
-        if number == 0 :  # 如果number等于0，初始化
+        if number == 0:  # 如果number等于0，初始化
             co = cal_co(name, context, event)
-            generate_canal(co)
+            if co != -1:
+                generate_canal(co)
 
-        elif number == 1 :   # 如果number等于1双击完成管道
+        elif number == 1:  # 如果number等于1双击完成管道
             co = cal_co(name, context, event)
-            finish_canal(co)
-            bpy.data.objects['右耳'].data.materials.clear()  #清除材质
-            bpy.data.objects['右耳'].data.materials.append(bpy.data.materials["Transparency"])
-            bpy.ops.object.select_all(action='DESELECT')
-            # bpy.ops.object.ventcanalqiehuan('INVOKE_DEFAULT')
+            if co != -1:
+                finish_canal(co)
+                bpy.data.objects['右耳'].data.materials.clear()  # 清除材质
+                bpy.data.objects['右耳'].data.materials.append(bpy.data.materials["Transparency"])
+                bpy.ops.object.select_all(action='DESELECT')
+                # bpy.ops.object.ventcanalqiehuan('INVOKE_DEFAULT')
 
-        else: # 如果numberd大于1，双击添加控制点 
+        else:  # 如果number大于1，双击添加控制点
             co = cal_co(mesh_name, context, event)
-            min_index,secondmin_index,insert_index = select_nearest_point(co)
-            add_canal(min_index,secondmin_index,co,insert_index)
+            if co != -1:
+                min_index, secondmin_index, insert_index = select_nearest_point(co)
+                add_canal(min_index, secondmin_index, co, insert_index)
 
     def invoke(self, context, event):
-        initialTransparency()
-        newColor('red', 1, 0, 0, 0, 1)
-        newColor('grey', 0.8, 0.8, 0.8, 0, 1)  #不透明材质
-        newColor('grey2', 0.8, 0.8, 0.8, 1, 0.8) #透明材质
         self.excute(context, event)
         return {'FINISHED'}
-    
-class TEST_OT_ventcanalqiehuan(bpy.types.Operator):
 
+
+class TEST_OT_ventcanalqiehuan(bpy.types.Operator):
     bl_idname = "object.ventcanalqiehuan"
     bl_label = "ventcanalqiehuan"
     bl_description = "鼠标行为切换"
 
     __timer = None
-    
-    def invoke(self, context, event): #初始化
+
+    def invoke(self, context, event):  # 初始化
         print('ventcanalqiehuan invoke')
+        initialTransparency()
+        newColor('red', 1, 0, 0, 0, 1)
+        newColor('grey', 0.8, 0.8, 0.8, 0, 1)  # 不透明材质
+        newColor('grey2', 0.8, 0.8, 0.8, 1, 0.4)  # 透明材质
         TEST_OT_ventcanalqiehuan.__timer = context.window_manager.event_timer_add(0.5, window=context.window)
         context.window_manager.modal_handler_add(self)
-        bpy.ops.wm.tool_set_by_id(name="builtin.select")
-        bpy.context.scene.var = 23
+        bpy.ops.wm.tool_set_by_id(name="my_tool.addventcanal2")
+        bpy.context.scene.var = 26
         return {'RUNNING_MODAL'}
-    
+
     def modal(self, context, event):
         global object_dic
-        if bpy.context.scene.var != 23:
+        if bpy.context.scene.var != 26:
             context.window_manager.event_timer_remove(TEST_OT_ventcanalqiehuan.__timer)
             TEST_OT_ventcanalqiehuan.__timer = None
             bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
@@ -420,53 +436,45 @@ class TEST_OT_ventcanalqiehuan(bpy.types.Operator):
             context.area.tag_redraw()
 
         if len(object_dic) > 2:
-            
-            sphere_number = on_which_shpere(context,event)
+
+            sphere_number = on_which_shpere(context, event)
             if (event.type == 'TIMER'):
                 if sphere_number == 0:
                     return {'PASS_THROUGH'}
-                elif sphere_number == 1 or sphere_number == 2:
+                elif sphere_number == 1 or sphere_number == 3:
                     bpy.context.scene.tool_settings.use_snap = True
                 else:
                     bpy.context.scene.tool_settings.use_snap = False
                 bpy.context.view_layer.objects.active = bpy.data.objects['ventcanalsphere' + str(sphere_number)]
                 obj = context.active_object
-                if re.match('ventcanalsphere', obj.name)!= None:
+                if re.match('ventcanalsphere', obj.name) != None:
                     flag = save_ventcanal_info(obj.location)
                     if flag:
                         sphere_name = 'ventcanalsphere' + str(sphere_number)
                         index = int(object_dic[sphere_name])
-                        bpy.data.objects['ventcanal'].data.splines[0].points[index].co[0:3] = bpy.data.objects[sphere_name].location
+                        bpy.data.objects['ventcanal'].data.splines[0].points[index].co[0:3] = bpy.data.objects[
+                            sphere_name].location
                         bpy.data.objects['ventcanal'].data.splines[0].points[index].co[3] = 1
                         convert_ventcanal()
                 return {'PASS_THROUGH'}
 
-            if(cal_co('meshventcanal', context, event) == -1 and is_changed_now(context,event) == True):
+            if (sphere_number != 0 and is_changed(context, event) == True):
+                bpy.ops.wm.tool_set_by_id(name="builtin.select")
+
+            elif (sphere_number == 0 and is_changed(context, event) == True):
+                bpy.ops.wm.tool_set_by_id(name="my_tool.addventcanal2")
+
+            if (cal_co('meshventcanal', context, event) == -1 and is_changed_now(context, event) == True):
                 if sphere_number == 0:
                     bpy.data.objects['meshventcanal'].data.materials.clear()
                     bpy.data.objects['meshventcanal'].data.materials.append(bpy.data.materials["grey"])
-                    bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
-            elif cal_co('meshventcanal', context, event) != -1:
-                if is_changed_now(context,event) == True:
-                    bpy.data.objects['meshventcanal'].data.materials.clear()
-                    bpy.data.objects['meshventcanal'].data.materials.append(bpy.data.materials["grey2"])
-                
-                if(sphere_number != 0 and is_changed(context,event) == True):
-                    bpy.ops.wm.tool_set_by_id(name="builtin.select")
-
-                elif(sphere_number == 0 and is_changed(context,event) == True):
-                    bpy.ops.wm.tool_set_by_id(name="my_tool.addventcanal2")
-            
-        else:
-            name = '右耳'
-            if(cal_co(name, context, event) == -1 and is_changed_old(context,event) == True):
-                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-            else:
-                if is_changed_old(context,event) == True:
-                    bpy.ops.wm.tool_set_by_id(name="my_tool.addventcanal2")
+            elif cal_co('meshventcanal', context, event) != -1 and is_changed_now(context, event) == True:
+                bpy.data.objects['meshventcanal'].data.materials.clear()
+                bpy.data.objects['meshventcanal'].data.materials.append(bpy.data.materials["grey2"])
 
         return {'PASS_THROUGH'}
+
 
 class TEST_OT_finishventcanal(bpy.types.Operator):
     bl_idname = "object.finishventcanal"
@@ -476,12 +484,12 @@ class TEST_OT_finishventcanal(bpy.types.Operator):
     def invoke(self, context, event):
         self.excute(context, event)
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-        bpy.context.scene.var = 24
+        bpy.context.scene.var = 27
         return {'FINISHED'}
 
     def excute(self, context, event):
         submit_ventcanal()
-        
+
 
 class TEST_OT_resetventcanal(bpy.types.Operator):
     bl_idname = "object.resetventcanal"
@@ -491,13 +499,13 @@ class TEST_OT_resetventcanal(bpy.types.Operator):
     def invoke(self, context, event):
         self.excute(context, event)
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-        bpy.context.scene.var = 25
+        bpy.context.scene.var = 28
         return {'FINISHED'}
 
     def excute(self, context, event):
         # 删除多余的物体
         global object_dic
-        need_to_delete_model_name_list = ['meshventcanal','ventcanal']
+        need_to_delete_model_name_list = ['meshventcanal', 'ventcanal']
         for key in object_dic:
             bpy.data.objects.remove(bpy.data.objects[key], do_unlink=True)
         delete_useless_object(need_to_delete_model_name_list)
@@ -521,6 +529,7 @@ class TEST_OT_resetventcanal(bpy.types.Operator):
         global number
         number = 0
 
+
 def new_curve(curve_name):
     ''' 创建并返回一个新的曲线对象 '''
     curve_data = bpy.data.curves.new(name=curve_name, type='CURVE')
@@ -529,10 +538,11 @@ def new_curve(curve_name):
     bpy.context.collection.objects.link(obj)
     bpy.context.view_layer.objects.active = obj
     moveToRight(obj)
-    obj.data.bevel_depth = bpy.context.scene.tongQiGuanDaoZhiJing / 2   #管道孔径
+    obj.data.bevel_depth = bpy.context.scene.tongQiGuanDaoZhiJing / 2  # 管道孔径
     obj.data.bevel_resolution = 16
-    obj.data.use_fill_caps = True # 封盖
+    obj.data.use_fill_caps = True  # 封盖
     return obj
+
 
 def generate_canal(co):
     ''' 初始化管道 '''
@@ -540,22 +550,23 @@ def generate_canal(co):
     obj = new_curve('ventcanal')
     obj.data.materials.append(bpy.data.materials["grey"])
     # 添加一个曲线样条
-    spline = obj.data.splines.new(type = 'NURBS')
+    spline = obj.data.splines.new(type='NURBS')
     spline.order_u = 2
     spline.use_smooth = True
     spline.points[number].co[0:3] = co
     spline.points[number].co[3] = 1
-    #spline.use_cyclic_u = True
-    #spline.use_endpoint_u = True
+    # spline.use_cyclic_u = True
+    # spline.use_endpoint_u = True
 
-    #开启吸附
+    # 开启吸附
     bpy.context.scene.tool_settings.use_snap = True
     bpy.context.scene.tool_settings.snap_elements = {'FACE'}
     bpy.context.scene.tool_settings.snap_target = 'CENTER'
     bpy.context.scene.tool_settings.use_snap_align_rotation = True
     bpy.context.scene.tool_settings.use_snap_backface_culling = True
 
-    add_sphere(co,0)
+    add_sphere(co, 0)
+
 
 def project_point_on_line(point, line_point1, line_point2):
     line_vec = line_point2 - line_point1
@@ -564,15 +575,17 @@ def project_point_on_line(point, line_point1, line_point2):
     projection = line_vec.dot(point_vec) * line_vec
     projected_point = line_point1 + projection
     return projected_point
-   
-def add_canal(min_co,secondmin_co,co,insert_index):
-    ''' 在管道上增加控制点 '''
-    
-    projected_point = project_point_on_line(co, min_co, secondmin_co)  # 计算目标点在向量上的投影点
-    add_point(insert_index,projected_point)
-    add_sphere(projected_point,insert_index)
 
-def add_point(index,co):
+
+def add_canal(min_co, secondmin_co, co, insert_index):
+    ''' 在管道上增加控制点 '''
+
+    projected_point = project_point_on_line(co, min_co, secondmin_co)  # 计算目标点在向量上的投影点
+    add_point(insert_index, projected_point)
+    add_sphere(projected_point, insert_index)
+
+
+def add_point(index, co):
     global number
     global object_dic
     curve_object = bpy.data.objects['ventcanal']
@@ -580,23 +593,23 @@ def add_point(index,co):
     new_curve_data = new_curve('newcurve').data
     # 在曲线上插入新的控制点
     new_curve_data.splines.clear()
-    spline = new_curve_data.splines.new(type = 'NURBS')
+    spline = new_curve_data.splines.new(type='NURBS')
     spline.order_u = 2
     spline.use_smooth = True
-    new_curve_data.splines[0].points.add(count = number)
+    new_curve_data.splines[0].points.add(count=number)
 
     # 设置新控制点的坐标
     for i, point in enumerate(curve_data.splines[0].points):
         if i < index:
             spline.points[i].co = point.co
-    
+
     spline.points[index].co[0:3] = co
     spline.points[index].co[3] = 1
 
     for i, point in enumerate(curve_data.splines[0].points):
         if i >= index:
-            spline.points[i+1].co = point.co
-    
+            spline.points[i + 1].co = point.co
+
     bpy.data.objects.remove(curve_object, do_unlink=True)
     bpy.data.objects['newcurve'].name = 'ventcanal'
     bpy.data.objects['ventcanal'].hide_set(True)
@@ -608,35 +621,51 @@ def add_point(index,co):
 
 def finish_canal(co):
     ''' 完成管道的初始化 '''
-    global number
     curve_object = bpy.data.objects['ventcanal']
     curve_data = curve_object.data
-    curve_data.splines[0].points.add(count = 1)
-    curve_data.splines[0].points[number].co[0:3] = co
-    curve_data.splines[0].points[number].co[3] = 1
-    bpy.context.view_layer.objects.active = curve_object
-    bpy.ops.object.select_all(action='DESELECT')
-    curve_object.select_set(state=True)
-    bpy.ops.object.mode_set(mode='EDIT') #进入编辑模式
-    bpy.ops.curve.select_all(action='DESELECT')
-    curve_data.splines[0].points[0].select = True
-    curve_data.splines[0].points[1].select = True
-    bpy.ops.curve.subdivide(number_cuts = 1) #细分次数
-    bpy.ops.object.mode_set(mode='OBJECT') #返回对象模式
+    obj = bpy.data.objects['右耳']
+    first_co = Vector(curve_data.splines[0].points[0].co[0:3])
+    _, _, normal, _ = obj.closest_point_on_mesh(first_co)
+    reverse_normal = (-normal[0], -normal[1], -normal[2])
+    reverse_normal = Vector(reverse_normal)
+    reverse_normal.normalize()
+    point_vec = co - first_co
+    projection = reverse_normal.dot(point_vec) * reverse_normal
+    projected_point = first_co + projection
+    curve_data.splines[0].points.add(count=2)
+    curve_data.splines[0].points[1].co[0:3] = projected_point
+    curve_data.splines[0].points[1].co[3] = 1
+    curve_data.splines[0].points[2].co[0:3] = co
+    curve_data.splines[0].points[2].co[3] = 1
+    add_sphere(projected_point, 1)
+    add_sphere(co, 2)
+    convert_ventcanal()
+    save_ventcanal_info(co)
     curve_object.hide_set(True)
     bpy.data.objects['右耳'].hide_select = True
-    add_sphere(co,2) 
-    temp_co = curve_data.splines[0].points[1].co[0:3]
-    add_sphere(temp_co,1)
-    convert_ventcanal()
-    save_ventcanal_info(temp_co)
+    # bpy.context.view_layer.objects.active = curve_object
+    # bpy.ops.object.select_all(action='DESELECT')
+    # curve_object.select_set(state=True)
+    # bpy.ops.object.mode_set(mode='EDIT')  # 进入编辑模式
+    # bpy.ops.curve.select_all(action='DESELECT')
+    # curve_data.splines[0].points[0].select = True
+    # curve_data.splines[0].points[1].select = True
+    # bpy.ops.curve.subdivide(number_cuts=1)  # 细分次数
+    # bpy.ops.object.mode_set(mode='OBJECT')  # 返回对象模式
+    # add_sphere(co, 2)
+    # temp_co = curve_data.splines[0].points[1].co[0:3]
+    # add_sphere(temp_co, 1)
+    # convert_soundcanal()
+    # save_soundcanal_info(temp_co)
+
 
 def hooktoobject(index):
     ''' 建立指定下标的控制点到圆球的字典 '''
     global number
     global object_dic
     sphere_name = 'ventcanalsphere' + str(number)
-    object_dic.update({sphere_name :index})
+    object_dic.update({sphere_name: index})
+
 
 def save_ventcanal_info(co):
     global ventcanal_data
@@ -655,26 +684,29 @@ def save_ventcanal_info(co):
         return True
     return False
 
+
 def initial_ventcanal():
-    #初始化
+    # 初始化
     global object_dic
     global ventcanal_data
-    if len(object_dic) > 2:    #存在已保存的圆球位置,复原原有的管道
+    global ventcanal_finish
+    ventcanal_finish = False
+    if len(object_dic) > 2:  # 存在已保存的圆球位置,复原原有的管道
         initialTransparency()
         newColor('red', 1, 0, 0, 1, 0.8)
         newColor('grey', 0.8, 0.8, 0.8, 0, 1)
-        newColor('grey2', 0.8, 0.8, 0.8, 1, 0.8)
+        newColor('grey2', 0.8, 0.8, 0.8, 1, 0.4)
         obj = new_curve('ventcanal')
         obj.data.materials.append(bpy.data.materials["grey"])
 
         # 添加一个曲线样条
-        spline = obj.data.splines.new(type = 'NURBS')
+        spline = obj.data.splines.new(type='NURBS')
         spline.order_u = 2
         spline.use_smooth = True
-        spline.points.add(count = len(object_dic) - 1)
+        spline.points.add(count=len(object_dic) - 1)
         for i, point in enumerate(spline.points):
-            point.co = (ventcanal_data[3*i],ventcanal_data[3*i+1],ventcanal_data[3*i+2],1)
-        
+            point.co = (ventcanal_data[3 * i], ventcanal_data[3 * i + 1], ventcanal_data[3 * i + 2], 1)
+
         # 生成圆球
         for key in object_dic:
             mesh = bpy.data.meshes.new("ventcanalsphere")
@@ -689,19 +721,19 @@ def initial_ventcanal():
             bm = bmesh.from_edit_mesh(obj.data)
 
             # 设置圆球的参数
-            radius = 0.3  # 半径
+            radius = 0.2  # 半径
             segments = 32  # 分段数
 
             # 在指定位置生成圆球
             bmesh.ops.create_uvsphere(bm, u_segments=segments, v_segments=segments,
-                                    radius=radius * 2)
-            bmesh.update_edit_mesh(obj.data) # 更新网格数据
+                                      radius=radius * 2)
+            bmesh.update_edit_mesh(obj.data)  # 更新网格数据
 
             bpy.ops.object.mode_set(mode='OBJECT')
             obj.data.materials.append(bpy.data.materials['red'])
-            obj.location = obj.data.splines[0].points[object_dic[key]].co[0:3] # 指定的位置坐标
-        
-        #开启吸附
+            obj.location = bpy.data.objects['ventcanal'].data.splines[0].points[object_dic[key]].co[0:3]  # 指定的位置坐标
+
+        # 开启吸附
         bpy.context.scene.tool_settings.use_snap = True
         bpy.context.scene.tool_settings.snap_elements = {'FACE'}
         bpy.context.scene.tool_settings.snap_target = 'CENTER'
@@ -710,23 +742,27 @@ def initial_ventcanal():
 
         bpy.data.objects['右耳'].data.materials.append(bpy.data.materials["Transparency"])
         bpy.data.objects['右耳'].hide_select = True
+        convert_ventcanal()
+        save_ventcanal_info([0, 0, 0])
         bpy.ops.object.ventcanalqiehuan('INVOKE_DEFAULT')
-        
-    else: #不存在已保存的圆球位置
+
+    else:  # 不存在已保存的圆球位置
         pass
+
 
 def submit_ventcanal():
     # 应用修改器，删除多余的物体
     global object_dic
-    if len(object_dic) >0 :
+    global ventcanal_finish
+    if len(object_dic) > 0 and ventcanal_finish == False:
         adjustpoint()
         bpy.context.view_layer.objects.active = bpy.data.objects['右耳']
         bool_modifier = bpy.context.active_object.modifiers.new(
-        name="Ventcanal Boolean Modifier", type='BOOLEAN')
+            name="Ventcanal Boolean Modifier", type='BOOLEAN')
         bool_modifier.operation = 'DIFFERENCE'
         bool_modifier.object = bpy.data.objects['meshventcanal']
         bpy.ops.object.modifier_apply(modifier="Ventcanal Boolean Modifier", single_user=True)
-        need_to_delete_model_name_list = ['meshventcanal','ventcanal']
+        need_to_delete_model_name_list = ['meshventcanal', 'ventcanal']
         for key in object_dic:
             need_to_delete_model_name_list.append(key)
         delete_useless_object(need_to_delete_model_name_list)
@@ -735,6 +771,7 @@ def submit_ventcanal():
         utils_re_color("右耳", (1, 0.319, 0.133))
         bpy.context.active_object.data.use_auto_smooth = True
 
+
 def adjustpoint():
     curve_object = bpy.data.objects['ventcanal']
     curve_data = curve_object.data
@@ -742,12 +779,12 @@ def adjustpoint():
     first_point = curve_data.splines[0].points[0]
     last_point = curve_data.splines[0].points[last_index]
     step = 0.5
-    normal = Vector(first_point.co[0:3]) - Vector(curve_data.splines[0].points[1].co[0:3])  
+    normal = Vector(first_point.co[0:3]) - Vector(curve_data.splines[0].points[1].co[0:3])
     first_point.co = (first_point.co[0] + normal[0] * step, first_point.co[1] + normal[1] * step,
-                       first_point.co[2] + normal[2] * step, 1)
-    normal = Vector(last_point.co[0:3]) - Vector(curve_data.splines[0].points[last_index - 1].co[0:3])  
+                      first_point.co[2] + normal[2] * step, 1)
+    normal = Vector(last_point.co[0:3]) - Vector(curve_data.splines[0].points[last_index - 1].co[0:3])
     last_point.co = (last_point.co[0] + normal[0] * step, last_point.co[1] + normal[1] * step,
-                      last_point.co[2] + normal[2] * step, 1)
+                     last_point.co[2] + normal[2] * step, 1)
     convert_ventcanal()
 
 
@@ -755,24 +792,25 @@ def checkposition():
     object = bpy.data.objects['meshventcanal']
     target_object = bpy.data.objects['右耳']
     bm = bmesh.new()
-    bm.from_mesh(object.data) #获取网格数据
+    bm.from_mesh(object.data)  # 获取网格数据
     bm.verts.ensure_lookup_table()
     color_lay = bm.verts.layers.float_color["Color"]
     for vert in bm.verts:
-        _, co, normal, _= target_object.closest_point_on_mesh(vert.co)
+        _, co, normal, _ = target_object.closest_point_on_mesh(vert.co)
         flag = (vert.co - co).dot(normal)
         colorvert = vert[color_lay]
-        if(flag > 0):
-            colorvert.x = 0.8 
+        if (flag > 0):
+            colorvert.x = 0.8
             colorvert.y = 0.8
             colorvert.z = 0.8
         else:
-            colorvert.x = 1 
+            colorvert.x = 1
             colorvert.y = 0
             colorvert.z = 0
     bm.to_mesh(object.data)
     bm.free()
-           
+
+
 def frontToVentCanal():
     all_objs = bpy.data.objects
     for selected_obj in all_objs:
@@ -789,9 +827,10 @@ def frontToVentCanal():
 
     initial_ventcanal()
 
+
 def frontFromVentCanal():
-    save_ventcanal_info()
-    need_to_delete_model_name_list = ['meshventcanal','ventcanal']
+    save_ventcanal_info([0, 0, 0])
+    need_to_delete_model_name_list = ['meshventcanal', 'ventcanal']
     for key in object_dic:
         need_to_delete_model_name_list.append(key)
     delete_useless_object(need_to_delete_model_name_list)
@@ -813,6 +852,7 @@ def frontFromVentCanal():
     for selected_obj in all_objs:
         if (selected_obj.name == "右耳VentCanalReset" or selected_obj.name == "右耳VentCanalLast"):
             bpy.data.objects.remove(selected_obj, do_unlink=True)
+
 
 def backToVentCanal():
     exist_VentCanalReset = False
@@ -911,8 +951,9 @@ def backToVentCanal():
 
         initial_ventcanal()
 
+
 def backFromVentCanal():
-    save_ventcanal_info()
+    save_ventcanal_info([0, 0, 0])
     submit_ventcanal()
     all_objs = bpy.data.objects
     for selected_obj in all_objs:
@@ -927,6 +968,7 @@ def backFromVentCanal():
     bpy.context.collection.objects.link(duplicate_obj)
     duplicate_obj.hide_set(True)
 
+
 class addventcanal_MyTool(bpy.types.WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
     bl_context_mode = 'OBJECT'
@@ -937,7 +979,7 @@ class addventcanal_MyTool(bpy.types.WorkSpaceTool):
     bl_description = (
         "使用鼠标双击添加控制点"
     )
-    bl_icon = "ops.curves.sculpt_pinch"
+    bl_icon = "ops.curve.draw"
     bl_widget = None
     bl_keymap = (
         ("object.ventcanalqiehuan", {"type": 'MOUSEMOVE', "value": 'ANY'},
@@ -946,6 +988,7 @@ class addventcanal_MyTool(bpy.types.WorkSpaceTool):
 
     def draw_settings(context, layout, tool):
         pass
+
 
 class addventcanal_MyTool2(bpy.types.WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
@@ -957,7 +1000,7 @@ class addventcanal_MyTool2(bpy.types.WorkSpaceTool):
     bl_description = (
         "实现鼠标双击添加控制点操作"
     )
-    bl_icon = "ops.curves.sculpt_pinch"
+    bl_icon = "ops.curve.extrude_cursor"
     bl_widget = None
     bl_keymap = (
         ("object.addventcanal", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'},
@@ -966,6 +1009,7 @@ class addventcanal_MyTool2(bpy.types.WorkSpaceTool):
 
     def draw_settings(context, layout, tool):
         pass
+
 
 class finishventcanal_MyTool(bpy.types.WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
@@ -977,7 +1021,7 @@ class finishventcanal_MyTool(bpy.types.WorkSpaceTool):
     bl_description = (
         "完成管道的绘制"
     )
-    bl_icon = "ops.curves.sculpt_puff" 
+    bl_icon = "ops.curve.extrude_move"
     bl_widget = None
     bl_keymap = (
         ("object.finishventcanal", {"type": 'MOUSEMOVE', "value": 'ANY'},
@@ -986,6 +1030,7 @@ class finishventcanal_MyTool(bpy.types.WorkSpaceTool):
 
     def draw_settings(context, layout, tool):
         pass
+
 
 class resetventcanal_MyTool(bpy.types.WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
@@ -997,7 +1042,7 @@ class resetventcanal_MyTool(bpy.types.WorkSpaceTool):
     bl_description = (
         "重置管道的绘制"
     )
-    bl_icon = "ops.curves.sculpt_slide"
+    bl_icon = "ops.curves.sculpt_snake_hook"
     bl_widget = None
     bl_keymap = (
         ("object.resetventcanal", {"type": 'MOUSEMOVE', "value": 'ANY'},
@@ -1006,6 +1051,30 @@ class resetventcanal_MyTool(bpy.types.WorkSpaceTool):
 
     def draw_settings(context, layout, tool):
         pass
+
+
+class mirrorventcanal_MyTool(bpy.types.WorkSpaceTool):
+    bl_space_type = 'VIEW_3D'
+    bl_context_mode = 'OBJECT'
+
+    # The prefix of the idname should be your add-on name.
+    bl_idname = "my_tool.mirrorventcanal"
+    bl_label = "通气孔镜像"
+    bl_description = (
+        "点击镜像通气孔"
+    )
+    bl_icon = "ops.curve.radius"
+    bl_widget = None
+    bl_keymap = (
+        ("object.mirrorventcanal", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+        ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
+        ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
+    )
+
+    def draw_settings(context, layout, tool):
+        pass
+
 
 _classes = [
     TEST_OT_addventcanal,
@@ -1023,14 +1092,18 @@ def register():
                             after={addventcanal_MyTool.bl_idname})
     bpy.utils.register_tool(finishventcanal_MyTool, separator=True, group=False,
                             after={resetventcanal_MyTool.bl_idname})
-    
+    bpy.utils.register_tool(mirrorventcanal_MyTool, separator=True, group=False,
+                            after={finishventcanal_MyTool.bl_idname})
+
     bpy.utils.register_tool(addventcanal_MyTool2, separator=True, group=False)
-    
+
+
 def unregister():
     for cls in _classes:
         bpy.utils.unregister_class(cls)
     bpy.utils.unregister_tool(addventcanal_MyTool)
     bpy.utils.unregister_tool(resetventcanal_MyTool)
     bpy.utils.unregister_tool(finishventcanal_MyTool)
+    bpy.utils.unregister_tool(mirrorventcanal_MyTool)
 
     bpy.utils.unregister_tool(addventcanal_MyTool2)

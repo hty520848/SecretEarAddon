@@ -14,12 +14,13 @@ from .create_mould.create_mould import *
 from .create_mould.frame_style_eardrum.frame_style_eardrum import *
 from .sound_canal import *
 from .vent_canal import *
+from .casting import *
 from .utils.utils import *
 import time
 
 prev_properties_context = "RENDER"  # 保存Properties窗口切换时上次Properties窗口中的上下文,记录由哪个模式切换而来
 
-is_msgbus_start = False         #模块切换操作符是否启动
+is_msgbus_start = False  # 模块切换操作符是否启动
 
 processing_stage_dict = {
     "RENDER": "打磨",
@@ -33,8 +34,8 @@ processing_stage_dict = {
     "PARTICLES": "铸造法软耳模",
     "PHYSICS": "支撑",
     "CONSTRAINT": "排气孔",
-    "DATA": "后期打磨"
-
+    "DATA": "后期打磨",
+    "MATERIAL":"布局切换"
 }
 
 
@@ -59,6 +60,7 @@ class Forward1(bpy.types.Operator):
 
         return {'FINISHED'}
 
+
 class SwitchTest(bpy.types.Operator):
     bl_idname = "object.switchtestfunc"
     bl_label = "功能测试"
@@ -74,6 +76,7 @@ class SwitchTest(bpy.types.Operator):
         duplicate_obj.hide_set(True)
         apply_frame_style_eardrum_template()
         return {'FINISHED'}
+
 
 class MsgbusCallBack(bpy.types.Operator):
     bl_idname = "object.msgbuscallback"
@@ -93,7 +96,7 @@ class MsgbusCallBack(bpy.types.Operator):
         workspace = context.window.workspace.name
 
         if workspace == '布局':
-            current_tab = bpy.context.screen.areas[1].spaces.active.context
+            current_tab = bpy.context.screen.areas[0].spaces.active.context
         elif workspace == '布局.001':
             current_tab = bpy.context.screen.areas[0].spaces.active.context
         name = "右耳"  # TODO 导入物体的名称
@@ -103,46 +106,62 @@ class MsgbusCallBack(bpy.types.Operator):
 
                 bpy.context.scene.var = 0
 
-                print("前面的上下文", prev_properties_context)
+                print(f'Previous Tab:, {prev_properties_context}')
                 print(f'Current Tab: {current_tab}')
-                selected_objs = bpy.data.objects
-                for selected_obj in selected_objs:
-                    print(selected_obj.name)
-
+                # print("切换前场景中存在的文件:")
+                # print("~~~~~~~~~~~~~~~~~~~")
+                # selected_objs = bpy.data.objects
+                # for selected_obj in selected_objs:
+                #     print(selected_obj.name)
+                # print("~~~~~~~~~~~~~~~~~~~")
+                # print("-------------------")
                 # 左右窗口切换
                 if (current_tab == 'MATERIAL'):
-                    print('MATERIAL')
-                    print('prev_context',prev_properties_context)
-                    override1 =getOverride()
+                    # print('MATERIAL')
+                    # print('prev_context', prev_properties_context)
+                    override1 = getOverride()
                     with bpy.context.temp_override(**override1):
                         active_obj = bpy.context.active_object
-                        print('active_obj',active_obj.name)
-                        bpy.ops.object.hide_collection(collection_index=2,  extend=False,toggle=True)
-                        bpy.ops.object.hide_collection(collection_index=1,  extend=False,toggle=True)
+                        print('active_obj', active_obj.name)
+                        bpy.ops.object.hide_collection(collection_index=2, extend=False, toggle=True)
+                        bpy.ops.object.hide_collection(collection_index=1, extend=False, toggle=True)
                         active_layer_collection = bpy.context.view_layer.active_layer_collection
-                        print('active_colletion',active_layer_collection.name)
+                        print('active_colletion', active_layer_collection.name)
                         if active_layer_collection.name == 'Right':
                             my_layer_collection = get_layer_collection(bpy.context.view_layer.layer_collection, 'Left')
                             bpy.context.view_layer.active_layer_collection = my_layer_collection
                         elif active_layer_collection.name == 'Left':
                             my_layer_collection = get_layer_collection(bpy.context.view_layer.layer_collection, 'Right')
                             bpy.context.view_layer.active_layer_collection = my_layer_collection
-                        override2 =getOverride2()    
+                        override2 = getOverride2()
                         with bpy.context.temp_override(**override2):
                             active_obj = bpy.context.active_object
-                            print('active_obj',active_obj.name)
-                            bpy.ops.object.hide_collection(collection_index=2,  extend=False,toggle=True)
-                            bpy.ops.object.hide_collection(collection_index=1,  extend=False,toggle=True)
+                            print('active_obj', active_obj.name)
+                            bpy.ops.object.hide_collection(collection_index=2, extend=False, toggle=True)
+                            bpy.ops.object.hide_collection(collection_index=1, extend=False, toggle=True)
                     if prev_properties_context == None:
                         if workspace == '布局':
                             bpy.context.screen.areas[1].spaces.active.context = 'RENDER'
                         elif workspace == '布局.001':
                             bpy.context.screen.areas[0].spaces.active.context = 'RENDER'
+                        current_tab = 'RENDER'
                     else:
                         if workspace == '布局':
                             bpy.context.screen.areas[1].spaces.active.context = prev_properties_context
                         elif workspace == '布局.001':
                             bpy.context.screen.areas[0].spaces.active.context = prev_properties_context
+                        current_tab = prev_properties_context
+                    
+
+                    # 交换左右窗口物体
+                    tar_obj = context.scene.leftWindowObj
+                    ori_obj = context.scene.rightWindowObj
+                    context.scene.leftWindowObj = ori_obj
+                    context.scene.rightWindowObj = tar_obj
+                    bpy.ops.object.select_all(action='DESELECT')
+                    bpy.context.view_layer.objects.active = bpy.data.objects[ori_obj]
+                    bpy.data.objects[ori_obj].select_set(True)
+
                 # 模块切换
                 current_process = processing_stage_dict[current_tab]
                 prev_process = processing_stage_dict[prev_properties_context]
@@ -183,8 +202,27 @@ class MsgbusCallBack(bpy.types.Operator):
                         with bpy.context.temp_override(**override):
                             frontFromSupport()
                             backToLocalThickening()
-                    
-    
+                    elif (prev_process == '传声孔'):
+                        print("SoundCanalToLocalThick")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromSoundCanal()
+                            backToLocalThickening()
+                    elif (prev_process == '通气孔'):
+                        print("SoundCanalToLocalThick")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromVentCanal()
+                            backToLocalThickening()
+                    elif (prev_process == '铸造法软耳模'):
+                        print("CastingToLocalThick")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromCasting()
+                            backToLocalThickening()
+
+
+
                 elif (current_process == '打磨'):
                     if (prev_process == '局部加厚'):
                         print("LocalThickToDaMo")
@@ -236,6 +274,12 @@ class MsgbusCallBack(bpy.types.Operator):
                         with bpy.context.temp_override(**override):
                             frontFromVentCanal()
                             backToDamo()
+                    elif (prev_process == '铸造法软耳模'):
+                        print("CastingToDamo")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromCasting()
+                            backToDamo()
 
 
                 elif (current_process == '切割'):
@@ -274,6 +318,24 @@ class MsgbusCallBack(bpy.types.Operator):
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromSupport()
+                            backToQieGe()
+                    elif (prev_process == '传声孔'):
+                        print("SoundCanalToQieGe")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromSoundCanal()
+                            backToQieGe()
+                    elif (prev_process == '通气孔'):
+                        print("SoundCanalToQieGe")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromVentCanal()
+                            backToQieGe()
+                    elif (prev_process == '铸造法软耳模'):
+                        print("CastingToQieGe")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromCasting()
                             backToQieGe()
 
 
@@ -314,6 +376,24 @@ class MsgbusCallBack(bpy.types.Operator):
                         with bpy.context.temp_override(**override):
                             frontFromSupport()
                             backToLabel()
+                    elif (prev_process == '传声孔'):
+                        print("SoundCanalToLabel")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromSoundCanal()
+                            frontToLabel()
+                    elif (prev_process == '通气孔'):
+                        print("SoundCanalToLabel")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromVentCanal()
+                            frontToLabel()
+                    elif (prev_process == '铸造法软耳模'):
+                        print("CastingToLabel")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromCasting()
+                            backToLabel()
 
                 elif (current_process == '创建模具'):
                     if (prev_process == '局部加厚'):
@@ -351,6 +431,24 @@ class MsgbusCallBack(bpy.types.Operator):
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromSupport()
+                            backToCreateMould()
+                    elif (prev_process == '传声孔'):
+                        print("SoundCanalToCreateMould")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromSoundCanal()
+                            backToCreateMould()
+                    elif (prev_process == '通气孔'):
+                        print("SoundCanalToCreateMould")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromVentCanal()
+                            backToCreateMould()
+                    elif (prev_process == '铸造法软耳模'):
+                        print("CastingToCreateMould")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromCasting()
                             backToCreateMould()
 
 
@@ -391,6 +489,24 @@ class MsgbusCallBack(bpy.types.Operator):
                         with bpy.context.temp_override(**override):
                             frontFromSupport()
                             backToHandle()
+                    elif (prev_process == '传声孔'):
+                        print("SoundCanalToHandle")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromSoundCanal()
+                            frontToHandle()
+                    elif (prev_process == '通气孔'):
+                        print("SoundCanalToHandle")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromVentCanal()
+                            frontToHandle()
+                    elif (prev_process == '铸造法软耳模'):
+                        print("CastingToHandle")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromCasting()
+                            backToHandle()
 
 
                 elif (current_process == '支撑'):
@@ -429,6 +545,24 @@ class MsgbusCallBack(bpy.types.Operator):
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             backFromHandle()
+                            frontToSupport()
+                    elif (prev_process == '传声孔'):
+                        print("SoundCanalToSupport")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromSoundCanal()
+                            frontToSupport()
+                    elif (prev_process == '通气孔'):
+                        print("SoundCanalToSupport")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromVentCanal()
+                            frontToSupport()
+                    elif (prev_process == '铸造法软耳模'):
+                        print("CastingToSupport")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromCasting()
                             frontToSupport()
 
                 elif (current_process == '传声孔'):
@@ -475,68 +609,136 @@ class MsgbusCallBack(bpy.types.Operator):
                             frontFromSupport()
                             backToSoundCanal()
                     elif (prev_process == '通气孔'):
-                        print("SupportToSoundCanal")
+                        print("VentCanalToSoundCanal")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
                             frontFromVentCanal()
                             backToSoundCanal()
+                    elif (prev_process == '铸造法软耳模'):
+                        print("CastingToSoundCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromCasting()
+                            backToSoundCanal()
 
-                    elif (current_process == '通气孔'):
-                        if (prev_process == '局部加厚'):
-                            print("LocalThickToVentCanal")
-                            override = getOverride()
-                            with bpy.context.temp_override(**override):
-                                backFromLocalThickening()
-                                frontToVentCanal()
-                        elif (prev_process == '打磨'):
-                            print("DamoToVentCanal")
-                            override = getOverride()
-                            with bpy.context.temp_override(**override):
-                                backFromDamo()
-                                frontToVentCanal()
-                        elif (prev_process == '切割'):
-                            print("QieGeToVentCanal")
-                            override = getOverride()
-                            with bpy.context.temp_override(**override):
-                                backFromQieGe()
-                                frontToVentCanal()
-                        elif (prev_process == '编号'):
-                            print("LabelToVentCanal")
-                            override = getOverride()
-                            with bpy.context.temp_override(**override):
-                                frontFromLabel()
-                                backToVentCanal()
-                        elif (prev_process == '创建模具'):
-                            print("CreateMouldToVentCanal")
-                            override = getOverride()
-                            with bpy.context.temp_override(**override):
-                                backFromCreateMould()
-                                frontToVentCanal()
-                        elif (prev_process == '耳膜附件'):
-                            print("HandleToVentCanal")
-                            override = getOverride()
-                            with bpy.context.temp_override(**override):
-                                frontFromHandle()
-                                backToVentCanal()
-                        elif (prev_process == '支撑'):
-                            print("SupportToVentCanal")
-                            override = getOverride()
-                            with bpy.context.temp_override(**override):
-                                frontFromSupport()
-                                backToVentCanal()
-                        elif (prev_process == '传声孔'):
-                            print("SoundCanalToVentCanal")
-                            override = getOverride()
-                            with bpy.context.temp_override(**override):
-                                backFromSoundCanal()
-                                frontToVentCanal()
+                elif (current_process == '通气孔'):
+                    if (prev_process == '局部加厚'):
+                        print("LocalThickToVentCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromLocalThickening()
+                            frontToVentCanal()
+                    elif (prev_process == '打磨'):
+                        print("DamoToVentCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromDamo()
+                            frontToVentCanal()
+                    elif (prev_process == '切割'):
+                        print("QieGeToVentCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromQieGe()
+                            frontToVentCanal()
+                    elif (prev_process == '编号'):
+                        print("LabelToVentCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromLabel()
+                            backToVentCanal()
+                    elif (prev_process == '创建模具'):
+                        print("CreateMouldToVentCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromCreateMould()
+                            frontToVentCanal()
+                    elif (prev_process == '耳膜附件'):
+                        print("HandleToVentCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromHandle()
+                            backToVentCanal()
+                    elif (prev_process == '支撑'):
+                        print("SupportToVentCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromSupport()
+                            backToVentCanal()
+                    elif (prev_process == '传声孔'):
+                        print("SoundCanalToVentCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromSoundCanal()
+                            frontToVentCanal()
+                    elif (prev_process == '铸造法软耳模'):
+                        print("CastingToVentCanal")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromCasting()
+                            backToVentCanal()
 
-
-                print("---------")
-                selected_objs = bpy.data.objects
-                for selected_obj in selected_objs:
-                    print(selected_obj.name)
-                print(",,,,,,")
+                elif (current_process == '铸造法软耳模'):
+                    if (prev_process == '局部加厚'):
+                        print("LocalThickToCasting")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromLocalThickening()
+                            frontToCasting()
+                    elif (prev_process == '打磨'):
+                        print("DamoToCasting")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromDamo()
+                            frontToCasting()
+                    elif (prev_process == '切割'):
+                        print("QieGeToCasting")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromQieGe()
+                            frontToCasting()
+                    elif (prev_process == '编号'):
+                        print("LabelToCasting")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                           backFromLabel()
+                           frontToCasting()
+                    elif (prev_process == '创建模具'):
+                        print("CreateMouldToCasting")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromCreateMould()
+                            frontToCasting()
+                    elif (prev_process == '耳膜附件'):
+                        print("HandleToCasting")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromHandle()
+                            frontToCasting()
+                    elif (prev_process == '支撑'):
+                        print("SupportToCasting")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            frontFromSupport()
+                            backToCasting()
+                    elif (prev_process == '传声孔'):
+                        print("SoundCanalToCasting")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                           backFromSoundCanal()
+                           frontToCasting()
+                    elif (prev_process == '通气孔'):
+                        print("VentCanalToCasting")
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            backFromVentCanal()
+                            frontToCasting()
+                # print("-------------------")
+                # print("切换后场景中存在的文件:")
+                # print("~~~~~~~~~~~~~~~~~~~")
+                # selected_objs = bpy.data.objects
+                # for selected_obj in selected_objs:
+                #     print(selected_obj.name)
+                # print("~~~~~~~~~~~~~~~~~~~")
 
         prev_properties_context = current_tab
 

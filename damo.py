@@ -12,38 +12,65 @@ prev_on_object = False  # 全局变量,保存之前的鼠标状态,用于判断�
 
 is_copy = False
 
-is_modifier = False
+# is_modifier = False
 
 
 def copy_object():
-    # 获取当前选中的物体
-    active_obj = bpy.context.active_object
+    for active_obj in bpy.data.objects:
+        if active_obj.name == '右耳':
+            name = active_obj.name + "DamoReset"
+            is_rightobj = bpy.data.objects.get(name)
+            if not is_rightobj:
+                duplicate_obj = active_obj.copy()
+                duplicate_obj.data = active_obj.data.copy()
+                duplicate_obj.name = name
+                duplicate_obj.animation_data_clear()
+                # 将复制的物体加入到场景集合中
+                scene = bpy.context.scene
+                scene.collection.objects.link(duplicate_obj)
+                moveToRight(duplicate_obj)
+                duplicate_obj.hide_set(True)
 
-    duplicate_obj = active_obj.copy()
-    duplicate_obj.data = active_obj.data.copy()
-    duplicate_obj.name = "DamoReset"
-    duplicate_obj.animation_data_clear()
-    # 将复制的物体加入到场景集合中
-    scene = bpy.context.scene
-    scene.collection.objects.link(duplicate_obj)
-    moveToRight(duplicate_obj)
-    duplicate_obj.hide_set(True)
-
+        if active_obj.name == '左耳':
+            name = active_obj.name + "DamoReset"
+            is_rightobj = bpy.data.objects.get(name)
+            if not is_rightobj:
+                duplicate_obj = active_obj.copy()
+                duplicate_obj.data = active_obj.data.copy()
+                duplicate_obj.name = name
+                duplicate_obj.animation_data_clear()
+                # 将复制的物体加入到场景集合中
+                scene = bpy.context.scene
+                scene.collection.objects.link(duplicate_obj)
+                moveToLeft(duplicate_obj)
+                duplicate_obj.hide_set(True)
 
 def backToDamo():
     # 根据保存的DamoCopy,复制一份用来替换当前激活物体
     active_obj = bpy.context.active_object
     name = bpy.context.object.name
-    copyname = name + "DamoCopy"
-    ori_obj = bpy.data.objects[copyname]
-    bpy.data.objects.remove(active_obj, do_unlink=True)
-    duplicate_obj = ori_obj.copy()
-    duplicate_obj.data = ori_obj.data.copy()
-    duplicate_obj.animation_data_clear()
-    duplicate_obj.name = name
-    bpy.context.scene.collection.objects.link(duplicate_obj)
-    moveToRight(duplicate_obj)
-    bpy.context.view_layer.objects.active = duplicate_obj
+    if name == '右耳':
+        copyname = name + "DamoCopy"
+        ori_obj = bpy.data.objects[copyname]
+        bpy.data.objects.remove(active_obj, do_unlink=True)
+        duplicate_obj = ori_obj.copy()
+        duplicate_obj.data = ori_obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = name
+        bpy.context.scene.collection.objects.link(duplicate_obj)
+        moveToRight(duplicate_obj)
+        bpy.context.view_layer.objects.active = duplicate_obj
+    elif name == '左耳':
+        copyname = name + "DamoCopy"
+        ori_obj = bpy.data.objects[copyname]
+        bpy.data.objects.remove(active_obj, do_unlink=True)
+        duplicate_obj = ori_obj.copy()
+        duplicate_obj.data = ori_obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = name
+        bpy.context.scene.collection.objects.link(duplicate_obj)
+        moveToLeft(duplicate_obj)
+        bpy.context.view_layer.objects.active = duplicate_obj
 
 
 def backFromDamo():
@@ -51,18 +78,35 @@ def backFromDamo():
     active_obj = bpy.context.active_object
     name = active_obj.name
     all_objs = bpy.data.objects
-    # 删除已经存在的右耳DamoCopy
-    for selected_obj in all_objs:
-        if (selected_obj.name == "右耳DamoCopy"):
-            bpy.data.objects.remove(selected_obj, do_unlink=True)
-    duplicate_obj1 = active_obj.copy()
-    duplicate_obj1.data = active_obj.data.copy()
-    duplicate_obj1.animation_data_clear()
-    duplicate_obj1.name = name + "DamoCopy"
-    bpy.context.collection.objects.link(duplicate_obj1)
-    duplicate_obj1.hide_set(True)
-    active_obj = bpy.data.objects[name]
-    bpy.context.view_layer.objects.active = active_obj
+    if name == '右耳':
+        # 删除已经存在的右耳DamoCopy
+        for selected_obj in all_objs:
+            if (selected_obj.name == "右耳DamoCopy"):
+                bpy.data.objects.remove(selected_obj, do_unlink=True)
+        duplicate_obj = active_obj.copy()
+        duplicate_obj.data = active_obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = name + "DamoCopy"
+        bpy.context.collection.objects.link(duplicate_obj)
+        moveToRight(duplicate_obj)
+        duplicate_obj.hide_set(True)
+        active_obj = bpy.data.objects[name]
+        bpy.context.view_layer.objects.active = active_obj
+
+    if name == '左耳':
+        # 删除已经存在的左耳DamoCopy
+        for selected_obj in all_objs:
+            if (selected_obj.name == "左耳DamoCopy"):
+                bpy.data.objects.remove(selected_obj, do_unlink=True)
+        duplicate_obj = active_obj.copy()
+        duplicate_obj.data = active_obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = name + "DamoCopy"
+        bpy.context.collection.objects.link(duplicate_obj)
+        moveToLeft(duplicate_obj)
+        duplicate_obj.hide_set(True)
+        active_obj = bpy.data.objects[name]
+        bpy.context.view_layer.objects.active = active_obj
 
 
 # 打磨功能模块左侧按钮的加厚操作
@@ -76,6 +120,7 @@ class Thickening(bpy.types.Operator):
     __now_mouse_y = None
     __initial_mouse_x = None  # 点击鼠标右键的初始位置
     __initial_mouse_y = None
+    __timer = None
 
     # #打磨模块下左侧的三个按钮才起作用
     # @classmethod
@@ -86,7 +131,7 @@ class Thickening(bpy.types.Operator):
 
         bpy.context.scene.var = 1
         global is_copy
-        global is_modifier
+        # global is_modifier
         op_cls = Thickening
         print("thicking_invoke")
         if bpy.context.mode == "OBJECT":  # 将默认的物体模式切换到雕刻模式
@@ -107,22 +152,34 @@ class Thickening(bpy.types.Operator):
         if not is_copy:
             is_copy = True
             copy_object()
-        if not is_modifier:
-            if (len(bpy.context.object.modifiers) > 0):
-                bpy.ops.object.modifier_apply(modifier="jiahou", single_user=True)
-                is_modifier = True
+        # if not is_modifier:
+        #     if (len(bpy.context.object.modifiers) > 0):
+        #         bpy.ops.object.modifier_apply(modifier="jiahou", single_user=True)
+        #         is_modifier = True
+        op_cls.__timer = context.window_manager.event_timer_add(0.2, window=context.window)
         context.window_manager.modal_handler_add(self)  # 进入modal模式
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
         op_cls = Thickening
-        active_obj = context.active_object
-
+       
         # 重绘区域
         if context.area:
             context.area.tag_redraw()
 
         if (bpy.context.scene.var == 1):
+            active_obj = context.active_object
+            # 获取网格数据
+            me = active_obj.data
+            # 创建bmesh对象
+            bm = bmesh.new()
+            # 将网格数据复制到bmesh对象
+            bm.from_mesh(me)
+            # 原始数据
+            ori_obj = bpy.data.objects[active_obj.name + "DamoReset"]
+            orime = ori_obj.data
+            oribm = bmesh.new()
+            oribm.from_mesh(orime)
             if (is_mouse_on_object(context, event)):
                 if (is_changed(context, event)):
                     if bpy.context.mode == "OBJECT":  # 将默认的物体模式切换到雕刻模式
@@ -130,6 +187,73 @@ class Thickening(bpy.types.Operator):
                     bpy.ops.wm.tool_set_by_id(
                         name="builtin_brush.Draw")  # 调用加厚笔刷
                     bpy.data.brushes["SculptDraw"].direction = "ADD"
+            
+                if event.type == 'TIMER':
+                    # 遍历顶点，根据厚度设置颜色
+                    color_lay = bm.verts.layers.float_color["Color"]
+                    for vert in bm.verts:
+                        colvert = vert[color_lay]
+                        bm.verts.ensure_lookup_table()
+                        oribm.verts.ensure_lookup_table()
+                        index_color = vert.index
+                        disvec_color = oribm.verts[index_color].co - bm.verts[index_color].co
+                        dis_color = disvec_color.dot(disvec_color)
+                        thinkness = round(math.sqrt(dis_color), 2)
+                        origin_veccol = oribm.verts[index_color].normal
+                        flag_color = origin_veccol.dot(disvec_color)
+                        if flag_color > 0:
+                            thinkness *= -1
+
+                        # 厚度限制
+                        if (context.scene.localLaHouDu):
+                            # print('是否开启',context.scene.localLaHouDu)
+                            maxHoudu = context.scene.maxLaHouDu
+                            minHoudu = context.scene.minLaHouDu
+                            # print("最大厚度：",maxHoudu)
+                            # print("最小厚度：",minHoudu)
+                            if (thinkness > maxHoudu or thinkness < minHoudu):
+                                # print("原坐标：",oribm.verts[index_color].co)
+                                # print("现坐标：",bm.verts[index_color].co)
+                                # 理论厚度
+                                if thinkness > maxHoudu:
+                                    lenth = maxHoudu
+                                elif thinkness < minHoudu:
+                                    lenth = minHoudu
+                                # print("实际厚度：",thinkness)
+                                # print("理论厚度：",lenth)
+                                # 根据理论厚度修改坐标
+                                bm.verts[index_color].co = oribm.verts[index_color].co - \
+                                                            disvec_color.normalized() * lenth
+                                # print("原坐标：",oribm.verts[index_color].co)
+                                # print("现坐标：",bm.verts[index_color].co)
+                                disvec_color = oribm.verts[index_color].co - \
+                                                bm.verts[index_color].co
+                                dis_color = disvec_color.dot(
+                                    disvec_color)
+                                thinkness = round(
+                                    math.sqrt(dis_color), 2)
+                                origin_veccol = oribm.verts[index_color].normal
+                                flag_color = origin_veccol.dot(
+                                    disvec_color)
+                                if flag_color > 0:
+                                    thinkness *= -1
+                                # print("修改后的厚度：",thinkness)
+
+                        color = round(thinkness / 0.8, 2)
+                        if color >= 1:
+                            color = 1
+                        if color <= -1:
+                            color = -1
+                        if thinkness >= 0:
+                            colvert.x = color
+                            colvert.y = 1 - color
+                            colvert.z = 0
+                        else:
+                            colvert.x = 0
+                            colvert.y = 1 + color
+                            colvert.z = color * (-1)
+                    
+
                 if event.type == 'RIGHTMOUSE':  # 点击鼠标右键，改变区域选取圆环的大小
                     if event.value == 'PRESS':  # 按下鼠标右键，保存鼠标点击初始位置，标记鼠标右键已按下，移动鼠标改变圆环大小
                         op_cls.__initial_mouse_x = event.mouse_region_x
@@ -138,6 +262,7 @@ class Thickening(bpy.types.Operator):
                     elif event.value == 'RELEASE':
                         op_cls.__right_mouse_down = False  # 松开鼠标右键，标记鼠标右键未按下，移动鼠标不再改变圆环大小，结束该事件，确定圆环的大小
                     return {'RUNNING_MODAL'}
+    
                 elif event.type == 'MOUSEMOVE':
                     # if event.type == 'Q':
                     # 获取鼠标光标的区域坐标
@@ -184,22 +309,12 @@ class Thickening(bpy.types.Operator):
                     # active_obj = bpy.context.active_object
                     # name = bpy.context.object.name
                     # copyname = name + ".001"
-                    ori_obj = bpy.data.objects["DamoReset"]
-                    orime = ori_obj.data
-                    oribm = bmesh.new()
-                    oribm.from_mesh(orime)
                     # innermw = ori_obj.matrix_world
                     # innermw_inv = innermw.inverted()
                     # 确保活动对象的类型是网格
                     if active_obj.type == 'MESH':
                         # 确保活动对象可编辑
                         if active_obj.mode == 'SCULPT':
-                            # 获取网格数据
-                            me = active_obj.data
-                            # 创建bmesh对象
-                            bm = bmesh.new()
-                            # 将网格数据复制到bmesh对象
-                            bm.from_mesh(me)
                             # bm.transform(active_obj.matrix_world)
                             # 构建BVH树
                             outertree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
@@ -240,80 +355,7 @@ class Thickening(bpy.types.Operator):
                                 MyHandleClass.add_handler(
                                     draw_callback_px, (None, final_dis))
                                 # print(final_dis)
-                                # 遍历顶点，根据厚度设置颜色
-                                color_lay = bm.verts.layers.float_color["Color"]
-                                for vert in bm.verts:
-                                    colvert = vert[color_lay]
-                                    bm.verts.ensure_lookup_table()
-                                    oribm.verts.ensure_lookup_table()
-                                    index_color = vert.index
-                                    disvec_color = oribm.verts[index_color].co - \
-                                                   bm.verts[index_color].co
-                                    dis_color = disvec_color.dot(disvec_color)
-                                    thinkness = round(math.sqrt(dis_color), 2)
-                                    # origin_color = innermw_inv @ cl
-                                    # dest_color = innermw_inv @ vert.co
-                                    # direc_color = dest_color - origin_color
-                                    # maxdis_color = math.sqrt(
-                                    #     direc_color.dot(direc_color))
-                                    # _, _, fidx3, _ = innertree.ray_cast(
-                                    #     origin_color, direc_color, maxdis_color)
-                                    origin_veccol = oribm.verts[index_color].normal
-                                    flag_color = origin_veccol.dot(
-                                        disvec_color)
-                                    if flag_color > 0:
-                                        thinkness *= -1
-
-                                    # 厚度限制
-                                    if (context.scene.localLaHouDu):
-                                        # print('是否开启',context.scene.localLaHouDu)
-                                        maxHoudu = context.scene.maxLaHouDu
-                                        minHoudu = context.scene.minLaHouDu
-                                        # print("最大厚度：",maxHoudu)
-                                        # print("最小厚度：",minHoudu)
-                                        if (thinkness > maxHoudu or thinkness < minHoudu):
-                                            # print("原坐标：",oribm.verts[index_color].co)
-                                            # print("现坐标：",bm.verts[index_color].co)
-                                            # 理论厚度
-                                            if thinkness > maxHoudu:
-                                                lenth = maxHoudu
-                                            elif thinkness < minHoudu:
-                                                lenth = minHoudu
-                                            # print("实际厚度：",thinkness)
-                                            # print("理论厚度：",lenth)
-                                            # 根据理论厚度修改坐标
-                                            bm.verts[index_color].co = oribm.verts[index_color].co - \
-                                                                       disvec_color.normalized() * lenth
-                                            # print("原坐标：",oribm.verts[index_color].co)
-                                            # print("现坐标：",bm.verts[index_color].co)
-                                            disvec_color = oribm.verts[index_color].co - \
-                                                           bm.verts[index_color].co
-                                            dis_color = disvec_color.dot(
-                                                disvec_color)
-                                            thinkness = round(
-                                                math.sqrt(dis_color), 2)
-                                            origin_veccol = oribm.verts[index_color].normal
-                                            flag_color = origin_veccol.dot(
-                                                disvec_color)
-                                            if flag_color > 0:
-                                                thinkness *= -1
-                                            # print("修改后的厚度：",thinkness)
-
-                                    color = round(thinkness / 0.8, 2)
-                                    if color >= 1:
-                                        color = 1
-                                    if color <= -1:
-                                        color = -1
-                                    if thinkness >= 0:
-                                        colvert.x = color
-                                        colvert.y = 1 - color
-                                        colvert.z = 0
-                                    else:
-                                        colvert.x = 0
-                                        colvert.y = 1 + color
-                                        colvert.z = color * (-1)
-                                bm.to_mesh(me)
-                                bm.free()
+                                
                     if op_cls.__right_mouse_down:  # 鼠标右键按下时，鼠标移动改变圆环大小
                         op_cls.__now_mouse_y = event.mouse_region_y
                         op_cls.__now_mouse_x = event.mouse_region_x
@@ -322,6 +364,7 @@ class Thickening(bpy.types.Operator):
                             op_cls.__now_mouse_x - op_cls.__initial_mouse_x) * fabs(
                             op_cls.__now_mouse_x - op_cls.__initial_mouse_x)))
                         bpy.data.scenes["Scene"].tool_settings.unified_paint_settings.size = dis
+
             elif ((not is_mouse_on_object(context, event)) and is_changed(context, event)):
                 if bpy.context.mode == "SCULPT":  # 将默认的雕刻模式切换到物体模式
                     bpy.ops.sculpt.sculptmode_toggle()
@@ -338,12 +381,15 @@ class Thickening(bpy.types.Operator):
                     colvert.x = 1
                     colvert.y = 0.319
                     colvert.z = 0.133
-                bm.to_mesh(me)
-                bm.free()
-                MyHandleClass.remove_handler()
+                MyHandleClass.remove_handler()   
                 context.area.tag_redraw()
+    
+            bm.to_mesh(me)
+            bm.free()
             return {'PASS_THROUGH'}
         else:
+            context.window_manager.event_timer_remove(op_cls.__timer)
+            op_cls.__timer = None
             return {'FINISHED'}
 
 
@@ -358,6 +404,7 @@ class Thinning(bpy.types.Operator):
     __now_mouse_y = None
     __initial_mouse_x = None  # 点击鼠标右键的初始位置
     __initial_mouse_y = None
+    __timer = None
 
     # @classmethod
     # def poll(cls,context):
@@ -366,33 +413,34 @@ class Thinning(bpy.types.Operator):
     def invoke(self, context, event):
 
         global is_copy
-        global is_modifier
+        # global is_modifier
         bpy.context.scene.var = 2
         op_cls = Thinning
         print("thinning_invoke")
         if bpy.context.mode == "OBJECT":  # 将默认的物体模式切换到雕刻模式
             bpy.ops.sculpt.sculptmode_toggle()
         bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")  # 调用加厚笔刷
-        bpy.data.brushes["SculptDraw"].direction = "ADD"
+        bpy.data.brushes["SculptDraw"].direction = "SUBTRACT"
         bpy.context.scene.tool_settings.unified_paint_settings.size = 100  # 将用于框选区域的圆环半径设置为500
         if bpy.context.mode == "SCULPT":  # 将默认的雕刻模式切换到物体模式
             bpy.ops.sculpt.sculptmode_toggle()
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")  # 切换到选择模式
-        __right_mouse_down = False  # 初始化鼠标右键行为操作
-        __now_mouse_x = None
-        __now_mouse_y = None
-        __initial_mouse_x = None
-        __initial_mouse_y = None  # 锁定圆环和模型的比例
+        op_cls.__right_mouse_down = False  # 初始化鼠标右键行为操作
+        op_cls.__now_mouse_x = None
+        op_cls.__now_mouse_y = None
+        op_cls.__initial_mouse_x = None
+        op_cls.__initial_mouse_y = None  # 锁定圆环和模型的比例
         bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'
 
         if not is_copy:
             is_copy = True
             copy_object()
-        if not is_modifier:
-            if (len(bpy.context.object.modifiers) > 0):
-                bpy.ops.object.modifier_apply(modifier="jiahou", single_user=True)
-                is_modifier = True
+        # if not is_modifier:
+        #     if (len(bpy.context.object.modifiers) > 0):
+        #         bpy.ops.object.modifier_apply(modifier="jiahou", single_user=True)
+        #         is_modifier = True
 
+        op_cls.__timer = context.window_manager.event_timer_add(0.2, window=context.window)
         context.window_manager.modal_handler_add(self)  # 进入modal模式
         return {'RUNNING_MODAL'}
 
@@ -406,13 +454,91 @@ class Thinning(bpy.types.Operator):
             context.area.tag_redraw()
 
         if (bpy.context.scene.var == 2):
+            active_obj = context.active_object
+            # 获取网格数据
+            me = active_obj.data
+            # 创建bmesh对象
+            bm = bmesh.new()
+            # 将网格数据复制到bmesh对象
+            bm.from_mesh(me)
+            # 原始数据
+            ori_obj = bpy.data.objects[active_obj.name + "DamoReset"]
+            orime = ori_obj.data
+            oribm = bmesh.new()
+            oribm.from_mesh(orime)
             if (is_mouse_on_object(context, event)):
                 if (is_changed(context, event)):
                     if bpy.context.mode == "OBJECT":  # 将默认的物体模式切换到雕刻模式
                         bpy.ops.sculpt.sculptmode_toggle()
-                    bpy.ops.wm.tool_set_by_id(
-                        name="builtin_brush.Draw")  # 调用减薄笔刷
+                    bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")  # 调用加厚笔刷
                     bpy.data.brushes["SculptDraw"].direction = "SUBTRACT"
+            
+                if event.type == 'TIMER':
+                    # 遍历顶点，根据厚度设置颜色
+                    color_lay = bm.verts.layers.float_color["Color"]
+                    for vert in bm.verts:
+                        colvert = vert[color_lay]
+                        bm.verts.ensure_lookup_table()
+                        oribm.verts.ensure_lookup_table()
+                        index_color = vert.index
+                        disvec_color = oribm.verts[index_color].co - bm.verts[index_color].co
+                        dis_color = disvec_color.dot(disvec_color)
+                        thinkness = round(math.sqrt(dis_color), 2)
+                        origin_veccol = oribm.verts[index_color].normal
+                        flag_color = origin_veccol.dot(disvec_color)
+                        if flag_color > 0:
+                            thinkness *= -1
+
+                        # 厚度限制
+                        if (context.scene.localLaHouDu):
+                            # print('是否开启',context.scene.localLaHouDu)
+                            maxHoudu = context.scene.maxLaHouDu
+                            minHoudu = context.scene.minLaHouDu
+                            # print("最大厚度：",maxHoudu)
+                            # print("最小厚度：",minHoudu)
+                            if (thinkness > maxHoudu or thinkness < minHoudu):
+                                # print("原坐标：",oribm.verts[index_color].co)
+                                # print("现坐标：",bm.verts[index_color].co)
+                                # 理论厚度
+                                if thinkness > maxHoudu:
+                                    lenth = maxHoudu
+                                elif thinkness < minHoudu:
+                                    lenth = minHoudu
+                                # print("实际厚度：",thinkness)
+                                # print("理论厚度：",lenth)
+                                # 根据理论厚度修改坐标
+                                bm.verts[index_color].co = oribm.verts[index_color].co + \
+                                                            disvec_color.normalized() * lenth
+                                # print("原坐标：",oribm.verts[index_color].co)
+                                # print("现坐标：",bm.verts[index_color].co)
+                                disvec_color = oribm.verts[index_color].co - \
+                                                bm.verts[index_color].co
+                                dis_color = disvec_color.dot(
+                                    disvec_color)
+                                thinkness = round(
+                                    math.sqrt(dis_color), 2)
+                                origin_veccol = oribm.verts[index_color].normal
+                                flag_color = origin_veccol.dot(
+                                    disvec_color)
+                                if flag_color > 0:
+                                    thinkness *= -1
+                                # print("修改后的厚度：",thinkness)
+
+                        color = round(thinkness / 0.8, 2)
+                        if color >= 1:
+                            color = 1
+                        if color <= -1:
+                            color = -1
+                        if thinkness >= 0:
+                            colvert.x = color
+                            colvert.y = 1 - color
+                            colvert.z = 0
+                        else:
+                            colvert.x = 0
+                            colvert.y = 1 + color
+                            colvert.z = color * (-1)
+                    
+
                 if event.type == 'RIGHTMOUSE':  # 点击鼠标右键，改变区域选取圆环的大小
                     if event.value == 'PRESS':  # 按下鼠标右键，保存鼠标点击初始位置，标记鼠标右键已按下，移动鼠标改变圆环大小
                         op_cls.__initial_mouse_x = event.mouse_region_x
@@ -421,6 +547,7 @@ class Thinning(bpy.types.Operator):
                     elif event.value == 'RELEASE':
                         op_cls.__right_mouse_down = False  # 松开鼠标右键，标记鼠标右键未按下，移动鼠标不再改变圆环大小，结束该事件，确定圆环的大小
                     return {'RUNNING_MODAL'}
+    
                 elif event.type == 'MOUSEMOVE':
                     # if event.type == 'Q':
                     # 获取鼠标光标的区域坐标
@@ -467,22 +594,12 @@ class Thinning(bpy.types.Operator):
                     # active_obj = bpy.context.active_object
                     # name = bpy.context.object.name
                     # copyname = name + ".001"
-                    ori_obj = bpy.data.objects["DamoReset"]
-                    orime = ori_obj.data
-                    oribm = bmesh.new()
-                    oribm.from_mesh(orime)
                     # innermw = ori_obj.matrix_world
                     # innermw_inv = innermw.inverted()
                     # 确保活动对象的类型是网格
                     if active_obj.type == 'MESH':
                         # 确保活动对象可编辑
                         if active_obj.mode == 'SCULPT':
-                            # 获取网格数据
-                            me = active_obj.data
-                            # 创建bmesh对象
-                            bm = bmesh.new()
-                            # 将网格数据复制到bmesh对象
-                            bm.from_mesh(me)
                             # bm.transform(active_obj.matrix_world)
                             # 构建BVH树
                             outertree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
@@ -523,77 +640,7 @@ class Thinning(bpy.types.Operator):
                                 MyHandleClass.add_handler(
                                     draw_callback_px, (None, final_dis))
                                 # print(final_dis)
-                                # 遍历顶点，根据厚度设置颜色
-                                color_lay = bm.verts.layers.float_color["Color"]
-                                for vert in bm.verts:
-                                    colvert = vert[color_lay]
-                                    bm.verts.ensure_lookup_table()
-                                    oribm.verts.ensure_lookup_table()
-                                    index_color = vert.index
-                                    disvec_color = oribm.verts[index_color].co - \
-                                                   bm.verts[index_color].co
-                                    dis_color = disvec_color.dot(disvec_color)
-                                    thinkness = round(math.sqrt(dis_color), 2)
-                                    # origin_color = innermw_inv @ cl
-                                    # dest_color = innermw_inv @ vert.co
-                                    # direc_color = dest_color - origin_color
-                                    # maxdis_color = math.sqrt(
-                                    #     direc_color.dot(direc_color))
-                                    # _, _, fidx3, _ = innertree.ray_cast(
-                                    #     origin_color, direc_color, maxdis_color)
-                                    origin_veccol = oribm.verts[index_color].normal
-                                    flag_color = origin_veccol.dot(
-                                        disvec_color)
-                                    if flag_color > 0:
-                                        thinkness *= -1
-
-                                    # 厚度限制
-                                    if (context.scene.localLaHouDu):
-                                        maxHoudu = context.scene.maxLaHouDu
-                                        minHoudu = context.scene.minLaHouDu
-                                        if (thinkness > maxHoudu or thinkness < minHoudu):
-                                            # print("原坐标：",oribm.verts[index_color].co)
-                                            # print("现坐标：",bm.verts[index_color].co)
-                                            # 应该绘制的厚度
-                                            if thinkness > maxHoudu:
-                                                lenth = maxHoudu
-                                            elif thinkness < minHoudu:
-                                                lenth = minHoudu
-                                            # print("实际厚度：",thinkness)
-                                            # print("理论厚度：",lenth)
-                                            # 根据厚度修改坐标
-                                            bm.verts[index_color].co = oribm.verts[index_color].co + \
-                                                                       disvec_color.normalized() * lenth
-                                            # print("原坐标：",oribm.verts[index_color].co)
-                                            # print("现坐标：",bm.verts[index_color].co)
-                                            disvec_color = oribm.verts[index_color].co - \
-                                                           bm.verts[index_color].co
-                                            dis_color = disvec_color.dot(
-                                                disvec_color)
-                                            thinkness = round(
-                                                math.sqrt(dis_color), 2)
-                                            origin_veccol = oribm.verts[index_color].normal
-                                            flag_color = origin_veccol.dot(
-                                                disvec_color)
-                                            if flag_color > 0:
-                                                thinkness *= -1
-                                            # print("修改后的厚度：",thinkness)
-
-                                    color = round(thinkness / 0.8, 2)
-                                    if color >= 1:
-                                        color = 1
-                                    if color <= -1:
-                                        color = -1
-                                    if thinkness >= 0:
-                                        colvert.x = color
-                                        colvert.y = 1 - color
-                                        colvert.z = 0
-                                    else:
-                                        colvert.x = 0
-                                        colvert.y = 1 + color
-                                        colvert.z = color * (-1)
-                                bm.to_mesh(me)
-                                bm.free()
+                                
                     if op_cls.__right_mouse_down:  # 鼠标右键按下时，鼠标移动改变圆环大小
                         op_cls.__now_mouse_y = event.mouse_region_y
                         op_cls.__now_mouse_x = event.mouse_region_x
@@ -602,6 +649,7 @@ class Thinning(bpy.types.Operator):
                             op_cls.__now_mouse_x - op_cls.__initial_mouse_x) * fabs(
                             op_cls.__now_mouse_x - op_cls.__initial_mouse_x)))
                         bpy.data.scenes["Scene"].tool_settings.unified_paint_settings.size = dis
+
             elif ((not is_mouse_on_object(context, event)) and is_changed(context, event)):
                 if bpy.context.mode == "SCULPT":  # 将默认的雕刻模式切换到物体模式
                     bpy.ops.sculpt.sculptmode_toggle()
@@ -618,13 +666,17 @@ class Thinning(bpy.types.Operator):
                     colvert.x = 1
                     colvert.y = 0.319
                     colvert.z = 0.133
-                bm.to_mesh(me)
-                bm.free()
-                MyHandleClass.remove_handler()
+                MyHandleClass.remove_handler()   
                 context.area.tag_redraw()
+    
+            bm.to_mesh(me)
+            bm.free()
             return {'PASS_THROUGH'}
         else:
+            context.window_manager.event_timer_remove(op_cls.__timer)
+            op_cls.__timer = None
             return {'FINISHED'}
+
 
 
 # 打磨功能模块左侧按钮的光滑操作
@@ -638,6 +690,7 @@ class Smooth(bpy.types.Operator):
     __now_mouse_y = None
     __initial_mouse_x = None  # 点击鼠标右键的初始位置
     __initial_mouse_y = None
+    __timer = None
 
     # @classmethod
     # def poll(context):
@@ -650,7 +703,7 @@ class Smooth(bpy.types.Operator):
         op_cls = Smooth
 
         global is_copy
-        global is_modifier
+        # global is_modifier
         bpy.context.scene.var = 3
         print("smooth_invoke")
         if bpy.context.mode == "OBJECT":  # 将默认的物体模式切换到雕刻模式
@@ -661,21 +714,22 @@ class Smooth(bpy.types.Operator):
         if bpy.context.mode == "SCULPT":  # 将默认的雕刻模式切换到物体模式
             bpy.ops.sculpt.sculptmode_toggle()
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")  # 切换到选择模式
-        __right_mouse_down = False  # 初始化鼠标右键行为操作
-        __now_mouse_x = None
-        __now_mouse_y = None
-        __initial_mouse_x = None
-        __initial_mouse_y = None  # 锁定圆环和模型的比例
+        op_cls.__right_mouse_down = False  # 初始化鼠标右键行为操作
+        op_cls.__now_mouse_x = None
+        op_cls.__now_mouse_y = None
+        op_cls.__initial_mouse_x = None
+        op_cls.__initial_mouse_y = None  # 锁定圆环和模型的比例
         bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'
 
         if not is_copy:
             is_copy = True
             copy_object()
-        if not is_modifier:
-            if (len(bpy.context.object.modifiers) > 0):
-                bpy.ops.object.modifier_apply(modifier="jiahou", single_user=True)
-                is_modifier = True
+        # if not is_modifier:
+        #     if (len(bpy.context.object.modifiers) > 0):
+        #         bpy.ops.object.modifier_apply(modifier="jiahou", single_user=True)
+        #         is_modifier = True
 
+        op_cls.__timer = context.window_manager.event_timer_add(0.2, window=context.window)
         context.window_manager.modal_handler_add(self)  # 进入modal模式
         return {'RUNNING_MODAL'}
 
@@ -688,12 +742,91 @@ class Smooth(bpy.types.Operator):
             context.area.tag_redraw()
 
         if (bpy.context.scene.var == 3):
+            active_obj = context.active_object
+            # 获取网格数据
+            me = active_obj.data
+            # 创建bmesh对象
+            bm = bmesh.new()
+            # 将网格数据复制到bmesh对象
+            bm.from_mesh(me)
+            # 原始数据
+            ori_obj = bpy.data.objects[active_obj.name + "DamoReset"]
+            orime = ori_obj.data
+            oribm = bmesh.new()
+            oribm.from_mesh(orime)
             if (is_mouse_on_object(context, event)):
                 if (is_changed(context, event)):
                     if bpy.context.mode == "OBJECT":  # 将默认的物体模式切换到雕刻模式
                         bpy.ops.sculpt.sculptmode_toggle()
-                    bpy.ops.wm.tool_set_by_id(
-                        name="builtin_brush.Smooth")  # 调用光滑笔刷
+                    bpy.ops.wm.tool_set_by_id(name="builtin_brush.Smooth")  # 调用光滑笔刷
+                    bpy.data.brushes["SculptDraw"].direction = "ADD"
+            
+                if event.type == 'TIMER':
+                    # 遍历顶点，根据厚度设置颜色
+                    color_lay = bm.verts.layers.float_color["Color"]
+                    for vert in bm.verts:
+                        colvert = vert[color_lay]
+                        bm.verts.ensure_lookup_table()
+                        oribm.verts.ensure_lookup_table()
+                        index_color = vert.index
+                        disvec_color = oribm.verts[index_color].co - bm.verts[index_color].co
+                        dis_color = disvec_color.dot(disvec_color)
+                        thinkness = round(math.sqrt(dis_color), 2)
+                        origin_veccol = oribm.verts[index_color].normal
+                        flag_color = origin_veccol.dot(disvec_color)
+                        if flag_color > 0:
+                            thinkness *= -1
+
+                        # 厚度限制
+                        if (context.scene.localLaHouDu):
+                            # print('是否开启',context.scene.localLaHouDu)
+                            maxHoudu = context.scene.maxLaHouDu
+                            minHoudu = context.scene.minLaHouDu
+                            # print("最大厚度：",maxHoudu)
+                            # print("最小厚度：",minHoudu)
+                            if (thinkness > maxHoudu or thinkness < minHoudu):
+                                # print("原坐标：",oribm.verts[index_color].co)
+                                # print("现坐标：",bm.verts[index_color].co)
+                                # 理论厚度
+                                if thinkness > maxHoudu:
+                                    lenth = maxHoudu
+                                elif thinkness < minHoudu:
+                                    lenth = minHoudu
+                                # print("实际厚度：",thinkness)
+                                # print("理论厚度：",lenth)
+                                # 根据理论厚度修改坐标
+                                bm.verts[index_color].co = oribm.verts[index_color].co - \
+                                                            disvec_color.normalized() * lenth
+                                # print("原坐标：",oribm.verts[index_color].co)
+                                # print("现坐标：",bm.verts[index_color].co)
+                                disvec_color = oribm.verts[index_color].co - \
+                                                bm.verts[index_color].co
+                                dis_color = disvec_color.dot(
+                                    disvec_color)
+                                thinkness = round(
+                                    math.sqrt(dis_color), 2)
+                                origin_veccol = oribm.verts[index_color].normal
+                                flag_color = origin_veccol.dot(
+                                    disvec_color)
+                                if flag_color > 0:
+                                    thinkness *= -1
+                                # print("修改后的厚度：",thinkness)
+
+                        color = round(thinkness / 0.8, 2)
+                        if color >= 1:
+                            color = 1
+                        if color <= -1:
+                            color = -1
+                        if thinkness >= 0:
+                            colvert.x = color
+                            colvert.y = 1 - color
+                            colvert.z = 0
+                        else:
+                            colvert.x = 0
+                            colvert.y = 1 + color
+                            colvert.z = color * (-1)
+                    
+
                 if event.type == 'RIGHTMOUSE':  # 点击鼠标右键，改变区域选取圆环的大小
                     if event.value == 'PRESS':  # 按下鼠标右键，保存鼠标点击初始位置，标记鼠标右键已按下，移动鼠标改变圆环大小
                         op_cls.__initial_mouse_x = event.mouse_region_x
@@ -702,6 +835,7 @@ class Smooth(bpy.types.Operator):
                     elif event.value == 'RELEASE':
                         op_cls.__right_mouse_down = False  # 松开鼠标右键，标记鼠标右键未按下，移动鼠标不再改变圆环大小，结束该事件，确定圆环的大小
                     return {'RUNNING_MODAL'}
+    
                 elif event.type == 'MOUSEMOVE':
                     # if event.type == 'Q':
                     # 获取鼠标光标的区域坐标
@@ -748,22 +882,12 @@ class Smooth(bpy.types.Operator):
                     # active_obj = bpy.context.active_object
                     # name = bpy.context.object.name
                     # copyname = name + ".001"
-                    ori_obj = bpy.data.objects["DamoReset"]
-                    orime = ori_obj.data
-                    oribm = bmesh.new()
-                    oribm.from_mesh(orime)
                     # innermw = ori_obj.matrix_world
                     # innermw_inv = innermw.inverted()
                     # 确保活动对象的类型是网格
                     if active_obj.type == 'MESH':
                         # 确保活动对象可编辑
                         if active_obj.mode == 'SCULPT':
-                            # 获取网格数据
-                            me = active_obj.data
-                            # 创建bmesh对象
-                            bm = bmesh.new()
-                            # 将网格数据复制到bmesh对象
-                            bm.from_mesh(me)
                             # bm.transform(active_obj.matrix_world)
                             # 构建BVH树
                             outertree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
@@ -804,45 +928,7 @@ class Smooth(bpy.types.Operator):
                                 MyHandleClass.add_handler(
                                     draw_callback_px, (None, final_dis))
                                 # print(final_dis)
-                                # 遍历顶点，根据厚度设置颜色
-                                color_lay = bm.verts.layers.float_color["Color"]
-                                for vert in bm.verts:
-                                    colvert = vert[color_lay]
-                                    bm.verts.ensure_lookup_table()
-                                    oribm.verts.ensure_lookup_table()
-                                    index_color = vert.index
-                                    disvec_color = oribm.verts[index_color].co - \
-                                                   bm.verts[index_color].co
-                                    dis_color = disvec_color.dot(disvec_color)
-                                    thinkness = round(math.sqrt(dis_color), 2)
-                                    # origin_color = innermw_inv @ cl
-                                    # dest_color = innermw_inv @ vert.co
-                                    # direc_color = dest_color - origin_color
-                                    # maxdis_color = math.sqrt(
-                                    #     direc_color.dot(direc_color))
-                                    # _, _, fidx3, _ = innertree.ray_cast(
-                                    #     origin_color, direc_color, maxdis_color)
-                                    origin_veccol = oribm.verts[index_color].normal
-                                    flag_color = origin_veccol.dot(
-                                        disvec_color)
-                                    if flag_color > 0:
-                                        thinkness *= -1
-
-                                    color = round(thinkness / 0.8, 2)
-                                    if color >= 1:
-                                        color = 1
-                                    if color <= -1:
-                                        color = -1
-                                    if thinkness >= 0:
-                                        colvert.x = color
-                                        colvert.y = 1 - color
-                                        colvert.z = 0
-                                    else:
-                                        colvert.x = 0
-                                        colvert.y = 1 + color
-                                        colvert.z = color * (-1)
-                                bm.to_mesh(me)
-                                bm.free()
+                                
                     if op_cls.__right_mouse_down:  # 鼠标右键按下时，鼠标移动改变圆环大小
                         op_cls.__now_mouse_y = event.mouse_region_y
                         op_cls.__now_mouse_x = event.mouse_region_x
@@ -851,10 +937,12 @@ class Smooth(bpy.types.Operator):
                             op_cls.__now_mouse_x - op_cls.__initial_mouse_x) * fabs(
                             op_cls.__now_mouse_x - op_cls.__initial_mouse_x)))
                         bpy.data.scenes["Scene"].tool_settings.unified_paint_settings.size = dis
+
             elif ((not is_mouse_on_object(context, event)) and is_changed(context, event)):
                 if bpy.context.mode == "SCULPT":  # 将默认的雕刻模式切换到物体模式
                     bpy.ops.sculpt.sculptmode_toggle()
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")  # 切换到选择模式
+
                 me = active_obj.data
                 # 创建bmesh对象
                 bm = bmesh.new()
@@ -866,13 +954,17 @@ class Smooth(bpy.types.Operator):
                     colvert.x = 1
                     colvert.y = 0.319
                     colvert.z = 0.133
-                bm.to_mesh(me)
-                bm.free()
-                MyHandleClass.remove_handler()
+                MyHandleClass.remove_handler()   
                 context.area.tag_redraw()
+    
+            bm.to_mesh(me)
+            bm.free()
             return {'PASS_THROUGH'}
         else:
+            context.window_manager.event_timer_remove(op_cls.__timer)
+            op_cls.__timer = None
             return {'FINISHED'}
+
 
 
 class Damo_Reset(bpy.types.Operator):
@@ -888,7 +980,7 @@ class Damo_Reset(bpy.types.Operator):
 
     def excute(self, context, event):
         global is_copy
-        global is_modifier
+        # global is_modifier
 
         # global reset_num
         if is_copy:
@@ -896,7 +988,7 @@ class Damo_Reset(bpy.types.Operator):
             active_obj = bpy.context.active_object
             name = bpy.context.object.name
             # copyname = name + ".001"
-            ori_obj = bpy.data.objects["DamoReset"]
+            ori_obj = bpy.data.objects[name + "DamoReset"]
             bpy.data.objects.remove(active_obj, do_unlink=True)
             ori_obj.name = name
             ori_obj.hide_set(False)
@@ -907,7 +999,7 @@ class Damo_Reset(bpy.types.Operator):
                     bpy.context.view_layer.objects.active = i
                     i.select_set(state=True)
             is_copy = False
-            is_modifier = False
+            # is_modifier = False
             # bpy.ops.geometry.color_attribute_add()
             # active_obj = bpy.context.active_object
             # me = active_obj.data
@@ -1101,8 +1193,7 @@ _classes = [
     Thickening,
     Thinning,
     Smooth,
-    Damo_Reset,
-
+    Damo_Reset
 ]
 
 

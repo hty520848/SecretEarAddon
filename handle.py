@@ -8,7 +8,7 @@ import bmesh
 
 prev_on_object = False  # 判断鼠标在模型上与否的状态是否改变
 
-is_add_handle = False   #是否添加过附件,只能添加一个附件
+is_add_handle = False   #是否添加过附件,只能添加一个附件。  模块切换时若添加过附件,则重新切换到添加附件模块时会添加一个附件
 
 prev_location_x = 0     #记录附件位置
 prev_location_y = 0
@@ -16,38 +16,19 @@ prev_location_z = 0
 prev_rotation_x = 0
 prev_rotation_y = 0
 prev_rotation_z = 0
+prev_handle_offset = 0  #记录面板中的附件偏移量
 
 
-# 获取区域和空间，鼠标行为切换相关
-def get_region_and_space(context, area_type, region_type, space_type):
-    region = None
-    area = None
-    space = None
 
-    # 获取指定区域的信息
-    for a in context.screen.areas:
-        if a.type == area_type:
-            area = a
-            break
-    else:
-        return (None, None)
-    # 获取指定区域的信息
-    for r in area.regions:
-        if r.type == region_type:
-            region = r
-            break
-    # 获取指定区域的信息
-    for s in area.spaces:
-        if s.type == space_type:
-            space = s
-            break
-
-    return (region, space)
+def initialTransparency():
+    mat = newShader("Transparency")  # 创建材质
+    mat.blend_method = "BLEND"
+    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.01
 
 
 # 判断鼠标是否在物体上
 def is_mouse_on_object(context, event):
-    name = "右耳"  # TODO      右耳为导入的模型名称
+    name = "Cube"  # TODO      右耳为导入的模型名称
     obj = bpy.data.objects[name]
 
     is_on_object = False  # 初始化变量
@@ -99,7 +80,7 @@ def is_mouse_on_object(context, event):
 
 # 判断鼠标状态是否发生改变
 def is_changed(context, event):
-    name = "右耳"  # TODO     右耳为导入的模型名称
+    name = "Cube"  # TODO     右耳为导入的模型名称
     obj = bpy.data.objects[name]
 
     curr_on_object = False  # 当前鼠标是否在物体上,初始化为False
@@ -176,10 +157,14 @@ def frontFromHandle():
     saveInfo()
     handlename = "Cube"
     handle_obj = bpy.data.objects.get(handlename)
+    handlecomparename = "Cube.001"
+    handle_compare_obj = bpy.data.objects.get(handlecomparename)
     planename = "Plane"
     plane_obj = bpy.data.objects.get(planename)
     if (handle_obj != None):
         bpy.data.objects.remove(handle_obj, do_unlink=True)
+    if (handle_compare_obj != None):
+        bpy.data.objects.remove(handle_compare_obj, do_unlink=True)
     if (plane_obj != None):
         bpy.data.objects.remove(plane_obj, do_unlink=True)
 
@@ -229,9 +214,27 @@ def backToHandle():
     else:
         name = "右耳"  # TODO    根据导入文件名称更改
         obj = bpy.data.objects[name]
-        lastname = "右耳MouldLast"
+        lastname = "右耳VentCanalLast"
         last_obj = bpy.data.objects.get(lastname)
         if (last_obj != None):
+            ori_obj = last_obj.copy()
+            ori_obj.data = last_obj.data.copy()
+            ori_obj.animation_data_clear()
+            ori_obj.name = name + "HandleReset"
+            bpy.context.collection.objects.link(ori_obj)
+            ori_obj.hide_set(True)
+        elif (bpy.data.objects.get("右耳SoundCanalLast") != None):
+            lastname = "右耳SoundCanalLast"
+            last_obj = bpy.data.objects.get(lastname)
+            ori_obj = last_obj.copy()
+            ori_obj.data = last_obj.data.copy()
+            ori_obj.animation_data_clear()
+            ori_obj.name = name + "HandleReset"
+            bpy.context.collection.objects.link(ori_obj)
+            ori_obj.hide_set(True)
+        elif (bpy.data.objects.get("右耳MouldLast") != None):
+            lastname = "右耳MouldLast"
+            last_obj = bpy.data.objects.get(lastname)
             ori_obj = last_obj.copy()
             ori_obj.data = last_obj.data.copy()
             ori_obj.animation_data_clear()
@@ -303,6 +306,7 @@ def saveInfo():
     global prev_rotation_x
     global prev_rotation_y
     global prev_rotation_z
+    global prev_handle_offset
 
     planename = "Plane"
     plane_obj = bpy.data.objects.get(planename)
@@ -314,6 +318,7 @@ def saveInfo():
         prev_rotation_x = plane_obj.rotation_euler[0]
         prev_rotation_y = plane_obj.rotation_euler[1]
         prev_rotation_z = plane_obj.rotation_euler[2]
+        prev_handle_offset = bpy.context.scene.erMoFuJianOffset
 
 
 
@@ -324,6 +329,7 @@ def initial():
     global prev_rotation_x
     global prev_rotation_y
     global prev_rotation_z
+    global prev_handle_offset
     global is_add_handle
 
     if(is_add_handle == True):
@@ -340,6 +346,7 @@ def initial():
         plane_obj.rotation_euler[1] = prev_rotation_y
         plane_obj.rotation_euler[2] = prev_rotation_z
         bpy.ops.object.handleadd('INVOKE_DEFAULT')
+        bpy.context.scene.erMoFuJianOffset = prev_handle_offset
 
 
 
@@ -350,13 +357,19 @@ def handleReset():
     # 存在未提交Handle时,删除Handle和Plane
     handlename = "Cube"
     handle_obj = bpy.data.objects.get(handlename)
+    handlecomparename = "Cube.001"
+    handle_compare_obj = bpy.data.objects.get(handlecomparename)
     planename = "Plane"
     plane_obj = bpy.data.objects.get(planename)
-    # 存在未提交的Label和Plane时
+    # 存在未提交的Handle,HandleCompare和Plane时
     if (handle_obj != None):
         bpy.data.objects.remove(handle_obj, do_unlink=True)
+    if (handle_compare_obj != None):
+        bpy.data.objects.remove(handle_compare_obj, do_unlink=True)
     if (plane_obj != None):
         bpy.data.objects.remove(plane_obj, do_unlink=True)
+    #将面板参数重置
+    bpy.context.scene.erMoFuJianOffset = 0
     # 将HandleReset复制并替代当前操作模型
     oriname = "右耳"  # TODO    右耳最终需要替换为导入时的文件名  右耳HandleReset同理
     ori_obj = bpy.data.objects.get(oriname)
@@ -376,6 +389,8 @@ def handleSubmit():
     obj = bpy.data.objects.get(name)
     handlename = "Cube"
     handle_obj = bpy.data.objects.get(handlename)
+    handlecomparename = "Cube.001"
+    handle_compare_obj = bpy.data.objects.get(handlecomparename)
     planename = "Plane"
     plane_obj = bpy.data.objects.get(planename)
     # 存在未提交的Handle和Plane时
@@ -389,8 +404,9 @@ def handleSubmit():
 
         bpy.data.objects.remove(plane_obj, do_unlink=True)
         bpy.data.objects.remove(handle_obj, do_unlink=True)
+        bpy.data.objects.remove(handle_compare_obj, do_unlink=True)
 
-        # 合并后Label会被去除材质,因此需要重置一下模型颜色为黄色
+        # 合并后Handle会被去除材质,因此需要重置一下模型颜色为黄色
         bpy.ops.object.mode_set(mode='VERTEX_PAINT')
         bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
         bpy.data.brushes["Draw"].color = (1, 0.6, 0.4)
@@ -401,6 +417,7 @@ def handleSubmit():
 def addHandle():
     # 添加平面Plane和附件Cube
     bpy.ops.mesh.primitive_cube_add(enter_editmode=False, align='WORLD', location=(-20, 6, 1), scale=(1, 1, 1))
+    bpy.ops.mesh.primitive_cube_add(enter_editmode=False, align='WORLD', location=(-20, 6, 1), scale=(1, 1, 1))
     bpy.ops.mesh.primitive_plane_add(enter_editmode=False, align='WORLD', location=(-20, 6, 0), scale=(1, 1, 1))
 
     name = "右耳"  # TODO    根据导入文件名称更改
@@ -408,6 +425,9 @@ def addHandle():
     cubename = "Cube"
     cube_obj = bpy.data.objects[cubename]
     moveToRight(cube_obj)
+    cubecomparename = "Cube.001"
+    cube_compare_obj = bpy.data.objects[cubecomparename]
+    moveToRight(cube_compare_obj)
     planename = "Plane"
     plane_obj = bpy.data.objects[planename]
     moveToRight(plane_obj)
@@ -419,32 +439,45 @@ def addHandle():
     cube_obj.data.materials.clear()
     cube_obj.data.materials.append(red_material)
 
+    # 将作为对比的附件变透明
+    bpy.context.view_layer.objects.active = cube_compare_obj
+    initialTransparency()
+    cube_compare_obj.data.materials.clear()
+    cube_compare_obj.data.materials.append(bpy.data.materials['Transparency'])
+
+
+
     # 为平面添加透明效果
     bpy.context.view_layer.objects.active = plane_obj
-    mat = bpy.data.materials.get("Transparency")
-    if mat is None:
-        mat = bpy.data.materials.new(name="Transparency")
-    mat.use_nodes = True
-    if mat.node_tree:
-        mat.node_tree.links.clear()
-        mat.node_tree.nodes.clear()
-    nodes = mat.node_tree.nodes
-    links = mat.node_tree.links
-    output = nodes.new(type='ShaderNodeOutputMaterial')
-    shader = nodes.new(type='ShaderNodeBsdfPrincipled')
-    color = nodes.new(type="ShaderNodeVertexColor")
-    links.new(color.outputs[0], nodes["Principled BSDF"].inputs[0])
-    links.new(shader.outputs[0], output.inputs[0])
+    # mat = bpy.data.materials.get("Transparency")
+    # if mat is None:
+    #     mat = bpy.data.materials.new(name="Transparency")
+    # mat.use_nodes = True
+    # if mat.node_tree:
+    #     mat.node_tree.links.clear()
+    #     mat.node_tree.nodes.clear()
+    # nodes = mat.node_tree.nodes
+    # links = mat.node_tree.links
+    # output = nodes.new(type='ShaderNodeOutputMaterial')
+    # shader = nodes.new(type='ShaderNodeBsdfPrincipled')
+    # color = nodes.new(type="ShaderNodeVertexColor")
+    # links.new(color.outputs[0], nodes["Principled BSDF"].inputs[0])
+    # links.new(shader.outputs[0], output.inputs[0])
+    # plane_obj.data.materials.clear()
+    # plane_obj.data.materials.append(mat)
+    # bpy.data.materials['Transparency'].blend_method = "BLEND"
+    # bpy.data.materials["Transparency"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.1
+    initialTransparency()
     plane_obj.data.materials.clear()
-    plane_obj.data.materials.append(mat)
-    bpy.data.materials['Transparency'].blend_method = "BLEND"
-    bpy.data.materials["Transparency"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
+    plane_obj.data.materials.append(bpy.data.materials['Transparency'])
 
-    ##将平面设置为附件的父物体。对父物体平面进行位移和大小缩放操作时，子物体字体会其改变
+    #将平面设置为附件的父物体。对父物体平面进行位移和大小缩放操作时，子物体字体会其改变
     bpy.context.view_layer.objects.active = plane_obj
     cube_obj.select_set(True)
+    cube_compare_obj.select_set(True)
     bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
     cube_obj.select_set(False)
+    cube_compare_obj.select_set(False)
     plane_obj.select_set(False)
     bpy.context.view_layer.objects.active = plane_obj
     plane_obj.select_set(True)
@@ -504,12 +537,22 @@ class HandleAdd(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
+        cubename = "Cube"
+        handle_obj = bpy.data.objects.get(cubename)
         if (bpy.context.scene.var == 14):
             if (is_mouse_on_object(context, event) and is_changed(context, event)):
-                # 调用handle的鼠标行为
+                # 调用handle的鼠标行为,将附件设置为选中的颜色
+                yellow_material = bpy.data.materials.new(name="Yellow")
+                yellow_material.diffuse_color = (1.0, 1.0, 0.0, 1.0)
+                handle_obj.data.materials.clear()
+                handle_obj.data.materials.append(yellow_material)
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
             elif ((not is_mouse_on_object(context, event)) and is_changed(context, event)):
-                # 调用公共鼠标行为
+                # 调用公共鼠标行为,将附件设置为默认颜色
+                red_material = bpy.data.materials.new(name="Red")
+                red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                handle_obj.data.materials.clear()
+                handle_obj.data.materials.append(red_material)
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             return {'PASS_THROUGH'}
         else:

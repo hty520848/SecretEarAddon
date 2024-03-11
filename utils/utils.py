@@ -119,3 +119,126 @@ def utils_copy_object(origin_name, copy_name):
         duplicate_obj.name = copy_name
         bpy.context.collection.objects.link(duplicate_obj)
     return copy_flag
+
+def judge_normals():
+    flag = True
+    cut_plane = bpy.data.objects["CutPlane"]
+    cut_plane_mesh = bmesh.from_edit_mesh(cut_plane.data)
+
+    for v in cut_plane_mesh.verts:
+        if v.normal[2] > 0:
+            flag = False
+
+    return flag
+
+
+def get_cut_plane():
+    bpy.data.objects["右耳"].select_set(False)
+    cut_plane = bpy.data.objects["CutPlane"]
+    bpy.context.view_layer.objects.active = cut_plane
+    cut_plane.select_set(True)
+    bpy.ops.object.convert(target='MESH')
+
+    # 填充平面
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    # bpy.ops.mesh.fill()
+    bpy.ops.mesh.remove_doubles(threshold=0.5)
+    bpy.ops.mesh.edge_face_add()
+
+    if judge_normals():
+        bpy.ops.mesh.flip_normals()
+
+    bpy.data.objects["CutPlane"].select_set(False)
+    bpy.context.view_layer.objects.active = bpy.data.objects["右耳"]
+    bpy.data.objects["右耳"].select_set(True)
+    cut_plane.hide_set(True)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def plane_boolean_cut():
+    for obj in bpy.data.objects:
+        obj.select_set(False)
+        if obj.name == "右耳":
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+    # 获取活动对象
+    obj = bpy.context.active_object
+    # 添加一个修饰器
+    modifier = obj.modifiers.new(name="BottomCut", type='BOOLEAN')
+    bpy.context.object.modifiers["BottomCut"].operation = 'DIFFERENCE'
+    bpy.context.object.modifiers["BottomCut"].object = bpy.data.objects["CutPlane"]
+
+    bpy.context.object.modifiers["BottomCut"].solver = 'EXACT'
+    # 应用修改器
+    bpy.ops.object.modifier_apply(modifier="BottomCut", single_user=True)
+
+    # 获取下边界顶点用于挤出
+    bpy.ops.object.mode_set(mode='EDIT')
+    # 创建bmesh对象
+    bm = bmesh.from_edit_mesh(bpy.data.objects["右耳"].data)
+    bottom_outer_border_index = [v.index for v in bm.verts if v.select]
+    # bpy.ops.mesh.delete(type='FACE')
+
+    ori_obj = bpy.data.objects["右耳"]
+    bpy.ops.object.mode_set(mode='OBJECT')
+    # 将下边界加入顶点组
+    bottom_outer_border_vertex = ori_obj.vertex_groups.get("BottomOuterBorderVertex")
+    if (bottom_outer_border_vertex == None):
+        bottom_outer_border_vertex = ori_obj.vertex_groups.new(name="BottomOuterBorderVertex")
+    for vert_index in bottom_outer_border_index:
+        bottom_outer_border_vertex.add([vert_index], 1, 'ADD')
+
+
+def judge_if_need_invert():
+    obj = bpy.data.objects["右耳"]
+    bm = bmesh.from_edit_mesh(obj.data)
+
+    # 获取最低点
+    vert_order_by_z = []
+    for vert in bm.verts:
+        vert_order_by_z.append(vert)
+    # 按z坐标排列
+    vert_order_by_z.sort(key=lambda vert: vert.co[2])
+    return not vert_order_by_z[0].select
+
+
+def delete_useless_part():
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.loop_to_region(select_bigger=True)
+
+    obj = bpy.data.objects["右耳"]
+    bm = bmesh.from_edit_mesh(obj.data)
+    select_vert = [v.index for v in bm.verts if v.select]
+    if not len(select_vert) == len(bm.verts): # 如果相等，说明切割成功了，不需要删除多余部分
+        # 判断最低点是否被选择
+        invert_flag = judge_if_need_invert()
+
+        if not invert_flag:
+            # 不需要反转，直接删除面即可
+            bpy.ops.mesh.delete(type='FACE')
+        else:
+            # 反转一下，删除顶点
+            bpy.ops.mesh.select_all(action='INVERT')
+            bpy.ops.mesh.delete(type='VERT')
+
+    # 最后，删一下边界的直接的面
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bottom_outer_border_vertex = bpy.data.objects["右耳"].vertex_groups.get("BottomOuterBorderVertex")
+    bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
+    if (bottom_outer_border_vertex != None):
+        bpy.ops.object.vertex_group_select()
+        bpy.ops.mesh.delete(type='FACE')
+        bpy.ops.mesh.select_all(action='DESELECT')
+
+    bmesh.update_edit_mesh(obj.data)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    # 最后删掉没用的CutPlane
+    bpy.data.objects.remove(bpy.data.objects["CutPlane"], do_unlink=True)
+
+
+def plane_cut():
+    get_cut_plane()
+    plane_boolean_cut()
+    delete_useless_part()

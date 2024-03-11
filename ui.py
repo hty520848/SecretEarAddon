@@ -20,23 +20,27 @@ import bmesh
 from bpy_extras import view3d_utils
 
 # 打磨面板
-class HUIER_PT_damo(bpy.types.Panel):
+class HUIER_PT_damo_R(bpy.types.Panel):
 
     bl_label = "耳样处理"
-    bl_idname = "HUIER_PT_damo"
+    bl_idname = "HUIER_PT_damo_R"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "render"
 
+    @classmethod
+    def poll(cls, context):
+        return context.scene.leftWindowObj == '右耳'
+
     def draw(self, context):
         layout = self.layout
-        # layout.scale_x = 1.2
-        # layout.use_property_split = True
-        # layout.use_property_decorate = False
-        # flow = layout.grid_flow(row_major=True, columns=0, even_columns=False, even_rows=False, align=True)
+        col = layout.split(factor=0.4)
+        row = col.row(align=True)
+        row.prop_tabs_enum(context.scene, 'proptabEnumR')
         layout.separator()
         col = layout.column()
-        col.prop(context.scene, 'laHouDU', text="蜡厚度")
+        col.separator()
+        col.prop(context.scene, 'laHouDUR', text="蜡厚度")
         col.separator()
         col.prop(context.scene, 'localLaHouDu', text="局部蜡厚度限制")
         col = layout.column()
@@ -44,20 +48,34 @@ class HUIER_PT_damo(bpy.types.Panel):
         col.prop(context.scene, 'maxLaHouDu', text="最大蜡厚度")
         col.separator()
         col.prop(context.scene, 'minLaHouDu', text="最小蜡厚度")
-        # col.operator("huier.addons",
-        #                 text="Preferences...", icon='PREFERENCES')
-        # col.operator("huier.keymap",
-        #                 text="Preferences...", icon='PREFERENCES')
-        # box = layout.box()
-        # box.prop(context.scene, 'laHouDU', text="蜡厚度")
-        # lahoudu(self,context,box)
 
-# def lahoudu(self,context,box):
-#     box.prop(context.scene,'localLaHouDu', text="局部蜡厚度限制",
-#              icon='TRIA_UP' if context.scene.localLaHouDu else 'TRIA_RIGHT')
-#     if context.scene.localLaHouDu:
-#         box.prop(context.scene, 'maxLaHouDu', text="最大蜡厚度")
-#         box.prop(context.scene, 'minLaHouDu', text="最小蜡厚度")
+class HUIER_PT_damo_L(bpy.types.Panel):
+
+    bl_label = "耳样处理"
+    bl_idname = "HUIER_PT_damo_L"
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = "render"
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.leftWindowObj == '左耳'
+
+    def draw(self, context):
+        layout = self.layout
+        col = layout.split(factor=0.4)
+        row = col.row(align=True)
+        row.prop_tabs_enum(context.scene, 'proptabEnumL')
+        layout.separator()
+        col = layout.column()
+        col.prop(context.scene, 'laHouDUL', text="蜡厚度")
+        col.separator()
+        col.prop(context.scene, 'localLaHouDu', text="局部蜡厚度限制")
+        col = layout.column()
+        col.active = context.scene.localLaHouDu
+        col.prop(context.scene, 'maxLaHouDu', text="最大蜡厚度")
+        col.separator()
+        col.prop(context.scene, 'minLaHouDu', text="最小蜡厚度")
 
 
 # 局部或整体加厚面板
@@ -361,7 +379,7 @@ class HUIER_PT_YingErMoCanShu(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "scene"
-    bl_options = {'DEFAULT_CLOSED'}
+    # bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
@@ -369,15 +387,15 @@ class HUIER_PT_YingErMoCanShu(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'gongXingMianBan', text="拱形面板")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'gongKuan', text="拱宽")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'gongGao', text="拱高")
+        # layout.separator()
+        # col = layout.column(align=True)
+        # col.prop(context.scene, 'gongXingMianBan', text="拱形面板")
+        # layout.separator()
+        # col = layout.column(align=True)
+        # col.prop(context.scene, 'gongKuan', text="拱宽")
+        # layout.separator()
+        # col = layout.column(align=True)
+        # col.prop(context.scene, 'gongGao', text="拱高")
         layout.separator()
         col = layout.column(align=True)
         col.prop(context.scene, 'yingErMoSheRuPianYi', text="舍入偏移")
@@ -581,13 +599,7 @@ class HUIER_PT_RuanErMoHouDu(bpy.types.Panel):
         layout = self.layout
         layout.separator()
         col = layout.column(align=True)
-        col.prop(context.scene, 'fontSize', text="字体尺寸")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'deep', text="深度")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'styleEnum', text="风格")
+        col.prop(context.scene, 'ruanErMoHouDu', text="铸造厚度")
 
 
 # 支撑
@@ -807,11 +819,11 @@ class OT_ImportFile(bpy.types.Operator, bpy_extras.io_utils.ImportHelper):
     bl_options = {'REGISTER', 'UNDO'}
 
     # # 过滤限制可选择的文件扩展名
-    # filter_glob: bpy.props.StringProperty(
-    #     default='*.stl',
-    #     options={'HIDDEN'},
-    #     maxlen=255,
-    # )
+    filter_glob: bpy.props.StringProperty(
+        default='*.stl',
+        options={'HIDDEN'},
+        maxlen=255,
+    )
 
     """use_setting: bpy.props.BoolProperty(
         name="Example Boolean", 
@@ -1104,8 +1116,8 @@ class HUIER_PT_TestButton(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         col = layout.column()
-        col.operator("obj.initialcolor", text="初始化模型颜色")
-        col.operator("obj.initialtransparency", text="透明")
+        # col.operator("obj.initialcolor", text="初始化模型颜色")
+        # col.operator("obj.initialtransparency", text="透明")
         # col.operator("obj.localthickeningreset", text="重置")
         # col.operator("obj.localthickeningaddarea", text="扩大区域")
         # col.operator("obj.localthickeningreducearea", text="缩小区域")
@@ -1115,13 +1127,15 @@ class HUIER_PT_TestButton(bpy.types.Panel):
         # col.operator("obj.undo", text="撤销")
         # col.operator("obj.redo", text="重做")
         # col.operator("object.switchtestfunc", text="磨具功能测试")
-        col.operator("obj.localthickeningjingxiang", text="加厚镜像")
+        # col.operator("obj.localthickeningjingxiang", text="加厚镜像")
+        col.operator("huier.switch", text = "切换窗口")
 
 
 # 注册类
 _classes = [
     # VIEW3D_HT_header,
-    HUIER_PT_damo,
+    HUIER_PT_damo_R,
+    HUIER_PT_damo_L,
     HUIER_PT_LocalOrGlobalJiaHou,
     # HUIER_PT_LocalOrGlobalJiaHou2,
     HUIER_PT_DianMianQieGe,

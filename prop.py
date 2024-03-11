@@ -8,10 +8,12 @@ from .support import *
 from .create_mould.soft_eardrum.thickness_and_fill import reset_and_refill
 from .create_mould.soft_eardrum.soft_eardrum import apply_soft_eardrum_template
 from .create_mould.frame_style_eardrum.frame_style_eardrum import apply_frame_style_eardrum_template
+from .create_mould.hard_eardrum.hard_eardrum import apply_hard_eardrum_template
 from .create_mould.create_mould import recover
 from .create_mould.border_fill import recover_and_refill
 from .sound_canal import convert_soundcanal
 from .vent_canal import convert_ventcanal
+from .casting import castingThicknessUpdate
 
 import os
 
@@ -33,16 +35,47 @@ def My_Properties():
         name="var", default=0, description="每个模块的按钮都会对应一个var值,用于结束按钮的modal"
     )
 
+    # 记录左右窗口中的物体是左耳还是右耳
+    bpy.types.Scene.leftWindowObj = bpy.props.StringProperty(name="",
+                                                            description="左窗口物体",
+                                                            default="右耳",
+                                                            maxlen=1024)
+    
+    bpy.types.Scene.rightWindowObj = bpy.props.StringProperty(name="",
+                                                            description="右窗口物体",
+                                                            default="左耳",
+                                                            maxlen=1024)
+
     # 打磨操作属性      蜡厚度，局部蜡厚度限制，最大蜡厚度，最小蜡厚度
-    bpy.types.Scene.laHouDU = bpy.props.FloatProperty(
-        name="laHouDU", min=-2.0, max=2.0, step=5,
-        description="调整蜡厚度的大小", update=Houdu)
+    bpy.types.Scene.laHouDUR = bpy.props.FloatProperty(
+        name="laHouDUR", min=-2.0, max=2.0, step=5,
+        description="调整蜡厚度的大小", update=HouduR)
+    bpy.types.Scene.laHouDUL = bpy.props.FloatProperty(
+        name="laHouDUL", min=-2.0, max=2.0, step=5,
+        description="调整蜡厚度的大小", update=HouduL)
     bpy.types.Scene.localLaHouDu = bpy.props.BoolProperty(
         name="localLaHouDu", default=False)
     bpy.types.Scene.maxLaHouDu = bpy.props.FloatProperty(
         name="maxLaHouDu", min=-1.0, max=1.0, step=1, description="最大蜡厚度的值")
     bpy.types.Scene.minLaHouDu = bpy.props.FloatProperty(
         name="minLaHouDu", min=-1.0, max=1.0, step=1, description="最小蜡厚度的值")
+    
+    # 左耳属性面板
+    bpy.types.Scene.proptabEnumR = bpy.props.EnumProperty(
+        name="righttab",
+        description='右耳属性面板',
+        items=[
+            ('右耳', '右耳属性值', '')],
+        
+    )
+    # 左耳属性面板
+    bpy.types.Scene.proptabEnumL = bpy.props.EnumProperty(
+        name="lefttab",
+        description='左耳属性面板',
+        items=[
+            ('左耳', '左耳属性值', ''),
+        ]
+    )
 
     # 局部或整体加厚    偏移值，边框宽度
     bpy.types.Scene.localThicking_offset = bpy.props.FloatProperty(
@@ -283,8 +316,11 @@ def My_Properties():
         name="gongKuan", min=-1.0, max=1.0)
     bpy.types.Scene.gongGao = bpy.props.FloatProperty(
         name="gongGao", min=-1.0, max=1.0)
+    bpy.types.Scene.yingErMoLowestZCo = bpy.props.FloatProperty(
+        description='该参数主要起到共享变量的作用,使得createmould文件中能够读取到hardmould文件中的参数',
+        name="yingErMoLowestZCo", min=-24.0, max=24.0)
     bpy.types.Scene.yingErMoSheRuPianYi = bpy.props.FloatProperty(
-        name="yingErMoSheRuPianYi", min=-1.0, max=1.0)
+        name="yingErMoSheRuPianYi", min=0, max=3.0, update=CreateMouldHardDrumSmooth)
     bpy.types.Scene.shiFouTongFengGuan = bpy.props.BoolProperty(
         name="shiFouTongFengGuan")
     bpy.types.Scene.tongFengGuanZhiJing = bpy.props.FloatProperty(
@@ -296,9 +332,9 @@ def My_Properties():
 
     # 传声孔      管道平滑      传声管道直径         激活   管道形状  偏移
     bpy.types.Scene.gaunDaoPinHua = bpy.props.BoolProperty(
-        name="gaunDaoPinHua",default=True)
+        name="gaunDaoPinHua", default=True)
     bpy.types.Scene.chuanShenGuanDaoZhiJing = bpy.props.FloatProperty(
-        name="chuanShenGuanDaoZhiJing", min=0.2, max=10, step=10, 
+        name="chuanShenGuanDaoZhiJing", min=0.2, max=10, step=10,
         default=2, update=soundcanalupdate)
     bpy.types.Scene.active = bpy.props.BoolProperty(name="active")
     bpy.types.Scene.chuanShenKongOffset = bpy.props.FloatProperty(
@@ -328,7 +364,7 @@ def My_Properties():
 
     # 耳膜附件      耳膜附件类型    偏移
     bpy.types.Scene.erMoFuJianOffset = bpy.props.FloatProperty(
-        name="erMoFuJianOffset", min=-1.0, max=1.0)
+        name="erMoFuJianOffset", min=-5.0, max=5.0, update=HandleOffsetUpdate)
     bpy.types.Scene.erMoFuJianTypeEnum = bpy.props.EnumProperty(
         name="erMoFuJianTypeEnum",
         description='handle耳膜附件的类型',
@@ -355,7 +391,7 @@ def My_Properties():
 
     # 软耳模厚度       厚度类型    软耳模厚度
     bpy.types.Scene.ruanErMoHouDu = bpy.props.FloatProperty(
-        name="ruanErMoHouDu", min=-1.0, max=1.0)
+        name="ruanErMoHouDu", min=0.2, max=3.0, update=CastingThicknessUpdate1)
     bpy.types.Scene.ruanErMoTypeEnum = bpy.props.EnumProperty(
         name="ruanErMoTypeEnum",
         description='',
@@ -387,41 +423,71 @@ def My_Properties():
     )
 
 
-# 添加厚度修改器
-def modify(self, context, thickness):
-    global flag
-    context1 = bpy.context.space_data.context
-    if flag == True and context1 == 'RENDER':
-        flag = False
-        obj = bpy.context.active_object
-        md = obj.modifiers.new("jiahou", "SOLIDIFY")
-        md.use_rim_only = True
-        md.use_quality_normals = True
-        md.offset = 1
-        md.thickness = context.scene.laHouDU
-        return {'RUNNING_MODAL'}
-    else:
-        if thickness < 0:
-            name = bpy.context.active_object.name
-            md = bpy.data.objects[name].modifiers["jiahou"]
-            md.use_flip_normals = True
-
-        else:
-            name = bpy.context.active_object.name
-            md = bpy.data.objects[name].modifiers["jiahou"]
-            md.use_flip_normals = False
-        return {'FINISHED'}
-
-
-def Houdu(self, context):
+def HouduR(self, context):
     bl_description = "初始耳模的厚度"
-    thickness = context.scene.laHouDU
-    modify(self, context, thickness)
-    active_object = bpy.context.active_object
-    name = active_object.name
-    bpy.data.objects[name].modifiers["jiahou"].thickness = thickness
-    # MyHandleClass.remove_handler()
-    # MyHandleClass.add_handler(draw_callback_px, (None, thickness))
+    thickness = context.scene.laHouDUR
+    if bpy.data.objects.get('右耳'):
+        active_object = bpy.data.objects['右耳']
+    if not bpy.data.objects.get('右耳DamoReset'):
+        duplicate_obj = active_object.copy()
+        duplicate_obj.data = active_object.data.copy()
+        duplicate_obj.name = '右耳DamoReset'
+        duplicate_obj.animation_data_clear()
+        # 将复制的物体加入到场景集合中
+        scene = bpy.context.scene
+        scene.collection.objects.link(duplicate_obj)
+        moveToRight(duplicate_obj)
+        duplicate_obj.hide_set(True)
+    damo_compare_obj = bpy.data.objects["右耳DamoReset"]
+    if active_object.type == 'MESH':
+        me = active_object.data
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bm.verts.ensure_lookup_table()
+
+        ori_me = damo_compare_obj.data
+        ori_bm = bmesh.new()
+        ori_bm.from_mesh(ori_me)
+        ori_bm.verts.ensure_lookup_table()
+
+        for vert in bm.verts:
+            vert.co = ori_bm.verts[vert.index].co + ori_bm.verts[vert.index].normal.normalized() * thickness
+        bm.to_mesh(me)
+        bm.free()
+        ori_bm.free()
+
+def HouduL(self, context):
+    bl_description = "初始耳模的厚度"
+    thickness = context.scene.laHouDUL
+    if bpy.data.objects.get('左耳'):
+        active_object = bpy.data.objects['左耳']
+    if not bpy.data.objects.get('左耳DamoReset'):
+        duplicate_obj = active_object.copy()
+        duplicate_obj.data = active_object.data.copy()
+        duplicate_obj.name = '左耳DamoReset'
+        duplicate_obj.animation_data_clear()
+        # 将复制的物体加入到场景集合中
+        scene = bpy.context.scene
+        scene.collection.objects.link(duplicate_obj)
+        moveToRight(duplicate_obj)
+        duplicate_obj.hide_set(True)
+    damo_compare_obj = bpy.data.objects["左耳DamoReset"]
+    if active_object.type == 'MESH':
+        me = active_object.data
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bm.verts.ensure_lookup_table()
+
+        ori_me = damo_compare_obj.data
+        ori_bm = bmesh.new()
+        ori_bm.from_mesh(ori_me)
+        ori_bm.verts.ensure_lookup_table()
+
+        for vert in bm.verts:
+            vert.co = ori_bm.verts[vert.index].co + ori_bm.verts[vert.index].normal.normalized() * thickness
+        bm.to_mesh(me)
+        bm.free()
+        ori_bm.free()
 
 
 def sheru(self, context):
@@ -489,15 +555,15 @@ def qiegeenum(self, context):
     bl_description = "选择切割方式"
     enum = bpy.context.scene.qieGeTypeEnum
     if enum == "OP1":
-        quitStepCut()
+        quitStepCut('右耳')
         override = getOverride()
         with bpy.context.temp_override(**override):
-            initCircle()
+            initCircle('右耳')
     if enum == "OP2":
         quitCut()
         override = getOverride()
         with bpy.context.temp_override(**override):
-            initPlane()
+            initPlane('右耳')
 
 
 def qiegesmooth2(self, context):
@@ -598,6 +664,7 @@ def ChangeMouldType(self, context):
             bpy.context.scene.neiBianJiXian = False
         if enum == "OP2":
             print("硬耳膜")
+            apply_hard_eardrum_template()
         if enum == "OP3":
             print("一体外壳")
         if enum == "OP4":
@@ -659,13 +726,79 @@ def CreateMouldInnerSmooth(self, context):
         if (target_modifier != None):
             bpy.context.object.modifiers["Smooth.001"].iterations = int(smooth * 10)
 
+#通过面板参数调整硬耳膜底面平滑度
+def CreateMouldHardDrumSmooth(self,context):
+    bl_description = "创建模具中的硬耳膜,平滑其底部边缘"
+
+    obj = bpy.data.objects["右耳"]
+    smooth = round(bpy.context.scene.yingErMoSheRuPianYi, 1)
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        modifier_name = "HardEarDrumModifier"
+        target_modifier = None
+        for modifier in obj.modifiers:
+            if modifier.name == modifier_name:  # TODO  优化：   将创建修改器放到加厚的invoke中，应用修改器放到提交中
+                target_modifier = modifier
+        if (target_modifier != None):
+            bpy.context.object.modifiers["HardEarDrumModifier"].iterations = int(smooth * 10)
+
+def HandleOffsetUpdate(self, context):
+    bl_description = "耳膜附件的偏移值,控制耳膜附件与耳膜的距离"
+
+    handle_offset = bpy.context.scene.erMoFuJianOffset
+
+    #更新耳膜附件到耳膜的距离
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        handle_obj = bpy.data.objects.get("Cube")
+        plane_obj = bpy.data.objects.get("Plane")
+        handle_compare_obj = bpy.data.objects.get("Cube.001")
+        if(handle_obj != None and plane_obj != None and handle_compare_obj !=None):
+            if handle_obj.type == 'MESH'and plane_obj.type == 'MESH' and handle_compare_obj.type == 'MESH':
+                # 获取当前激活物体的网格数据
+                me = handle_obj.data
+                # 创建bmesh对象
+                bm = bmesh.new()
+                # 将网格数据复制到bmesh对象
+                bm.from_mesh(me)
+                bm.verts.ensure_lookup_table()
+
+                ori_handle_me = handle_compare_obj.data
+                ori_handle_bm = bmesh.new()
+                ori_handle_bm.from_mesh(ori_handle_me)
+                ori_handle_bm.verts.ensure_lookup_table()
+
+                plane_me = plane_obj.data
+                plane_bm = bmesh.new()
+                plane_bm.from_mesh(plane_me)
+                plane_bm.verts.ensure_lookup_table()
+
+                #获取平面法向
+                plane_vert0 = plane_bm.verts[0]
+                plane_vert1 = plane_bm.verts[1]
+                plane_vert2 = plane_bm.verts[2]
+                point1 = mathutils.Vector((plane_vert0.co[0], plane_vert0.co[1], plane_vert0.co[2]))
+                point2 = mathutils.Vector((plane_vert1.co[0], plane_vert1.co[1], plane_vert1.co[2]))
+                point3 = mathutils.Vector((plane_vert2.co[0], plane_vert2.co[1], plane_vert2.co[2]))
+                # 计算两个向量
+                vector1 = point2 - point1
+                vector2 = point3 - point1
+                # 计算法向量
+                normal = vector1.cross(vector2)
+                #根据面板参数设置偏移值
+                for vert in bm.verts:
+                    vert.co = ori_handle_bm.verts[vert.index].co + normal.normalized() * handle_offset
+                    # vert.co += normal.normalized() * handle_offset
+
+                bm.to_mesh(me)
+                bm.free()
+                ori_handle_bm.free()
+
 
 def LabelTextUpdate(self, context):
     bl_description = "更新标签中的文本内容"
 
-    print("update")
     labelText = bpy.context.scene.labelText
-
     # 将属性面板中的text属性值读取到剪切板中生成新的label
     override = getOverride()
     with bpy.context.temp_override(**override):
@@ -675,7 +808,6 @@ def LabelTextUpdate(self, context):
 def LabelSizeUpdate(self, context):
     bl_description = "更新文本中字体的大小"
     size = bpy.context.scene.fontSize
-    print("字体大小更新")
     override = getOverride()
     with bpy.context.temp_override(**override):
         labelSizeUpdate(size)
@@ -720,6 +852,30 @@ def LabelEnum(self, context):
             bpy.context.view_layer.objects.active = plane_obj
 
 
+def CastingThicknessUpdate(self, context):
+    bl_description = "更新铸造法厚度"
+
+    obj = bpy.data.objects["右耳"]
+    thickness = bpy.context.scene.ruanErMoHouDu
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        modifier_name = "CastingModifier"
+        target_modifier = None
+        for modifier in obj.modifiers:
+            if modifier.name == modifier_name:
+                target_modifier = modifier
+        if (target_modifier != None):
+            bpy.context.object.modifiers["CastingModifier"].thickness = thickness
+
+
+def CastingThicknessUpdate1(self, context):
+    bl_description = "更新铸造法厚度"
+
+    thickness = bpy.context.scene.ruanErMoHouDu
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        castingThicknessUpdate(thickness)
+
 def SupportEnum(self, context):
     bl_description = "切换支撑的类型"
 
@@ -746,10 +902,51 @@ def SupportEnum(self, context):
 def SupportOffsetUpdate(self, context):
     bl_description = "更新支撑沿法线的偏移值"
 
-    offset = bpy.context.scene.zhiChengOffset
+    support_offset = bpy.context.scene.zhiChengOffset
     override = getOverride()
     with bpy.context.temp_override(**override):
-        print("offset更新")
+        support_obj = bpy.data.objects.get("Cone")
+        plane_obj = bpy.data.objects.get("Plane")
+        support_compare_obj = bpy.data.objects.get("ConeCompare")
+        if (support_obj != None and plane_obj != None and support_compare_obj != None):
+            if support_obj.type == 'MESH' and plane_obj.type == 'MESH' and support_compare_obj.type == 'MESH':
+                # 获取当前激活物体的网格数据
+                me = support_obj.data
+                # 创建bmesh对象
+                bm = bmesh.new()
+                # 将网格数据复制到bmesh对象
+                bm.from_mesh(me)
+                bm.verts.ensure_lookup_table()
+
+                ori_support_me = support_compare_obj.data
+                ori_support_bm = bmesh.new()
+                ori_support_bm.from_mesh(ori_support_me)
+                ori_support_bm.verts.ensure_lookup_table()
+
+                plane_me = plane_obj.data
+                plane_bm = bmesh.new()
+                plane_bm.from_mesh(plane_me)
+                plane_bm.verts.ensure_lookup_table()
+
+                # 获取平面法向
+                plane_vert0 = plane_bm.verts[0]
+                plane_vert1 = plane_bm.verts[1]
+                plane_vert2 = plane_bm.verts[2]
+                point1 = mathutils.Vector((plane_vert0.co[0], plane_vert0.co[1], plane_vert0.co[2]))
+                point2 = mathutils.Vector((plane_vert1.co[0], plane_vert1.co[1], plane_vert1.co[2]))
+                point3 = mathutils.Vector((plane_vert2.co[0], plane_vert2.co[1], plane_vert2.co[2]))
+                # 计算两个向量
+                vector1 = point2 - point1
+                vector2 = point3 - point1
+                # 计算法向量
+                normal = vector1.cross(vector2)
+                # 根据面板参数设置偏移值
+                for vert in bm.verts:
+                    vert.co = ori_support_bm.verts[vert.index].co + normal.normalized() * support_offset
+
+                bm.to_mesh(me)
+                bm.free()
+                ori_support_bm.free()
 
 def soundcanalupdate(self, context):
     bl_description = "更新传声孔的直径大小"
@@ -770,6 +967,6 @@ def ventcanalupdate(self, context):
             obj.data.bevel_depth = diameter / 2
     #更新网格数据
     convert_ventcanal()
-    
+
 def register():
     My_Properties()

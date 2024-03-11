@@ -108,6 +108,82 @@ def normal_ray_cast(template_vert, rotate_angle, height_difference, target_bm):
         return closest_vert, closest_normal
 
 
+def frame_style_normal_ray_cast(template_vert, rotate_angle, height_difference, target_bm):
+    closest_vert = None
+
+    # 获取顶点的法向
+    origin_normal = template_vert[1]
+    origin_co = template_vert[0]
+
+    # 计算得到实际的起点坐标
+    xx_co = origin_co[0] * math.cos(math.radians(rotate_angle)) - origin_co[1] * math.sin(math.radians(rotate_angle))
+    yy_co = origin_co[0] * math.sin(math.radians(rotate_angle)) + origin_co[1] * math.cos(math.radians(rotate_angle))
+    zz_co = origin_co[2] + height_difference
+    actual_co = (xx_co, yy_co, zz_co)
+
+    xx_normal = origin_normal[0] * math.cos(math.radians(rotate_angle)) - origin_normal[1] * math.sin(
+        math.radians(rotate_angle))
+    yy_normal = origin_normal[0] * math.sin(math.radians(rotate_angle)) + origin_normal[1] * math.cos(
+        math.radians(rotate_angle))
+    actual_normal = (xx_normal, yy_normal, origin_normal[2])
+
+    target_obj = bpy.data.objects["右耳"]
+
+    hit = False
+    out_hit, out_loc, out_normal, out_index = target_obj.ray_cast(actual_co, actual_normal)
+
+    # 反向向内
+    reverse_normal = (-xx_normal, -yy_normal, -origin_normal[2])
+    in_hit, in_loc, in_normal, in_index = target_obj.ray_cast(actual_co, reverse_normal)
+
+    if out_hit and not in_hit:  # 向外命中，向内没命中
+        hit = out_hit
+        loc = out_loc
+        normal = out_normal
+        index = out_index
+
+    elif not out_hit and in_hit:  # 向内命中，向外没命中
+        hit = in_hit
+        loc = in_loc
+        normal = in_normal
+        index = in_index
+
+    elif out_hit and in_hit:  # 内外都命中
+        out_distance = ((origin_co[0] - out_loc[0]) ** 2 + (origin_co[1] - out_loc[1]) ** 2 + (
+                    origin_co[2] - out_loc[2]) ** 2) ** 0.5
+        in_distance = ((origin_co[0] - in_loc[0]) ** 2 + (origin_co[1] - in_loc[1]) ** 2 + (
+                    origin_co[2] - in_loc[2]) ** 2) ** 0.5
+
+        if out_distance < in_distance:
+            hit = out_hit
+            loc = out_loc
+            normal = out_normal
+            index = out_index
+        else:
+            hit = in_hit
+            loc = in_loc
+            normal = in_normal
+            index = in_index
+
+    if hit:
+        # 进入这里就说明向外或向内命中了
+        target_mesh = target_obj.data
+        hit_face = target_mesh.polygons[index]
+        # 获取这个面的顶点索引
+        face_verts_index = hit_face.vertices
+
+        min_distance = math.inf
+        for vert_index in face_verts_index:
+            vert = target_bm.verts[vert_index]
+            distance = (loc[0] - vert.co[0]) ** 2 + (loc[1] - vert.co[1]) ** 2 + (loc[2] - vert.co[2]) ** 2
+            if distance < min_distance:
+                closest_vert = vert
+                closest_normal = normal
+                min_distance = distance
+
+        return closest_vert, closest_normal
+
+
 # 对顶点进行排序用于画圈
 def get_order_border_vert(selected_verts):
     size = len(selected_verts)
@@ -220,7 +296,7 @@ def normal_projection_to_darw_bottom_ring(origin_highest_vert, border_vert_co_an
             border_vert_co.append(cast_vert.co)
 
     order_border_vert = get_order_border_vert(border_vert_co)
-    draw_border_curve(order_border_vert, "BottomRingBorderR", 0.3)
+    draw_border_curve(order_border_vert, "BottomRingBorderR", 0.18)
     moveToRight(bpy.data.objects["BottomRingBorderR"])
 
 
@@ -254,7 +330,45 @@ def normal_projection_to_darw_cut_plane(origin_highest_vert, border_vert_co_and_
             plane_border_co.append(plane_co)
 
     order_border_vert = get_order_border_vert(plane_border_co)
-    draw_border_curve(get_order_border_vert(border_vert_co), "BottomRingBorderR", 0.3)
+    draw_border_curve(get_order_border_vert(border_vert_co), "BottomRingBorderR", 0.18)
+    draw_border_curve(order_border_vert, "CutPlane", 0)
+
+    moveToRight(bpy.data.objects["BottomRingBorderR"])
+    moveToRight(bpy.data.objects["CutPlane"])
+
+
+def frame_normal_projection_to_darw_cut_plane(origin_highest_vert, border_vert_co_and_normal):
+    # 存储模板耳道口边界的坐标与法向以及最高点坐标
+
+    # 为了解决节点dead的问题，把bmesh信息获取拿出来，作为传参进去
+    target_obj = bpy.data.objects["右耳"]
+    # 获取网格数据
+    target_me = target_obj.data
+
+    # 创建bmesh对象
+    target_bm = bmesh.new()
+    # 将网格数据复制到bmesh对象
+    target_bm.from_mesh(target_me)
+    target_bm.verts.ensure_lookup_table()
+
+    border_vert = list()
+    border_vert_co = list()
+    plane_border_co = list()
+    rotate_angle, height_difference = get_change_parameters(origin_highest_vert)
+
+    for vert in border_vert_co_and_normal:
+        # cast_vert,cast_normal = normal_ray_cast(vert, rotate_angle, height_difference, target_bm)
+        cast_vert, cast_normal = frame_style_normal_ray_cast(vert, rotate_angle, height_difference, target_bm)
+        if cast_vert is not None and cast_vert not in border_vert:
+            border_vert.append(cast_vert)
+            border_vert_co.append(cast_vert.co)
+            step = 0.2
+            plane_co = (cast_vert.co[0] + cast_normal[0] * step, cast_vert.co[1] + cast_normal[1] * step,
+                        cast_vert.co[2] + cast_normal[2] * step)
+            plane_border_co.append(plane_co)
+
+    order_border_vert = get_order_border_vert(plane_border_co)
+    draw_border_curve(get_order_border_vert(border_vert_co), "BottomRingBorderR", 0.18)
     draw_border_curve(order_border_vert, "CutPlane", 0)
 
     moveToRight(bpy.data.objects["BottomRingBorderR"])
