@@ -1032,3 +1032,73 @@ def get_cast_index(tar_obj,ori_index):
     bpy.ops.transform.mirror(orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL', constraint_axis=(False, True, False))
 
     return cast_vertex_index
+
+def extrude_border_by_vertex_groups(ori_group_name, target_group_name):
+    ori_obj = bpy.data.objects["右耳"]
+    bpy.ops.object.mode_set(mode='EDIT')
+    bm = bmesh.from_edit_mesh(ori_obj.data)
+    bpy.ops.mesh.select_all(action='DESELECT')
+
+    outer_border_vertex = ori_obj.vertex_groups.get(ori_group_name)
+    bpy.ops.object.vertex_group_set_active(group=ori_group_name)
+    if (outer_border_vertex != None):
+        bpy.ops.object.vertex_group_select()
+        bpy.ops.mesh.remove_doubles(threshold=0.8)
+        outer_border = [v for v in bm.verts if v.select]
+        outer_edges = set()
+        extrude_direction = {}
+        # 遍历选中的顶点
+        for vert in outer_border:
+            key = (vert.co[0], vert.co[1], vert.co[2])
+            extrude_direction[key] = vert.normal
+            for edge in vert.link_edges:
+                # 检查边的两个顶点是否都在选中的顶点中
+                if edge.verts[0] in outer_border and edge.verts[1] in outer_border:
+                    outer_edges.add(edge)
+                    edge.select_set(True)
+
+        # 复制选中的顶点并沿着各自的法线方向移动
+        bpy.ops.mesh.duplicate()
+
+        # 获取所有选中的顶点
+        inside_border_vert = [v for v in bm.verts if v.select]
+        inside_border_index = [v.index for v in bm.verts if v.select]
+
+        inside_edges = [e for e in bm.edges if e.select]
+
+        thickness = bpy.context.scene.zongHouDu
+        for i, vert in enumerate(inside_border_vert):
+            key = (vert.co[0], vert.co[1], vert.co[2])
+            dir = extrude_direction[key]
+            vert.co -= dir * thickness  # 沿法线方向移动
+
+        # 重新选中外边界
+        for v in outer_border:
+            v.select_set(True)
+
+        for edge in outer_edges:
+            edge.select_set(True)
+
+        bpy.ops.mesh.bridge_edge_loops()
+
+        bpy.ops.object.mode_set(mode='OBJECT')
+        set_vert_group(target_group_name, inside_border_index)
+
+
+def set_vert_group(group_name, vert_index_list):
+    ori_obj = bpy.context.active_object
+
+    vert_group = ori_obj.vertex_groups.get(group_name)
+    if (vert_group == None):
+        vert_group = ori_obj.vertex_groups.new(name=group_name)
+    for vert_index in vert_index_list:
+        vert_group.add([vert_index], 1, 'ADD')
+
+
+def delete_vert_group(group_name):
+    ori_obj = bpy.context.active_object
+
+    vert_group = ori_obj.vertex_groups.get(group_name)
+    if (vert_group != None):
+        bpy.ops.object.vertex_group_set_active(group=group_name)
+        bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)

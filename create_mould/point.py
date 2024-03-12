@@ -8,7 +8,6 @@ from .bottom_ring import boolean_apply, cut_bottom_part
 from .dig_hole import boolean_dig, get_hole_border, get_order_border_vert
 from .soft_eardrum.thickness_and_fill import set_finish, get_fill_plane, fill
 from .soft_eardrum.soft_eardrum import soft_eardrum, get_cut_plane, plane_cut, delete_useless_part
-from .frame_style_eardrum.frame_style_eardrum import getSmoothVertexGroup, border_fill, applySmooth
 from ..tool import recover_and_remind_border, moveToRight, utils_re_color, generate_cutplane, convert_to_mesh, \
     recover_to_dig
 import re

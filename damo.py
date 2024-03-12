@@ -10,10 +10,7 @@ import math
 
 prev_on_object = False  # 全局变量,保存之前的鼠标状态,用于判断鼠标状态是否改变(如从物体上移动到公共区域或从公共区域移动到物体上)
 
-is_copy = False
-
 # is_modifier = False
-
 
 def copy_object():
     for active_obj in bpy.data.objects:
@@ -130,7 +127,6 @@ class Thickening(bpy.types.Operator):
     def invoke(self, context, event):
 
         bpy.context.scene.var = 1
-        global is_copy
         # global is_modifier
         op_cls = Thickening
         print("thicking_invoke")
@@ -148,14 +144,12 @@ class Thickening(bpy.types.Operator):
         op_cls.__initial_mouse_x = None
         op_cls.__initial_mouse_y = None  # 锁定圆环和模型的比例
         bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'
-
-        if not is_copy:
-            is_copy = True
-            copy_object()
+        copy_object()
         # if not is_modifier:
         #     if (len(bpy.context.object.modifiers) > 0):
         #         bpy.ops.object.modifier_apply(modifier="jiahou", single_user=True)
         #         is_modifier = True
+
         op_cls.__timer = context.window_manager.event_timer_add(0.2, window=context.window)
         context.window_manager.modal_handler_add(self)  # 进入modal模式
         return {'RUNNING_MODAL'}
@@ -412,7 +406,6 @@ class Thinning(bpy.types.Operator):
 
     def invoke(self, context, event):
 
-        global is_copy
         # global is_modifier
         bpy.context.scene.var = 2
         op_cls = Thinning
@@ -431,10 +424,7 @@ class Thinning(bpy.types.Operator):
         op_cls.__initial_mouse_x = None
         op_cls.__initial_mouse_y = None  # 锁定圆环和模型的比例
         bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'
-
-        if not is_copy:
-            is_copy = True
-            copy_object()
+        copy_object()
         # if not is_modifier:
         #     if (len(bpy.context.object.modifiers) > 0):
         #         bpy.ops.object.modifier_apply(modifier="jiahou", single_user=True)
@@ -702,7 +692,7 @@ class Smooth(bpy.types.Operator):
     def invoke(self, context, event):
         op_cls = Smooth
 
-        global is_copy
+
         # global is_modifier
         bpy.context.scene.var = 3
         print("smooth_invoke")
@@ -720,10 +710,7 @@ class Smooth(bpy.types.Operator):
         op_cls.__initial_mouse_x = None
         op_cls.__initial_mouse_y = None  # 锁定圆环和模型的比例
         bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'
-
-        if not is_copy:
-            is_copy = True
-            copy_object()
+        copy_object()
         # if not is_modifier:
         #     if (len(bpy.context.object.modifiers) > 0):
         #         bpy.ops.object.modifier_apply(modifier="jiahou", single_user=True)

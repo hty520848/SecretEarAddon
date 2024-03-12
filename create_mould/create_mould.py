@@ -1,5 +1,6 @@
 import bpy
 import bmesh
+import re
 
 from ..utils.utils import *
 from ..tool import moveToRight, initialTransparency, newColor
@@ -222,6 +223,10 @@ def delete_useless_object(need_to_delete_model_name_list):
         bpy.ops.outliner.orphans_purge(
             do_local_ids=True, do_linked_ids=True, do_recursive=False)
 
+def delete_hole_border():
+    for obj in bpy.data.objects:
+        if re.match('HoleBorderCurve', obj.name) is not None:
+            bpy.data.objects.remove(obj, do_unlink=True)
 
 def recover():
     '''
@@ -241,6 +246,7 @@ def recover():
                                           "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
                                           "右耳ForGetFillPlane","meshHoleBorderCurveR","meshBottomRingBorderR", "dragcurve"]
         delete_useless_object(need_to_delete_model_name_list)
+        delete_hole_border()
         # 将最开始复制出来的OriginForCreateMould名称改为模型名称
         obj.hide_set(False)
         obj.name = "右耳"

@@ -154,7 +154,7 @@ def recover_and_refill():
     bpy.context.view_layer.objects.active = cur_obj
 
     # 重新挤出
-    get_up_inner_border_and_fill()
+    # get_up_inner_border_and_fill()
     # 重新挖洞
     # dig_hole()
 
@@ -510,60 +510,7 @@ def draw_border_curve(order_border_co, name, depth):
         bpy.context.view_layer.objects.active = active_obj
 
 
-def extrude_border_by_vertex_groups(group_name):
-    ori_obj = bpy.data.objects["右耳"]
-    bpy.ops.object.mode_set(mode='EDIT')
-    bm = bmesh.from_edit_mesh(ori_obj.data)
-    bpy.ops.mesh.select_all(action='DESELECT')
 
-    outer_border_vertex = ori_obj.vertex_groups.get(group_name)
-    bpy.ops.object.vertex_group_set_active(group=group_name)
-    if (outer_border_vertex != None):
-        bpy.ops.object.vertex_group_select()
-        bpy.ops.mesh.remove_doubles(threshold=0.8)
-        outer_border = [v for v in bm.verts if v.select]
-        outer_edges = set()
-        extrude_direction = {}
-        # 遍历选中的顶点
-        for vert in outer_border:
-            key = (vert.co[0], vert.co[1], vert.co[2])
-            extrude_direction[key] = vert.normal
-            for edge in vert.link_edges:
-                # 检查边的两个顶点是否都在选中的顶点中
-                if edge.verts[0] in outer_border and edge.verts[1] in outer_border:
-                    outer_edges.add(edge)
-                    edge.select_set(True)
-
-        # 复制选中的顶点并沿着各自的法线方向移动
-        bpy.ops.mesh.duplicate()
-
-        # 获取所有选中的顶点
-        inside_border_vert = [v for v in bm.verts if v.select]
-        inside_border_index = [v.index for v in bm.verts if v.select]
-        inside_edges = [e for e in bm.edges if e.select]
-
-        thickness = bpy.context.scene.zongHouDu
-        for i, vert in enumerate(inside_border_vert):
-            key = (vert.co[0], vert.co[1], vert.co[2])
-            dir = extrude_direction[key]
-            vert.co -= dir * thickness  # 沿法线方向移动
-
-        # 重新选中外边界
-        for v in outer_border:
-            v.select_set(True)
-
-        for edge in outer_edges:
-            edge.select_set(True)
-
-        bpy.ops.mesh.bridge_edge_loops()
-
-        bpy.ops.object.mode_set(mode='OBJECT')
-        # 将下边界加入顶点组
-        bottom_inner_border_vertex = ori_obj.vertex_groups.get("BottomInnerBorderVertex")
-        if (bottom_inner_border_vertex == None):
-            bottom_inner_border_vertex = ori_obj.vertex_groups.new(name="BottomInnerBorderVertex")
-        for vert_index in inside_border_index:
-            bottom_inner_border_vertex.add([vert_index], 1, 'ADD')
 
 
 def get_up_inner_border_and_fill():
@@ -581,7 +528,7 @@ def get_up_inner_border_and_fill():
     duplicate_obj.hide_set(True)
     moveToRight(duplicate_obj)
 
-    extrude_border_by_vertex_groups("BottomOuterBorderVertex")
+    # extrude_border_by_vertex_groups("BottomOuterBorderVertex")
 
     template_highest_point = (-10.3681, 2.2440, 12.1771)
     template_hole_border = [(3.6963632106781006, 1.4901610612869263, -3.0596837997436523),
@@ -816,10 +763,16 @@ def fill_up_and_bottom():
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='DESELECT')
 
-    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
-    bpy.ops.object.vertex_group_select()
     bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
     bpy.ops.object.vertex_group_select()
+    # 保证内外底边顶点数相同，减少三角面
+    times = 2
+    for i in range(0, times + 1):
+        bpy.ops.mesh.subdivide()
+
+    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+
     bpy.ops.mesh.bridge_edge_loops()
 
     bpy.ops.mesh.select_all(action='SELECT')
@@ -829,24 +782,6 @@ def fill_up_and_bottom():
     bpy.ops.object.mode_set(mode='OBJECT')
     bpy.ops.object.shade_smooth(use_auto_smooth=True, auto_smooth_angle=3.14159)
 
-
-def set_vert_group(group_name, vert_index_list):
-    ori_obj = bpy.context.active_object
-
-    vert_group = ori_obj.vertex_groups.get(group_name)
-    if (vert_group == None):
-        vert_group = ori_obj.vertex_groups.new(name=group_name)
-    for vert_index in vert_index_list:
-        vert_group.add([vert_index], 1, 'ADD')
-
-
-def delete_vert_group(group_name):
-    ori_obj = bpy.context.active_object
-
-    vert_group = ori_obj.vertex_groups.get(group_name)
-    if (vert_group != None):
-        bpy.ops.object.vertex_group_set_active(group=group_name)
-        bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
 
 
 # 更新顶点组
@@ -883,6 +818,21 @@ def update_vert_group():
 def resample_curve():
     obj = bpy.context.active_object
     bpy.ops.object.convert(target='CURVE')
+    main_obj = bpy.data.objects["右耳"]
+
+    obj.select_set(False)
+    bpy.context.view_layer.objects.active = main_obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bm = bmesh.from_edit_mesh(main_obj.data)
+    outer_border_index_list = [v.index for v in bm.verts if v.select]
+    origin_size = len(outer_border_index_list)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    obj.select_set(True)
+    main_obj.select_set(False)
+    bpy.context.view_layer.objects.active = obj
 
     # 添加几何节点修改器
     modifier = obj.modifiers.new(name="Resample", type='NODES')
@@ -891,18 +841,16 @@ def resample_curve():
     node_tree = bpy.data.node_groups[0]
     node_links = node_tree.links
 
-    # node_tree.nodes.new("GeometryNodeMeshToCurve")
     input_node = node_tree.nodes[0]
     output_node = node_tree.nodes[1]
 
     resample_node = node_tree.nodes.new("GeometryNodeResampleCurve")
-    resample_node.inputs[2].default_value = 100
+    resample_node.inputs[2].default_value = origin_size * 2
 
     node_links.new(input_node.outputs[0], resample_node.inputs[0])
     node_links.new(resample_node.outputs[0], output_node.inputs[0])
 
     bpy.ops.object.convert(target='MESH')
-
 
 def sub_surface(up_index, bottom_index):
     bpy.ops.object.mode_set(mode='OBJECT')
@@ -976,7 +924,7 @@ def fill_and_smooth_inner_face():
                 obj.select_set(False)
 
     resample_curve()
-    up_index, bottom_index = update_vert_group()
+    up_index,bottom_index = update_vert_group()
 
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
@@ -985,11 +933,14 @@ def fill_and_smooth_inner_face():
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.vertex_group_set_active(group='UpFillBorderVertex')
     bpy.ops.object.vertex_group_select()
-    bpy.ops.mesh.fill_grid(span=6, offset=6)
+    bpy.ops.mesh.fill_grid(span=0, offset=6)
 
+    times = 2
     # 使用表面细分修改器
-    up_index, bottom_index = sub_surface(up_index, bottom_index)
-    up_index, bottom_index = sub_surface(up_index, bottom_index)
+    for i in range(0,times):
+        up_index,bottom_index = sub_surface(up_index,bottom_index)
+
+
 
     bpy.ops.object.mode_set(mode='OBJECT')
     # 合并内外壁
@@ -1001,3 +952,47 @@ def fill_and_smooth_inner_face():
 
     bpy.context.view_layer.objects.active = main_obj
     bpy.ops.object.join()
+
+
+def fill_frame_style_inner_face():
+    name = "右耳"  # TODO    根据导入文件名称更改
+    ori_obj = bpy.data.objects[name]
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    # 复制一份挖孔前的模型以备用
+    cur_obj = bpy.data.objects["右耳"]
+    duplicate_obj = cur_obj.copy()
+    duplicate_obj.data = cur_obj.data.copy()
+    duplicate_obj.animation_data_clear()
+    duplicate_obj.name = cur_obj.name + "OriginForFill"
+    bpy.context.collection.objects.link(duplicate_obj)
+    duplicate_obj.hide_set(True)
+    moveToRight(duplicate_obj)
+
+    extrude_border_by_vertex_groups("BottomOuterBorderVertex", "BottomInnerBorderVertex")
+
+
+
+    obj = bpy.context.active_object
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.object.vertex_group_set_active(group='UpInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+
+    bpy.ops.mesh.fill()
+    bpy.ops.mesh.subdivide(number_cuts=4)
+
+    bm = bmesh.from_edit_mesh(obj.data)
+    inner_face_index = [v.index for v in bm.verts if v.select]
+    bpy.ops.object.mode_set(mode='OBJECT')
+    # 用于平滑的顶点组，包含所有孔边界顶点
+    set_vert_group("InnerFaceVertex",inner_face_index)
+
+    # 添加一个修饰器
+    modifier = obj.modifiers.new(name="Smooth", type='LAPLACIANSMOOTH')
+    bpy.context.object.modifiers["Smooth"].vertex_group = "InnerFaceVertex"
+    bpy.context.object.modifiers["Smooth"].iterations = 20
+    bpy.context.object.modifiers["Smooth"].lambda_factor = 20
+    bpy.ops.object.modifier_apply(modifier="Smooth", single_user=True)

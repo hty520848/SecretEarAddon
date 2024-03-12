@@ -2,11 +2,7 @@ import bpy
 import bmesh
 
 from ..dig_hole import dig_hole
-from ..bottom_ring import bottom_cut
-from ..border_fill import border_fill
-from ..border_fill import getSmoothVertexGroup
-from ..border_fill import applySmooth
-from ..border_fill import get_up_inner_border_and_fill
+from ..border_fill import fill_frame_style_inner_face
 from ..normal_projection import frame_normal_projection_to_darw_cut_plane
 from ...tool import moveToRight, convert_to_mesh
 from ...utils.utils import *
@@ -651,8 +647,9 @@ def apply_frame_style_eardrum_template():
         frame_normal_projection_to_darw_cut_plane(origin_highest_vert,border_vert_co_and_normal)
         plane_cut()
 
-        get_up_inner_border_and_fill()
         dig_hole()
+
+        fill_frame_style_inner_face()
 
         convert_to_mesh("BottomRingBorderR", "meshBottomRingBorderR", 0.18)
         utils_re_color("右耳", (1, 0.319, 0.133))

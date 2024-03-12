@@ -42,6 +42,7 @@ def smooth_stepcut():
 
 # col.operator("huier.switch", text = "切换窗口")
 
+
 def getOverride():
     # 获取所有的窗口
     override = []
@@ -52,7 +53,7 @@ def getOverride():
         for area in screen.areas:
             if area.type == 'VIEW_3D':
                 # print('宽度',area.width)
-                if(area.spaces.active.use_local_collections == False):
+                if (area.spaces.active.use_local_collections == False):
                     # 设置local collection
                     area.spaces.active.use_local_collections = True
                 ride = {
@@ -61,19 +62,20 @@ def getOverride():
                     'area': area,
                     'region': [region for region in area.regions if region.type == 'WINDOW'][0],
                 }
-                override.append(ride) 
+                override.append(ride)
 
-    return override[0],override[1]
+    return override[0], override[1]
+
 
 def hide():
-    override1,override2 = getOverride()
+    override1, override2 = getOverride()
     with bpy.context.temp_override(**override2):
         bpy.ops.object.hide_collection(collection_index=2, extend=False)
 
-
     with bpy.context.temp_override(**override1):
         bpy.ops.object.hide_collection(collection_index=1, extend=False)
-    
+
+
 if __name__ == "__main__":
     hide()
 
@@ -82,7 +84,7 @@ def get_change_parameters():
     tar_obj = bpy.data.objects['右耳']
     ori_obj_R = bpy.data.objects['TemplateEarR']
     ori_obj_L = bpy.data.objects['TemplateEarL']
-    
+
     # 获取模型最高点
     origin_highest_vert_index_R = get_highest_vert(ori_obj_R)
     origin_highest_vert_index_L = get_highest_vert(ori_obj_L)
@@ -92,13 +94,17 @@ def get_change_parameters():
     origin_highest_vert_L = ori_obj_L.data.vertices[origin_highest_vert_index_L].co @ ori_obj_R.matrix_world
     target_highest_vert = tar_obj.data.vertices[target_highest_vert_index].co @ tar_obj.matrix_world
     # 计算旋转角度
-    angle_origin_R = calculate_angle(origin_highest_vert_R[0],origin_highest_vert_R[1])
-    angle_origin_L= calculate_angle(origin_highest_vert_L[0],origin_highest_vert_L[1])
-    angle_target = calculate_angle(target_highest_vert[0], target_highest_vert[1])
+    angle_origin_R = calculate_angle(
+        origin_highest_vert_R[0], origin_highest_vert_R[1])
+    angle_origin_L = calculate_angle(
+        origin_highest_vert_L[0], origin_highest_vert_L[1])
+    angle_target = calculate_angle(
+        target_highest_vert[0], target_highest_vert[1])
     rotate_angle_R = angle_target - angle_origin_R
     rotate_angle_L = angle_target - angle_origin_L
-    
-    return rotate_angle_R,rotate_angle_L
+
+    return rotate_angle_R, rotate_angle_L
+
 
 def get_highest_vert(obj):
     # 获取网格数据
@@ -116,6 +122,7 @@ def get_highest_vert(obj):
     vert_order_by_z.sort(key=lambda vert: vert.co[2], reverse=True)
     return vert_order_by_z[0].index
 
+
 def calculate_angle(x, y):
     # 弧度
     angle_radians = math.atan2(y, x)
@@ -127,6 +134,7 @@ def calculate_angle(x, y):
     angle_degrees = (angle_degrees + 360) % 360
 
     return angle_degrees
+
 
 def rotate():
     # 获取场景中的选中对象
@@ -142,15 +150,18 @@ def rotate():
         bpy.ops.object.select_all(action='DESELECT')
         bpy.context.view_layer.objects.active = obj_R
         obj_R.select_set(True)
-        bpy.ops.object.transform_apply(location=False, rotation=True, scale=False, isolate_users=True)
-        
+        bpy.ops.object.transform_apply(
+            location=False, rotation=True, scale=False, isolate_users=True)
+
     if obj_L:
         rotate_angle_L = math.radians(rotate_angle_L)  # 将角度转换为弧度
         obj_L.rotation_euler[2] += rotate_angle_L  # 在 Z 轴上添加旋转角度
         bpy.ops.object.select_all(action='DESELECT')
         bpy.context.view_layer.objects.active = obj_L
         obj_L.select_set(True)
-        bpy.ops.object.transform_apply(location=False, rotation=True, scale=False, isolate_users=True)
+        bpy.ops.object.transform_apply(
+            location=False, rotation=True, scale=False, isolate_users=True)
+
 
 def judge():
     files_dir = os.path.join(os.path.dirname(__file__))
@@ -159,12 +170,15 @@ def judge():
     bpy.ops.wm.stl_import(filepath=path_EarR)
     bpy.ops.wm.stl_import(filepath=path_EarL)
     rotate()
-    lowest_plane_border_T, _ = get_cut_border(0.25,'右耳')
-    lowest_plane_border_R, _ = get_cut_border(0.25,'TemplateEarR')
-    lowest_plane_border_L, _ = get_cut_border(0.25,'TemplateEarL')
-    draw_cut_border_curve(get_order_border_vert(lowest_plane_border_T), 'TargetEar', 0.1)
-    draw_cut_border_curve(get_order_border_vert(lowest_plane_border_R), 'RightEar', 0.1)
-    draw_cut_border_curve(get_order_border_vert(lowest_plane_border_L), 'LeftEar', 0.1)
+    lowest_plane_border_T, _ = get_cut_border(0.25, '右耳')
+    lowest_plane_border_R, _ = get_cut_border(0.25, 'TemplateEarR')
+    lowest_plane_border_L, _ = get_cut_border(0.25, 'TemplateEarL')
+    draw_cut_border_curve(get_order_border_vert(
+        lowest_plane_border_T), 'TargetEar', 0.1)
+    draw_cut_border_curve(get_order_border_vert(
+        lowest_plane_border_R), 'RightEar', 0.1)
+    draw_cut_border_curve(get_order_border_vert(
+        lowest_plane_border_L), 'LeftEar', 0.1)
     # order_border_vert_T = get_order_border_vert(lowest_plane_border_T)
     # order_border_vert_R = get_order_border_vert(lowest_plane_border_R)
     # order_border_vert_L = get_order_border_vert(lowest_plane_border_L)
@@ -179,17 +193,17 @@ def judge():
 def find_max_distance_vertex(vertices):
     max_distance = 0
     max_distance_index = None
-    
+
     # 遍历顶点坐标列表
     for i in range(len(vertices) - 1):
         # 计算相邻顶点之间的距离
         distance = math.dist(vertices[i], vertices[i+1])
-        
+
         # 如果当前距离大于记录的最大距离，则更新最大距离及其对应的下标
         if distance > max_distance:
             max_distance = distance
             max_distance_index = i
-    
+
     temp_distance = math.dist(vertices[0], vertices[len(vertices) - 1])
     if temp_distance > max_distance:
         max_distance = temp_distance
@@ -201,7 +215,7 @@ def find_max_distance_vertex(vertices):
 def get_plane_height(high_percent, name):
     # high_percent 0.25
     obj = bpy.data.objects[name]
-    
+
     me = obj.data
     bm = bmesh.new()
     bm.from_mesh(me)
@@ -214,9 +228,11 @@ def get_plane_height(high_percent, name):
     vert_order_by_z.sort(key=lambda vert: vert.co[2], reverse=True)
     highest_vert = vert_order_by_z[0]
     lowest_vert = vert_order_by_z[-1]
-    origin_z_co = lowest_vert.co[2] + high_percent * (highest_vert.co[2] - lowest_vert.co[2])
+    origin_z_co = lowest_vert.co[2] + high_percent * \
+        (highest_vert.co[2] - lowest_vert.co[2])
 
     return origin_z_co
+
 
 def get_lowest_point(angle_degrees, z_co, count, origin_loc, origin_normal, name):
     # 在当前平面内找到距离z轴最近的点
@@ -227,7 +243,8 @@ def get_lowest_point(angle_degrees, z_co, count, origin_loc, origin_normal, name
     lowest_point = origin_loc
     lowest_normal = origin_normal
     # 投射光线的方向
-    direction = (math.cos(math.radians(angle_degrees)), math.sin(math.radians(angle_degrees)), 0)
+    direction = (math.cos(math.radians(angle_degrees)),
+                 math.sin(math.radians(angle_degrees)), 0)
     h = z_co
     while h < z_co + 1:
         origin = (0, 0, h)
@@ -244,10 +261,11 @@ def get_lowest_point(angle_degrees, z_co, count, origin_loc, origin_normal, name
                 min_distance = distance
                 lowest_point = (loc[0], loc[1], loc[2])
                 lowest_normal = normal
-    
+
         h = h + 0.2
 
     return lowest_point, lowest_normal
+
 
 def get_cut_border(high_percent, name):
     # 获取活动对象
@@ -273,8 +291,9 @@ def get_cut_border(high_percent, name):
                 count = 1
                 while hit:
                     lowest_point,  lowest_normal = get_lowest_point(angle_degrees, origin_z_co, count,
-                                                        (loc[0], loc[1], loc[2]),
-                                                        (normal[0], normal[1], normal[2]), name)
+                                                                    (loc[0], loc[1],
+                                                                     loc[2]),
+                                                                    (normal[0], normal[1], normal[2]), name)
                     lowest_plane_border.append(lowest_point)
                     lowest_plane_normal.append(lowest_normal)
                     # 去找下一个交点
@@ -287,6 +306,7 @@ def get_cut_border(high_percent, name):
             angle_degrees = angle_degrees + 0.5
 
     return lowest_plane_border, lowest_plane_normal
+
 
 def get_order_border_vert(selected_verts):
     size = len(selected_verts)
@@ -304,13 +324,15 @@ def get_order_border_vert(selected_verts):
 
         # 2024/1/2 z轴落差过大会导致问题，这里只考虑xy坐标
         for vert in unprocessed_vertex:
-            distance = math.sqrt((vert[0] - now_vert_co[0]) ** 2 + (vert[1] - now_vert_co[1]) ** 2)  # 计算欧几里得距离
+            distance = math.sqrt(
+                (vert[0] - now_vert_co[0]) ** 2 + (vert[1] - now_vert_co[1]) ** 2)  # 计算欧几里得距离
             if distance < min_distance:
                 min_distance = distance
                 now_vert = vert
         if min_distance > 3 and len(unprocessed_vertex) < 0.1 * size:
             finish = True
     return order_border_vert
+
 
 def draw_cut_border_curve(order_border_co, name, depth):
     new_node_list = list()
@@ -333,6 +355,7 @@ def draw_cut_border_curve(order_border_co, name, depth):
     newColor('blue', 0, 0, 1, 1, 1)
     bpy.context.active_object.data.materials.append(bpy.data.materials['blue'])
     bpy.context.view_layer.update()
+
 
 if __name__ == "__main__":
     judge()
@@ -360,6 +383,7 @@ def getModely(name):
 
     return y_max, y_min
 
+
 def cal_number(percent, name):
     y_max, y_min = getModely(name)
     initY = y_min + (y_max - y_min) * percent
@@ -369,6 +393,7 @@ def cal_number(percent, name):
     selected_verts = [v.co for v in bm.verts if round(v.co.y, 2) < round(
         initY, 2) + 0.1 and round(v.co.y, 2) > round(initY, 2) - 0.1]
     return len(selected_verts)
+
 
 def judge2():
     for i in range(1, 10):
@@ -381,17 +406,17 @@ def judge2():
 class MsgbusCallBack2(bpy.types.Operator):
     bl_idname = "object.msgbuscallback2"
     bl_label = "绘制文本"
- 
+
     def invoke(self, context, event):
         print("绘制文本invoke")
         global is_msgbus_start2
         is_msgbus_start2 = True
-        self.excute(context,event)
+        self.excute(context, event)
         return {'FINISHED'}
 
     def excute(self, context, event):
         self.draw_left()
-        subscribe_to3 = bpy.types.Area,'width'
+        subscribe_to3 = bpy.types.Area, 'width'
         bpy.msgbus.subscribe_rna(
             key=subscribe_to3,
             owner=object(),
@@ -408,9 +433,11 @@ class MsgbusCallBack2(bpy.types.Operator):
             if region.x == 0:
                 PublicHandleClass.remove_handler()
                 if bpy.context.scene.leftWindowObj == "右耳":
-                    PublicHandleClass.add_handler(draw_callback_Red, (None, region.width - 100, region.height - 100, "R"))
+                    PublicHandleClass.add_handler(
+                        draw_callback_Red, (None, region.width - 100, region.height - 100, "R"))
                 elif bpy.context.scene.leftWindowObj == "左耳":
-                    PublicHandleClass.add_handler(draw_callback_Blue, (None, region.width - 100, region.height - 100, "L"))
+                    PublicHandleClass.add_handler(
+                        draw_callback_Blue, (None, region.width - 100, region.height - 100, "L"))
                 # blf.color(0, 0.0, 0.0, 0.0, 1.0)
                 # blf.position(font_id, region.width - 100, region.height - 100, 0)
                 # blf.size(font_id, 50)
@@ -423,12 +450,15 @@ class MsgbusCallBack2(bpy.types.Operator):
             if region.x == 0:
                 PublicHandleClass.remove_handler()
                 if bpy.context.scene.leftWindowObj == "右耳":
-                    PublicHandleClass.add_handler(draw_callback_Red, (None, region.width - 100, region.height - 100, "R"))
+                    PublicHandleClass.add_handler(
+                        draw_callback_Red, (None, region.width - 100, region.height - 100, "R"))
                 elif bpy.context.scene.leftWindowObj == "左耳":
-                    PublicHandleClass.add_handler(draw_callback_Blue, (None, region.width - 100, region.height - 100, "L"))
+                    PublicHandleClass.add_handler(
+                        draw_callback_Blue, (None, region.width - 100, region.height - 100, "L"))
             # if region2.x != 0:
             #     PublicHandleClass.remove_handler()
             #     PublicHandleClass.add_handler(draw_callback_Red, (None, region2.width - 100, region2.height - 100, "L"))
+
 
 class MsgbusCallBack3(bpy.types.Operator):
     bl_idname = "object.msgbuscallback3"
@@ -436,7 +466,7 @@ class MsgbusCallBack3(bpy.types.Operator):
 
     def invoke(self, context, event):
         print("区域大小变化invoke")
-        self.excute(context,event)
+        self.excute(context, event)
         return {'FINISHED'}
 
     def excute(self, context, event):
@@ -445,14 +475,18 @@ class MsgbusCallBack3(bpy.types.Operator):
         if region.x == 0:
             PublicHandleClass.remove_handler()
             if bpy.context.scene.leftWindowObj == "右耳":
-                PublicHandleClass.add_handler(draw_callback_Red, (None, region.width - 100, region.height - 100, "R"))
+                PublicHandleClass.add_handler(
+                    draw_callback_Red, (None, region.width - 100, region.height - 100, "R"))
             elif bpy.context.scene.leftWindowObj == "左耳":
-                PublicHandleClass.add_handler(draw_callback_Blue, (None, region.width - 100, region.height - 100, "L"))
+                PublicHandleClass.add_handler(
+                    draw_callback_Blue, (None, region.width - 100, region.height - 100, "L"))
+
 
 font_info_public = {
     "font_id": 0,
     "handler": None,
-    }
+}
+
 
 def draw_callback_Red(self, x, y, text):
     """Draw on the viewports"""
@@ -463,6 +497,7 @@ def draw_callback_Red(self, x, y, text):
     blf.size(font_id, 50)
     blf.draw(font_id, text)
 
+
 def draw_callback_Blue(self, x, y, text):
     """Draw on the viewports"""
     # BLF drawing routine
@@ -471,6 +506,7 @@ def draw_callback_Blue(self, x, y, text):
     blf.position(font_id, x, y, 0)
     blf.size(font_id, 50)
     blf.draw(font_id, text)
+
 
 class PublicHandleClass:
     _handler = None
@@ -486,13 +522,17 @@ class PublicHandleClass:
         if cls._handler is not None:
             bpy.types.SpaceView3D.draw_handler_remove(cls._handler, 'WINDOW')
             cls._handler = None
-    
+
+
 def getOverrideMain():
-    area_type = 'VIEW_3D'  # change this to use the correct Area Type context you want to process in
-    areas = [area for area in bpy.context.window.screen.areas if area.type == area_type]
+    # change this to use the correct Area Type context you want to process in
+    area_type = 'VIEW_3D'
+    areas = [
+        area for area in bpy.context.window.screen.areas if area.type == area_type]
 
     if len(areas) <= 0:
-        raise Exception(f"Make sure an Area of type {area_type} is open or visible in your screen!")
+        raise Exception(
+            f"Make sure an Area of type {area_type} is open or visible in your screen!")
 
     override = {
         'window': bpy.context.window,
@@ -503,12 +543,16 @@ def getOverrideMain():
 
     return override
 
+
 def getOverrideMain2():
-    area_type = 'VIEW_3D'  # change this to use the correct Area Type context you want to process in
-    areas = [area for area in bpy.context.window.screen.areas if area.type == area_type]
+    # change this to use the correct Area Type context you want to process in
+    area_type = 'VIEW_3D'
+    areas = [
+        area for area in bpy.context.window.screen.areas if area.type == area_type]
 
     if len(areas) <= 0:
-        raise Exception(f"Make sure an Area of type {area_type} is open or visible in your screen!")
+        raise Exception(
+            f"Make sure an Area of type {area_type} is open or visible in your screen!")
 
     override = {
         'window': bpy.context.window,
@@ -518,11 +562,12 @@ def getOverrideMain2():
     }
 
     return override
+
+
 def msgbus_callback2(*args):
     global is_msgbus_start2
     if (not is_msgbus_start2):
         bpy.ops.object.msgbuscallback2('INVOKE_DEFAULT')
-
 
 
 subscribe_to2 = (bpy.types.Object, "name")
