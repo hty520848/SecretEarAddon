@@ -106,7 +106,7 @@ class MsgbusCallBack(bpy.types.Operator):
 
                 bpy.context.scene.var = 0
 
-                print(f'Previous Tab:, {prev_properties_context}')
+                print(f'Previous Tab: {prev_properties_context}')
                 print(f'Current Tab: {current_tab}')
                 # print("切换前场景中存在的文件:")
                 # print("~~~~~~~~~~~~~~~~~~~")
@@ -141,13 +141,13 @@ class MsgbusCallBack(bpy.types.Operator):
                             bpy.ops.object.hide_collection(collection_index=1, extend=False, toggle=True)
                     if prev_properties_context == None:
                         if workspace == '布局':
-                            bpy.context.screen.areas[1].spaces.active.context = 'RENDER'
+                            bpy.context.screen.areas[0].spaces.active.context = 'RENDER'
                         elif workspace == '布局.001':
                             bpy.context.screen.areas[0].spaces.active.context = 'RENDER'
                         current_tab = 'RENDER'
                     else:
                         if workspace == '布局':
-                            bpy.context.screen.areas[1].spaces.active.context = prev_properties_context
+                            bpy.context.screen.areas[0].spaces.active.context = prev_properties_context
                         elif workspace == '布局.001':
                             bpy.context.screen.areas[0].spaces.active.context = prev_properties_context
                         current_tab = prev_properties_context
@@ -700,8 +700,8 @@ class MsgbusCallBack(bpy.types.Operator):
                         print("LabelToCasting")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
-                           backFromLabel()
-                           frontToCasting()
+                            backFromLabel()
+                            frontToCasting()
                     elif (prev_process == '创建模具'):
                         print("CreateMouldToCasting")
                         override = getOverride()
@@ -724,8 +724,8 @@ class MsgbusCallBack(bpy.types.Operator):
                         print("SoundCanalToCasting")
                         override = getOverride()
                         with bpy.context.temp_override(**override):
-                           backFromSoundCanal()
-                           frontToCasting()
+                            backFromSoundCanal()
+                            frontToCasting()
                     elif (prev_process == '通气孔'):
                         print("VentCanalToCasting")
                         override = getOverride()

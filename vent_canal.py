@@ -489,6 +489,8 @@ class TEST_OT_finishventcanal(bpy.types.Operator):
 
     def excute(self, context, event):
         submit_ventcanal()
+        global ventcanal_finish
+        ventcanal_finish = True
 
 
 class TEST_OT_resetventcanal(bpy.types.Operator):
@@ -566,6 +568,7 @@ def generate_canal(co):
     bpy.context.scene.tool_settings.use_snap_backface_culling = True
 
     add_sphere(co, 0)
+    save_ventcanal_info(co)
 
 
 def project_point_on_line(point, line_point1, line_point2):
@@ -655,8 +658,8 @@ def finish_canal(co):
     # add_sphere(co, 2)
     # temp_co = curve_data.splines[0].points[1].co[0:3]
     # add_sphere(temp_co, 1)
-    # convert_soundcanal()
-    # save_soundcanal_info(temp_co)
+    # convert_ventcanal()
+    # save_ventcanal_info(temp_co)
 
 
 def hooktoobject(index):
@@ -740,11 +743,59 @@ def initial_ventcanal():
         bpy.context.scene.tool_settings.use_snap_align_rotation = True
         bpy.context.scene.tool_settings.use_snap_backface_culling = True
 
+        bpy.data.objects['右耳'].data.materials.clear()
         bpy.data.objects['右耳'].data.materials.append(bpy.data.materials["Transparency"])
         bpy.data.objects['右耳'].hide_select = True
         convert_ventcanal()
         save_ventcanal_info([0, 0, 0])
+        bpy.data.objects['ventcanal'].hide_set(True)
         bpy.ops.object.ventcanalqiehuan('INVOKE_DEFAULT')
+    
+    elif len(object_dic) == 1:   # 只点击了一次
+        newColor('red', 1, 0, 0, 1, 0.8)
+        newColor('grey', 0.8, 0.8, 0.8, 0, 1)
+        obj = new_curve('ventcanal')
+        obj.data.materials.append(bpy.data.materials["grey"])
+        # 添加一个曲线样条
+        spline = obj.data.splines.new(type='NURBS')
+        spline.order_u = 2
+        spline.use_smooth = True
+        spline.points[0].co[0:3] = ventcanal_data[0:3]
+        spline.points[0].co[3] = 1
+        # spline.use_cyclic_u = True
+        # spline.use_endpoint_u = True
+
+        # 开启吸附
+        bpy.context.scene.tool_settings.use_snap = True
+        bpy.context.scene.tool_settings.snap_elements = {'FACE'}
+        bpy.context.scene.tool_settings.snap_target = 'CENTER'
+        bpy.context.scene.tool_settings.use_snap_align_rotation = True
+        bpy.context.scene.tool_settings.use_snap_backface_culling = True
+        bpy.ops.object.ventcanalqiehuan('INVOKE_DEFAULT')
+
+        mesh = bpy.data.meshes.new("ventcanalsphere")
+        obj = bpy.data.objects.new("ventcanalsphere1", mesh)
+        bpy.context.collection.objects.link(obj)
+        moveToRight(obj)
+
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select_set(state=True)
+        bpy.ops.object.mode_set(mode='EDIT')
+        bm = bmesh.from_edit_mesh(obj.data)
+
+        # 设置圆球的参数
+        radius = 0.4  # 半径
+        segments = 32  # 分段数
+
+        # 在指定位置生成圆球
+        bmesh.ops.create_uvsphere(bm, u_segments=segments, v_segments=segments,
+                                    radius=radius * 2)
+        bmesh.update_edit_mesh(obj.data)  # 更新网格数据
+
+        bpy.ops.object.mode_set(mode='OBJECT')
+        obj.data.materials.append(bpy.data.materials['red'])
+        obj.location = ventcanal_data[0:3]  # 指定的位置坐标
 
     else:  # 不存在已保存的圆球位置
         pass
@@ -778,7 +829,7 @@ def adjustpoint():
     last_index = len(curve_data.splines[0].points) - 1
     first_point = curve_data.splines[0].points[0]
     last_point = curve_data.splines[0].points[last_index]
-    step = 0.5
+    step = 0.3
     normal = Vector(first_point.co[0:3]) - Vector(curve_data.splines[0].points[1].co[0:3])
     first_point.co = (first_point.co[0] + normal[0] * step, first_point.co[1] + normal[1] * step,
                       first_point.co[2] + normal[2] * step, 1)
@@ -889,8 +940,8 @@ def backToVentCanal():
             bpy.context.collection.objects.link(ori_obj)
             moveToRight(ori_obj)
             ori_obj.hide_set(True)
-        elif (bpy.data.objects.get("右耳SoundCanalLast") != None):
-            lastname = "右耳SoundCanalLast"
+        elif (bpy.data.objects.get("右耳ventcanalLast") != None):
+            lastname = "右耳ventcanalLast"
             last_obj = bpy.data.objects.get(lastname)
             ori_obj = last_obj.copy()
             ori_obj.data = last_obj.data.copy()

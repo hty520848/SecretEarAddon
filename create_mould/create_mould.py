@@ -31,6 +31,8 @@ def frontToCreateMould():
     initialTransparency()
     duplicate_obj1.data.materials.clear()
     duplicate_obj1.data.materials.append(bpy.data.materials['Transparency'])
+    bpy.data.objects["右耳MouldReset"].select_set(False)
+    bpy.context.view_layer.objects.active = obj
     moveToRight(duplicate_obj1)
     obj.data.materials.clear()
     obj.data.materials.append(bpy.data.materials['Yellow'])
@@ -59,11 +61,12 @@ def frontFromCreateMould():
     bpy.context.view_layer.objects.active = duplicate_obj
 
     # 切出创建模具时 需要被删除的物体的名称数组
-    need_to_delete_model_name_list = ["右耳OriginForCreateMouldR", "HoleCutCylinderBottomR",
+    need_to_delete_model_name_list = ["右耳OriginForCreateMouldR", "HoleCutCylinderBottomR", "meshBottomRingBorderR",
                                       "HoleBorderCurveR", "BottomRingBorderR", "cutPlane", "BottomRingBorderRForCutR",
-                                      "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
-                                      "右耳ForGetFillPlane", "dragcurve"]
+                                      "右耳OriginForCutR", "右耳Circle", "右耳Torus","左耳Circle", "左耳Torus", "右耳huanqiecompare", "FillPlane",
+                                      "右耳ForGetFillPlane", "dragcurve", "selectcurve"]
     delete_useless_object(need_to_delete_model_name_list)
+    delete_hole_border()
     enum = bpy.context.scene.muJuTypeEnum
     if enum == "OP1":
         set_finish(True)
@@ -152,7 +155,7 @@ def backFromCreateMould():
     for selected_obj in all_objs:
         if (selected_obj.name == "右耳MouldLast"):
             bpy.data.objects.remove(selected_obj, do_unlink=True)
-        if (selected_obj.name == "右耳MouldReset"):
+        elif (selected_obj.name == "右耳MouldReset"):
             selected_obj.hide_set(True)
     name = "右耳"  # TODO    根据导入文件名称更改
     obj = bpy.data.objects[name]
@@ -164,12 +167,13 @@ def backFromCreateMould():
     duplicate_obj1.hide_set(True)
 
     # 切出创建模具时 需要被删除的物体的名称数组
-    need_to_delete_model_name_list = ["右耳OriginForCreateMouldR", "HoleCutCylinderBottomR",
+    need_to_delete_model_name_list = ["右耳OriginForCreateMouldR", "HoleCutCylinderBottomR", "meshBottomRingBorderR",
                                       "HoleBorderCurveR", "BottomRingBorderR", "cutPlane", "BottomRingBorderRForCutR",
-                                      "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
-                                      "右耳ForGetFillPlane", "dragcurve"]
+                                      "右耳OriginForCutR", "右耳Circle", "右耳Torus","左耳Circle", "左耳Torus", "右耳huanqiecompare", "FillPlane",
+                                      "右耳ForGetFillPlane", "dragcurve", "selectcurve"]
 
     delete_useless_object(need_to_delete_model_name_list)
+    delete_hole_border()
 
     enum = bpy.context.scene.muJuTypeEnum
     if enum == "OP1":
@@ -177,6 +181,9 @@ def backFromCreateMould():
 
 
 def apply_template():
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
     success = True
     # 复制一份挖孔前的模型以备用
     cur_obj = bpy.context.active_object
@@ -198,6 +205,7 @@ def apply_template():
     elif mould_type == "OP2":
         print("硬耳膜")
         apply_hard_eardrum_template()
+        bpy.context.scene.neiBianJiXian = False
     elif mould_type == "OP3":
         print("一体外壳")
     elif mould_type == "OP4":
@@ -227,6 +235,10 @@ def delete_hole_border():
     for obj in bpy.data.objects:
         if re.match('HoleBorderCurve', obj.name) is not None:
             bpy.data.objects.remove(obj, do_unlink=True)
+    for obj in bpy.data.objects:
+        if re.match('meshHoleBorderCurve', obj.name) is not None:
+            bpy.data.objects.remove(obj, do_unlink=True)
+
 
 def recover():
     '''
@@ -243,8 +255,8 @@ def recover():
         need_to_delete_model_name_list = ["右耳", "HoleCutCylinderBottomR",
                                           "HoleBorderCurveR", "BottomRingBorderR", "cutPlane",
                                           "BottomRingBorderRForCutR",
-                                          "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
-                                          "右耳ForGetFillPlane","meshHoleBorderCurveR","meshBottomRingBorderR", "dragcurve"]
+                                          "右耳OriginForCutR", "右耳Circle", "右耳Torus","左耳Circle", "左耳Torus", "右耳huanqiecompare", "FillPlane",
+                                          "右耳ForGetFillPlane", "meshBottomRingBorderR", "dragcurve", "selectcurve"]
         delete_useless_object(need_to_delete_model_name_list)
         delete_hole_border()
         # 将最开始复制出来的OriginForCreateMould名称改为模型名称
@@ -273,9 +285,10 @@ def complete():
     need_to_delete_model_name_list = ["HoleCutCylinderBottomR",
                                       "HoleBorderCurveR", "BottomRingBorderR", "cutPlane",
                                       "BottomRingBorderRForCutR",
-                                      "右耳OriginForCutR", "Circle", "Torus", "右耳huanqiecompare", "FillPlane",
-                                      "右耳ForGetFillPlane","meshHoleBorderCurveR","meshBottomRingBorderR", "dragcurve"]
+                                      "右耳OriginForCutR", "右耳Circle", "右耳Torus","左耳Circle", "左耳Torus", "右耳huanqiecompare", "FillPlane",
+                                      "右耳ForGetFillPlane", "meshBottomRingBorderR", "dragcurve", "selectcurve"]
     delete_useless_object(need_to_delete_model_name_list)
+    delete_hole_border()
     enum = bpy.context.scene.muJuTypeEnum
     if enum == "OP1":
         set_finish(True)

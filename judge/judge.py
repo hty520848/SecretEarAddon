@@ -2,7 +2,6 @@ import bpy
 import bmesh
 import math
 import os
-from mathutils import Vector
 
 # 导入模版文件
 def import_template():
@@ -102,7 +101,8 @@ def copy_object(name):
     scene = bpy.context.scene
     scene.collection.objects.link(duplicate_obj)
     # moveToRight(duplicate_obj)
-    generate_curve(duplicate_obj.name)
+    normal = generate_curve(duplicate_obj.name)
+    return normal
 
 # 旋转对象
 def rotate():
@@ -229,9 +229,7 @@ def find_max_curvature(name):
 
 
 def cal_cosine(normal1, normal2):
-    normal1_norm = normal1.normalized()
-    normal2_norm = normal2.normalized()
-    correlation = normal1.dot(normal2) / (normal1_norm * normal2_norm)
+    correlation = normal1.normalized().dot(normal2.normalized())
     return correlation
 
 # 左右耳识别
@@ -242,8 +240,8 @@ def judge():
     normalR = generate_curve('TemplateEarR')
     normalL = generate_curve('TemplateEarL')
     # 判断法向方向的相似性
-    cosineR = cal_cosine(Vector(normalT), Vector(normalR))
-    cosineL = cal_cosine(Vector(normalT), Vector(normalL))
+    cosineR = cal_cosine(normalT, normalR)
+    cosineL = cal_cosine(normalT, normalL)
     if cosineR > cosineL:
         return True
     else:

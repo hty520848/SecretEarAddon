@@ -11,11 +11,7 @@ from ...utils.utils import *
 from ..frame_style_eardrum.frame_style_eardrum import recover_and_remind_border
 from ...tool import convert_to_mesh
 
-def apply_soft_eardrum_template():
-    cut_success = True
-    fill_success = True
-    origin_highest_vert = (-10.5040, 2.6564, 11.9506)
-    border_vert_co_and_normal = [
+border_vert_co_and_normal = [
         ((-4.81834602355957, 1.1757267713546753, 1.5148240327835083),
          (0.7272932529449463, 0.3362278640270233, 0.5983271598815918)), (
             (-4.815596580505371, 0.8645016551017761, 1.663185477256775),
@@ -229,10 +225,18 @@ def apply_soft_eardrum_template():
             (-7.019528388977051, -7.888681411743164, -5.090011119842529),
             (-0.6839302182197571, -0.0663234293460846, -0.7265264987945557))
     ]
+    
+
+def apply_soft_eardrum_template():
+    cut_success = True
+    fill_success = True
+    origin_highest_vert = (-10.5040, 2.6564, 11.9506)
+    global border_vert_co_and_normal
+    
     try:
         normal_projection_to_darw_cut_plane(origin_highest_vert, border_vert_co_and_normal)
         soft_eardrum()
-        convert_to_mesh('BottomRingBorderR', 'meshBottomRingBorderR', 0.3)
+        convert_to_mesh('BottomRingBorderR', 'meshBottomRingBorderR', 0.18)
     except:
         cut_success = False
 
@@ -374,6 +378,14 @@ def delete_useless_part():
 
     # 最后删掉没用的CutPlane
     bpy.data.objects.remove(bpy.data.objects["CutPlane"], do_unlink=True)
+
+def clear_co_and_normal():
+    global border_vert_co_and_normal
+    border_vert_co_and_normal = [ ]
+
+def set_co_and_normal(co, normal):
+    global border_vert_co_and_normal
+    border_vert_co_and_normal.append((co, normal))
 
 
 def soft_eardrum():

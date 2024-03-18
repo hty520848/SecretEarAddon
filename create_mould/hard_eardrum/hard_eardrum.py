@@ -1,7 +1,5 @@
 from ..bottom_ring import bottom_cut
-from ...tool import getOverride
-from ...tool import moveToRight
-from ...tool import moveToLeft
+from ...tool import getOverride, moveToRight, moveToLeft, convert_to_mesh
 import bpy
 import bmesh
 
@@ -46,6 +44,8 @@ class TimerAddModifierAfterQmesh(bpy.types.Operator):
                     bpy.data.objects['右耳'].data.materials.clear()
                     bpy.data.objects['右耳'].data.materials.append(bpy.data.materials['Yellow'])
                     is_timer_modifier_start = False     #重拓扑完成且添加修改器后,退出该定时器
+                    context.window_manager.event_timer_remove(op_cls.__timer)
+                    op_cls.__timer = None
                     return {'FINISHED'}
             return {'PASS_THROUGH'}
         else:
@@ -159,6 +159,7 @@ def apply_hard_eardrum_template():
     # duplicate_obj.select_set(state=False)
     pass  # TODO 将当前模型变透明
     bottom_fill()                                      #底面切割后补面并且重拓扑
+    convert_to_mesh('BottomRingBorderR', 'meshBottomRingBorderR', 0.18)
     pass  # TODO 将模型由透明变为非透明
     # bpy.data.objects.remove(duplicate_obj, do_unlink=True)
     # # 解决重拓扑的异步问题   添加平滑修改器,指定硬耳膜平滑顶点组,且可通过面板参数调整平滑度

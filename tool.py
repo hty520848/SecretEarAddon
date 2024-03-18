@@ -704,37 +704,6 @@ def convert_to_mesh(curve_name, mesh_name, depth):
     bpy.ops.object.convert(target='MESH')  # 转化为网格
     duplicate_obj.select_set(state=False)
 
-def generate_cutplane():
-    active_obj = bpy.data.objects['BottomRingBorderR']
-    duplicate_obj = active_obj.copy()
-    duplicate_obj.data = active_obj.data.copy()
-    duplicate_obj.name = "CutPlane"
-    duplicate_obj.animation_data_clear()
-    # 将复制的物体加入到场景集合中
-    bpy.context.collection.objects.link(duplicate_obj)
-    moveToRight(duplicate_obj)
-
-    # 获取曲线对象
-    curve_object = bpy.data.objects['CutPlane']
-    # 获取目标物体
-    target_object = bpy.data.objects["右耳MouldReset"]
-    # 获取数据
-    curve_data = curve_object.data
-
-    # 将曲线的每个顶点沿法向移动
-    for spline in curve_data.splines:
-        for point in spline.points:
-            # 获取顶点原位置
-            vertex_co = curve_object.matrix_world @ mathutils.Vector(point.co[0:3])
-            _, _, normal, _ = target_object.closest_point_on_mesh(vertex_co)
-            step = 0.2
-            point.co = (point.co[0] - normal[0] * step, point.co[1] - normal[1] * step,
-                        point.co[2] - normal[2] * step, 1)
-
-    bpy.context.view_layer.objects.active = bpy.data.objects['CutPlane']
-    bpy.context.object.data.bevel_depth = 0
-
-
 def recover_and_remind_border():
     '''
     恢复到进入切割模式并且保留边界线，用于挖孔，切割报错时恢复
@@ -749,7 +718,7 @@ def recover_and_remind_border():
         # 删除不需要的物体
         need_to_delete_model_name_list = ["右耳", "cutPlane", "右耳OriginForCutR",
                                           "右耳OriginForFill", "FillPlane", "右耳ForGetFillPlane", "右耳huanqiecompare",
-                                          "dragcurve"]
+                                          "dragcurve", "selectcurve"]
         for selected_obj in bpy.data.objects:
             if (selected_obj.name in need_to_delete_model_name_list):
                 bpy.data.objects.remove(selected_obj, do_unlink=True)
@@ -794,7 +763,7 @@ def recover_to_dig():
         # 删除不需要的物体
         need_to_delete_model_name_list = ["右耳", "cutPlane",
                                           "右耳OriginForFill", "FillPlane", "右耳ForGetFillPlane", "右耳huanqiecompare",
-                                          "dragcurve"]
+                                          "dragcurve", "selectcurve"]
         for selected_obj in bpy.data.objects:
             if (selected_obj.name in need_to_delete_model_name_list):
                 bpy.data.objects.remove(selected_obj, do_unlink=True)
@@ -860,10 +829,12 @@ def delete_useless_object(need_to_delete_model_name_list):
 def subdivide(curve_name, subdivide_number):
     bpy.ops.object.select_all(action='DESELECT')
     bpy.context.view_layer.objects.active = bpy.data.objects[curve_name]
+    bpy.data.objects[curve_name].select_set(True)
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.curve.select_all(action='SELECT')
     bpy.ops.curve.subdivide(number_cuts=subdivide_number)  # 细分次数
     bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.data.objects[curve_name].select_set(False)
 
 # 计算原点与给定坐标点之间的角度（弧度）
 def calculate_angle(x, y):

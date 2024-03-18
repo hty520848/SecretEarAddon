@@ -32,6 +32,8 @@ finish = False
 # 模型进入切割模式的原始网格
 oridata = None
 
+operator_obj = '' # 当前操作的物体是左耳还是右耳
+
 
 def get_direction(start, end):
     direction = (end[0] - start[0], end[1] - start[1], end[2] - start[2])
@@ -41,15 +43,15 @@ def get_direction(start, end):
 
 
 # 获取截面半径
-def getRadius():
-    global old_radius, scale_ratio, now_radius, on_obj
+def getRadius(op):
+    global old_radius, scale_ratio, now_radius, on_obj,operator_obj
 
     # 翻转圆环法线
-    obj_torus = bpy.data.objects['Torus']
-    obj_circle = bpy.data.objects['Circle']
-    active_obj = bpy.data.objects['右耳huanqiecompare']
+    obj_torus = bpy.data.objects[operator_obj+'Torus']
+    obj_circle = bpy.data.objects[operator_obj+'Circle']
+    active_obj = bpy.data.objects[operator_obj+'huanqiecompare']
     for selected_obj in bpy.data.objects:
-        if (selected_obj.name == "右耳huanqiecompareintersect"):
+        if (selected_obj.name == operator_obj+"huanqiecompareintersect"):
             bpy.data.objects.remove(selected_obj, do_unlink=True)
     duplicate_obj = active_obj.copy()
     duplicate_obj.data = active_obj.data.copy()
@@ -68,7 +70,7 @@ def getRadius():
     duplicate_obj.modifiers[0].operation = 'INTERSECT'
     duplicate_obj.modifiers[0].object = obj_circle
     duplicate_obj.modifiers[0].solver = 'FAST'
-    bpy.ops.object.modifier_apply(modifier='Boolean Intersect')
+    bpy.ops.object.modifier_apply(modifier='Boolean Intersect',single_user=True)
 
     rbm = bmesh.new()
     rbm.from_mesh(duplicate_obj.data)
@@ -98,12 +100,12 @@ def getRadius():
 
         # 遍历的每个顶点并计算距离
         for vertex in plane_verts:
-            distance = (vertex.co - center).length
+            distance = (vertex.co - obj_torus.location).length
             max_distance = max(max_distance, distance)
             min_distance = min(min_distance, distance)
 
         radius = round(max_distance, 2)
-        radius = radius + 0.5
+        radius = radius+0.5
         # print('最大半径',radius)
         # print('最小半径',min_distance)
         now_radius = round(min_distance, 2)
@@ -115,8 +117,9 @@ def getRadius():
         bpy.context.view_layer.objects.active = obj_torus
         obj_torus.select_set(True)
         # 缩放圆环及调整位置
-        obj_torus.location = center
-        obj_circle.location = center
+        if op == 'move':
+            obj_torus.location = center
+            obj_circle.location = center
         scale_ratio = round(radius / old_radius, 3)
         # print('缩放比例', scale_ratio)
         obj_torus.scale = (scale_ratio, scale_ratio, 1)
@@ -135,14 +138,15 @@ def initialTorusColor():
         1.0, 0.0, 0, 1.0)
 
 
-def draw_cut_plane():
+def draw_cut_plane(obj_name):
     global old_radius, scale_ratio, now_radius, last_loc, last_radius, last_ratation
-    global zmax, zmin, oridata, init1, init2
+    global zmax, zmin, oridata, init1, init2, operator_obj
 
-    obj_main = bpy.data.objects['右耳']
+    obj_main = bpy.data.objects[obj_name]
+    operator_obj = obj_name
 
-    copyModel()
-    getModelZ()
+    copyModel(obj_name)
+    getModelZ(obj_name)
 
     initZ = round(zmax * 0.5, 2)
 
@@ -175,19 +179,25 @@ def draw_cut_plane():
     bpy.ops.object.mode_set(mode='OBJECT')
     # print('当前位置', last_loc)
 
+    initX = center.x
+    initY = center.y
+    # if obj_name == '左耳':
+    #     initY = -initY
+
     # 正常初始化
     if last_loc == None:
         print('正常初始化')
         # 大圆环
         bpy.ops.mesh.primitive_circle_add(
             vertices=32, radius=12, fill_type='NGON', calc_uvs=True, enter_editmode=False, align='WORLD', location=(
-                center.x, center.y, initZ), rotation=(
-                0.0, -0.0, 0.0), scale=(
+                initX, initY, initZ), rotation=(
+                0.0, 0.0, 0.0), scale=(
                 1.0, 1.0, 1.0))
 
         # 初始化环体
         bpy.ops.mesh.primitive_torus_add(align='WORLD', location=(
-            center.x, center.y, initZ), rotation=(0.0, -0.0, 0.0), major_radius=old_radius, minor_radius=0.4)
+            initX, initY, initZ), rotation=(0.0, 0, 0), major_segments=80, minor_segments=80, major_radius=old_radius,
+                                         minor_radius=0.4)
 
 
 
@@ -200,28 +210,56 @@ def draw_cut_plane():
                 1.0, 1.0, 1.0))
         # 初始化环体
         bpy.ops.mesh.primitive_torus_add(align='WORLD', location=last_loc, rotation=(
-            last_ratation[0], last_ratation[1], last_ratation[2]), major_radius=last_radius, minor_radius=0.4)
+            last_ratation[0], last_ratation[1], last_ratation[2]), major_segments=80, minor_segments=80,
+                                         major_radius=last_radius, minor_radius=0.4)
         old_radius = last_radius
 
     obj = bpy.context.active_object
-    moveToRight(obj)
+    obj.name = obj_name + 'Torus'
+    if obj_name == '右耳':
+        moveToRight(obj)
+    elif obj_name == '左耳':
+        moveToLeft(obj)
     # 环体颜色
     initialTorusColor()
     obj.data.materials.clear()
     obj.data.materials.append(bpy.data.materials['red'])
     # 选择圆环
     obj_circle = bpy.data.objects['Circle']
-    moveToRight(obj_circle)
-    # 进入编辑模式
-    bpy.context.view_layer.objects.active = obj_circle
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    # 翻转圆环法线
-    bpy.ops.mesh.flip_normals(only_clnors=False)
-    # 隐藏圆环
-    obj_circle.hide_set(True)
-    # 返回对象模式
-    bpy.ops.object.mode_set(mode='OBJECT')
+    obj_circle.name = obj_name + 'Circle'
+    if obj_name == '右耳':
+        moveToRight(obj_circle)
+    elif obj_name == '左耳':
+        moveToLeft(obj_circle)
+    # 物体位于右边窗口
+    if obj_name == bpy.context.scene.rightWindowObj:
+        override2 = getOverride2()
+        with bpy.context.temp_override(**override2):
+            # 进入编辑模式
+            bpy.ops.object.select_all(action='DESELECT')
+            bpy.context.view_layer.objects.active = obj_circle
+            obj_circle.select_set(True)
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='SELECT')
+            # 翻转圆环法线
+            bpy.ops.mesh.flip_normals(only_clnors=False)
+            # 隐藏圆环
+            obj_circle.hide_set(True)
+            # 返回对象模式
+            bpy.ops.object.mode_set(mode='OBJECT')
+    else:
+        # 进入编辑模式
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.context.view_layer.objects.active = obj_circle
+        obj_circle.select_set(True)
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        # 翻转圆环法线
+        bpy.ops.mesh.flip_normals(only_clnors=False)
+        # 隐藏圆环
+        obj_circle.hide_set(True)
+        # 返回对象模式
+        bpy.ops.object.mode_set(mode='OBJECT')
 
 
 def get_fill_plane():
@@ -242,7 +280,7 @@ def get_fill_plane():
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.mode_set(mode='OBJECT')
-    circle_obj = bpy.data.objects["Circle"]
+    circle_obj = bpy.data.objects[operator_obj + "Circle"]
     circle_obj.hide_set(False)
     bpy.context.view_layer.objects.active = circle_obj
     bpy.ops.object.mode_set(mode='EDIT')
@@ -258,7 +296,7 @@ def get_fill_plane():
     # 为模型添加布尔修改器
     modifier = obj_main.modifiers.new(name="PlaneCut", type='BOOLEAN')
     bpy.context.object.modifiers["PlaneCut"].operation = 'DIFFERENCE'
-    bpy.context.object.modifiers["PlaneCut"].object = bpy.data.objects["Circle"]
+    bpy.context.object.modifiers["PlaneCut"].object = bpy.data.objects[operator_obj + "Circle"]
     bpy.context.object.modifiers["PlaneCut"].solver = 'FAST'
     bpy.ops.object.modifier_apply(modifier="PlaneCut", single_user=True)
 
@@ -279,7 +317,7 @@ def get_fill_plane():
         v.select_set(True)
 
     bmesh.update_edit_mesh(obj_main.data)
-    end = bpy.data.objects["Circle"].location
+    end = bpy.data.objects[operator_obj + "Circle"].location
     plane_border_co = []
     for v in select_vert:
         direction = get_direction(v.co, end)
@@ -370,7 +408,7 @@ def fill():
 
 
 def soft_eardrum():
-    draw_cut_plane()
+    draw_cut_plane("右耳")
     bpy.ops.object.softeardrumcirclecut('INVOKE_DEFAULT')
     get_fill_plane()
     fill()
@@ -379,14 +417,14 @@ def soft_eardrum():
 
 # 复制初始模型，并赋予透明材质
 
-def copyModel():
+def copyModel(obj_name):
     # 获取当前选中的物体
-    obj_ori = bpy.data.objects['右耳']
+    obj_ori = bpy.data.objects[obj_name]
     # 复制物体用于对比突出加厚的预览效果
     obj_all = bpy.data.objects
     copy_compare = True  # 判断是否复制当前物体作为透明的参照,不存在参照物体时默认会复制一份新的参照物体
     for selected_obj in obj_all:
-        if (selected_obj.name == "右耳huanqiecompare"):
+        if (selected_obj.name == obj_name+"huanqiecompare"):
             copy_compare = False  # 当存在参照物体时便不再复制新的物体
             # break
     if (copy_compare):  # 复制一份物体作为透明的参照
@@ -399,16 +437,17 @@ def copyModel():
         scene = bpy.context.scene
         scene.collection.objects.link(duplicate_obj)
 
-        moveToRight(duplicate_obj)
-
-        # print('复制的', duplicate_obj.name)
+        if obj_name == '右耳':
+            moveToRight(duplicate_obj)
+        elif obj_name == '左耳':
+            moveToLeft(duplicate_obj)
 
 
 # 获取模型的Z坐标范围
-def getModelZ():
+def getModelZ(obj_name):
     global zmax, zmin
     # 获取目标物体的编辑模式网格
-    obj_main = bpy.data.objects['右耳']
+    obj_main = bpy.data.objects[obj_name]
     bpy.context.view_layer.objects.active = obj_main
     bpy.ops.object.mode_set(mode='EDIT')
     bm = bmesh.from_edit_mesh(obj_main.data)
@@ -437,7 +476,7 @@ def reset_to_after_cut():
     obj = bpy.data.objects["右耳huanqiecompare"]
     obj.name = "右耳"
     # 重新获取平面并且完成切割填充
-    copyModel()
+    copyModel("右耳")
     bpy.context.view_layer.objects.active = bpy.data.objects["右耳"]
 
 
@@ -462,8 +501,8 @@ def set_finish(is_finish):
 
 
 def saveCir():
-    global old_radius, last_loc, last_radius, last_ratation
-    obj_torus = bpy.data.objects['Torus']
+    global old_radius, last_loc, last_radius, last_ratation, operator_obj
+    obj_torus = bpy.data.objects[operator_obj+'Torus']
     last_loc = obj_torus.location.copy()
     last_radius = round(old_radius * obj_torus.scale[0], 2)
     last_ratation = obj_torus.rotation_euler.copy()
@@ -475,6 +514,7 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
 
     __initial_rotation_x = None  # 初始x轴旋转角度
     __initial_rotation_y = None
+    __initial_rotation_z = None
     __left_mouse_down = False  # 按下右键未松开时，旋转圆环角度
     __right_mouse_down = False  # 按下右键未松开时，圆环上下移动
     __now_mouse_x = None  # 鼠标移动时的位置
@@ -482,6 +522,40 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
     __initial_mouse_x = None  # 点击鼠标右键的初始位置
     __initial_mouse_y = None
     __is_moving = False
+    __dx = 0;
+    __dy = 0;
+
+    def cast_ray(self, context, event):
+
+        # cast ray from mouse location, return data from ray
+        scene = context.scene
+        #   region = context.region
+        #   rv3d = context.region_data
+
+        # 左边窗口区域
+        override1 = getOverride()
+        override2 = getOverride2()
+        region1 = override1['region']
+        region2 = override2['region']
+        area1 = override1['area']
+        area2 = override2['area']
+        if (event.mouse_region_x > region1.width):
+            #   print('右窗口')
+            coord = event.mouse_region_x - region1.width, event.mouse_region_y
+            region = region2
+            rv3d = area2.spaces.active.region_3d
+        else:
+            #   print('左窗口')
+            coord = event.mouse_region_x, event.mouse_region_y
+            region = region1
+            rv3d = area1.spaces.active.region_3d
+        viewlayer = context.view_layer.depsgraph
+        # get the ray from the viewport and mouse
+        view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
+        ray_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
+
+        hit, location, normal, index, object, matrix = scene.ray_cast(viewlayer, ray_origin, view_vector)
+        return hit, location, normal, index, object, matrix
 
     def invoke(self, context, event):
 
@@ -491,6 +565,7 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
 
         op_cls.__initial_rotation_x = None
         op_cls.__initial_rotation_y = None
+        op_cls.__initial_rotation_z = None
         op_cls.__left_mouse_down = False
         op_cls.__right_mouse_down = False
         op_cls.__now_mouse_x = None
@@ -500,27 +575,43 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
 
         context.window_manager.modal_handler_add(self)
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-        # bpy.context.scene.var = 22
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
         global old_radius, finish
-        global scale_ratio, zmax, zmin, on_obj
+        global scale_ratio, zmax, zmin, on_obj, operator_obj
         op_cls = Soft_Eardrum_Circle_Cut
         mould_type = bpy.context.scene.muJuTypeEnum
-        # if bpy.context.scene.var != 22:
-        #     print('ruanermo finish')
-        #     return {'FINISHED'}
+
         if context.area:
             context.area.tag_redraw()
         # 未切割时起效
         if finish == False:
             if mould_type == "OP1":
-                obj_torus = bpy.data.objects['Torus']
-                active_obj = bpy.data.objects['Circle']
+                mouse_x = event.mouse_x
+                mouse_y = event.mouse_y
+                override1 = getOverride()
+                area = override1['area']
+                override2 = getOverride2()
+                area2 = override2['area']
+
+                workspace = bpy.context.window.workspace.name
+                # 双窗口模式下
+                if workspace == '布局.001':
+                    # 根据鼠标位置判断当前操作窗口
+                    if (mouse_x > area.width and mouse_y > area2.y):
+                        # print('右窗口')
+                        operator_obj = context.scene.rightWindowObj
+                    else:
+                        # print('左窗口')
+                        operator_obj = context.scene.leftWindowObj
+
+                obj_torus = bpy.data.objects[operator_obj + 'Torus']
+                active_obj = bpy.data.objects[operator_obj + 'Circle']
                 bpy.ops.object.select_all(action='DESELECT')
                 bpy.context.view_layer.objects.active = obj_torus
                 obj_torus.select_set(True)
+
             # 鼠标是否在圆环上
             if (mould_type == "OP1" and is_mouse_on_object(context, event)):
                 # print('在圆环上')
@@ -535,30 +626,76 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                         op_cls.__left_mouse_down = True
                         op_cls.__initial_rotation_x = obj_torus.rotation_euler[0]
                         op_cls.__initial_rotation_y = obj_torus.rotation_euler[1]
+                        op_cls.__initial_rotation_z = obj_torus.rotation_euler[2]
                         op_cls.__initial_mouse_x = event.mouse_region_x
                         op_cls.__initial_mouse_y = event.mouse_region_y
+
+                        region, space = get_region_and_space(
+                            context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
+                        )
+                        coord = (op_cls.__initial_mouse_x, op_cls.__initial_mouse_y)
+
+                        hit, face_location, face_normal, face_index, face_object, face_matrix = self.cast_ray(context,
+                                                                                                              event)
+                        if hit:
+                            if face_object.type == 'MESH':
+                                ori_x = obj_torus.location.x
+                                ori_y = obj_torus.location.y
+
+                                # 判断鼠标位置在圆环的哪个方位
+                                co = face_location
+                                op_cls.__dx = round(co.x - ori_x, 2)
+                                op_cls.__dy = round(co.y - ori_y, 2)
+
                     # 取消
                     elif event.value == 'RELEASE':
                         normal = active_obj.matrix_world.to_3x3(
                         ) @ active_obj.data.polygons[0].normal
-                        print('圆环法线',normal)
                         if normal.z > 0:
+                            print('圆环法线', normal)
                             print('反转法线')
-                            active_obj.hide_set(False)
-                            bpy.context.view_layer.objects.active = active_obj
-                            bpy.ops.object.mode_set(mode='EDIT')
-                            bpy.ops.mesh.select_all(action='SELECT')
-                            # 翻转圆环法线
-                            bpy.ops.mesh.flip_normals(only_clnors=False)
-                            # 隐藏圆环
-                            active_obj.hide_set(True)
-                            # 返回对象模式
-                            bpy.ops.object.mode_set(mode='OBJECT')
+                            override1 = getOverride()
+                            override2 = getOverride2()
+                            region1 = override1['region']
+                            region2 = override2['region']
+                            if event.mouse_region_x > region1.width:
+                                with bpy.context.temp_override(**override2):
+                                    active_obj.hide_set(False)
+                                    bpy.context.view_layer.objects.active = active_obj
+                                    bpy.ops.object.mode_set(mode='EDIT')
+                                    bpy.ops.mesh.select_all(action='SELECT')
+                                    # 翻转圆环法线
+                                    # bpy.ops.mesh.flip_normals(only_clnors=False)
+                                    bpy.ops.mesh.flip_normals()
+                                    # bpy.ops.mesh.normals_make_consistent(inside=True)
+                                    # 隐藏圆环
+                                    active_obj.hide_set(True)
+                                    # 返回对象模式
+                                    bpy.ops.object.mode_set(mode='OBJECT')
+                                    print('反转后法线', active_obj.matrix_world.to_3x3(
+                                    ) @ active_obj.data.polygons[0].normal)
+                            else:
+                                active_obj.hide_set(False)
+                                bpy.context.view_layer.objects.active = active_obj
+                                bpy.ops.object.mode_set(mode='EDIT')
+                                bpy.ops.mesh.select_all(action='SELECT')
+                                # 翻转圆环法线
+                                # bpy.ops.mesh.flip_normals(only_clnors=False)
+                                bpy.ops.mesh.flip_normals()
+                                # bpy.ops.mesh.normals_make_consistent(inside=True)
+                                # 隐藏圆环
+                                active_obj.hide_set(True)
+                                # 返回对象模式
+                                bpy.ops.object.mode_set(mode='OBJECT')
+                                print('反转后法线', active_obj.matrix_world.to_3x3(
+                                ) @ active_obj.data.polygons[0].normal)
                         reset_and_refill()
+                        saveCir()
                         op_cls.__is_moving = False
                         op_cls.__left_mouse_down = False
                         op_cls.__initial_rotation_x = None
                         op_cls.__initial_rotation_y = None
+                        op_cls.__initial_rotation_z = None
                         op_cls.__initial_mouse_x = None
                         op_cls.__initial_mouse_y = None
 
@@ -582,23 +719,43 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                 elif event.type == 'MOUSEMOVE':
                     # 左键按住旋转
                     if op_cls.__left_mouse_down:
-                        # x轴旋转角度
+                        # 旋转角度正负号
+                        if (op_cls.__dy < 0):
+                            symx = -1;
+                        else:
+                            symx = 1;
+
+                        if (op_cls.__dx > 0):
+                            symy = -1;
+                        else:
+                            symy = 1;
+
+                        # x,y轴旋转比例
+                        px = round(abs(op_cls.__dy) / sqrt(op_cls.__dx * op_cls.__dx + op_cls.__dy * op_cls.__dy), 2)
+                        py = round(abs(op_cls.__dx) / sqrt(op_cls.__dx * op_cls.__dx + op_cls.__dy * op_cls.__dy), 2)
+
+                        # 旋转角度
                         rotate_angle_x = (
-                                                 event.mouse_region_x - op_cls.__initial_mouse_x) * 0.01
+                                                 event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01 * px
                         rotate_angle_y = (
-                                                 event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01
+                                                 event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01 * py
+                        rotate_angle_z = (
+                                                 event.mouse_region_x - op_cls.__initial_mouse_x) * 0.005
                         active_obj.rotation_euler[0] = op_cls.__initial_rotation_x + \
-                                                       rotate_angle_x
+                                                       rotate_angle_x * symx
                         active_obj.rotation_euler[1] = op_cls.__initial_rotation_y + \
-                                                       rotate_angle_y
-                        obj_torus.rotation_euler[0] = op_cls.__initial_rotation_x + \
-                                                      rotate_angle_x
-                        obj_torus.rotation_euler[1] = op_cls.__initial_rotation_y + \
-                                                      rotate_angle_y
-                        getRadius()
+                                                       rotate_angle_y * symy
+                        active_obj.rotation_euler[2] = op_cls.__initial_rotation_z + \
+                                                       rotate_angle_z
+
+                        obj_torus.rotation_euler[0] = active_obj.rotation_euler[0]
+                        obj_torus.rotation_euler[1] = active_obj.rotation_euler[1]
+                        obj_torus.rotation_euler[2] = active_obj.rotation_euler[2]
+
+                        getRadius('rotate')
                         return {'RUNNING_MODAL'}
                     elif op_cls.__right_mouse_down:
-                        obj_circle = bpy.data.objects['Circle']
+                        obj_circle = bpy.data.objects[operator_obj + 'Circle']
                         op_cls.__now_mouse_y = event.mouse_region_y
                         op_cls.__now_mouse_x = event.mouse_region_x
                         dis = 0.25
@@ -613,7 +770,7 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                             # print('下移')
                             obj_circle.location += normal * dis
                             obj_torus.location += normal * dis
-                        getRadius()
+                        getRadius('move')
                         return {'RUNNING_MODAL'}
 
                 return {'PASS_THROUGH'}
@@ -624,53 +781,106 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
 
             else:
                 # bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                obj_torus = bpy.data.objects['Torus']
-                active_obj = bpy.data.objects['Circle']
+                obj_torus = bpy.data.objects[operator_obj + 'Torus']
+                active_obj = bpy.data.objects[operator_obj + 'Circle']
                 if event.value == 'RELEASE' and op_cls.__is_moving:
                     normal = active_obj.matrix_world.to_3x3(
-                        ) @ active_obj.data.polygons[0].normal
-                    print('圆环法线',normal)
+                    ) @ active_obj.data.polygons[0].normal
                     if normal.z > 0:
+                        print('圆环法线', normal)
                         print('反转法线')
-                        active_obj.hide_set(False)
-                        bpy.context.view_layer.objects.active = active_obj
-                        bpy.ops.object.mode_set(mode='EDIT')
-                        bpy.ops.mesh.select_all(action='SELECT')
-                        # 翻转圆环法线
-                        bpy.ops.mesh.flip_normals(only_clnors=False)
-                        # 隐藏圆环
-                        active_obj.hide_set(True)
-                        # 返回对象模式
-                        bpy.ops.object.mode_set(mode='OBJECT')
+                        override1 = getOverride()
+                        override2 = getOverride2()
+                        region1 = override1['region']
+                        region2 = override2['region']
+                        # 右窗口
+                        if event.mouse_region_x > region1.width:
+                            with bpy.context.temp_override(**override2):
+                                active_obj.hide_set(False)
+                                bpy.context.view_layer.objects.active = active_obj
+                                bpy.ops.object.mode_set(mode='EDIT')
+                                bpy.ops.mesh.select_all(action='SELECT')
+                                # 翻转圆环法线
+                                # bpy.ops.mesh.flip_normals(only_clnors=False)
+                                bpy.ops.mesh.flip_normals()
+                                # bpy.ops.mesh.normals_make_consistent(inside=True)
+                                # 隐藏圆环
+                                active_obj.hide_set(True)
+                                # 返回对象模式
+                                bpy.ops.object.mode_set(mode='OBJECT')
+                                print('反转后法线', active_obj.matrix_world.to_3x3(
+                                ) @ active_obj.data.polygons[0].normal)
+                        else:
+                            active_obj.hide_set(False)
+                            bpy.context.view_layer.objects.active = active_obj
+                            bpy.ops.object.mode_set(mode='EDIT')
+                            bpy.ops.mesh.select_all(action='SELECT')
+                            # 翻转圆环法线
+                            # bpy.ops.mesh.flip_normals(only_clnors=False)
+                            bpy.ops.mesh.flip_normals()
+                            # bpy.ops.mesh.normals_make_consistent(inside=True)
+                            # 隐藏圆环
+                            active_obj.hide_set(True)
+                            # 返回对象模式
+                            bpy.ops.object.mode_set(mode='OBJECT')
+                            print('反转后法线', active_obj.matrix_world.to_3x3(
+                            ) @ active_obj.data.polygons[0].normal)
                     reset_and_refill()
+                    saveCir()
                     op_cls.__is_moving = False
                     op_cls.__left_mouse_down = False
                     op_cls.__right_mouse_down = False
                     op_cls.__initial_rotation_x = None
                     op_cls.__initial_rotation_y = None
+                    op_cls.__initial_rotation_z = None
                     op_cls.__initial_mouse_x = None
                     op_cls.__initial_mouse_y = None
+
                 if event.type == 'MOUSEMOVE':
                     # 左键按住旋转
                     if op_cls.__left_mouse_down:
-                        # x轴旋转角度
+                        # 旋转正负号
+                        if (op_cls.__dy < 0):
+                            symx = -1;
+                        else:
+                            symx = 1;
+
+                        if (op_cls.__dx > 0):
+                            symy = -1;
+                        else:
+                            symy = 1;
+
+                        # print('symx',symx)
+                        # print('symy',symy)
+
+                        #  x,y轴旋转比例
+                        px = round(abs(op_cls.__dy) / sqrt(op_cls.__dx * op_cls.__dx + op_cls.__dy * op_cls.__dy), 2)
+                        py = round(abs(op_cls.__dx) / sqrt(op_cls.__dx * op_cls.__dx + op_cls.__dy * op_cls.__dy), 2)
+                        # print('px',px)
+                        # print('py',py)
+
+                        # 旋转角度
                         rotate_angle_x = (
-                                                 event.mouse_region_x - op_cls.__initial_mouse_x) * 0.01
+                                                 event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01 * px
                         rotate_angle_y = (
-                                                 event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01
+                                                 event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01 * py
+                        rotate_angle_z = (
+                                                 event.mouse_region_x - op_cls.__initial_mouse_x) * 0.005
                         active_obj.rotation_euler[0] = op_cls.__initial_rotation_x + \
-                                                       rotate_angle_x
+                                                       rotate_angle_x * symx
                         active_obj.rotation_euler[1] = op_cls.__initial_rotation_y + \
-                                                       rotate_angle_y
-                        obj_torus.rotation_euler[0] = op_cls.__initial_rotation_x + \
-                                                      rotate_angle_x
-                        obj_torus.rotation_euler[1] = op_cls.__initial_rotation_y + \
-                                                      rotate_angle_y
-                        getRadius()
+                                                       rotate_angle_y * symy
+                        active_obj.rotation_euler[2] = op_cls.__initial_rotation_z + \
+                                                       rotate_angle_z
+                        obj_torus.rotation_euler[0] = active_obj.rotation_euler[0]
+                        obj_torus.rotation_euler[1] = active_obj.rotation_euler[1]
+                        obj_torus.rotation_euler[2] = active_obj.rotation_euler[2]
+
+                        getRadius('rotate')
                         return {'RUNNING_MODAL'}
 
                     elif op_cls.__right_mouse_down:
-                        obj_circle = bpy.data.objects['Circle']
+                        obj_circle = bpy.data.objects[operator_obj + 'Circle']
                         op_cls.__now_mouse_y = event.mouse_region_y
                         op_cls.__now_mouse_x = event.mouse_region_x
                         dis = 0.25
@@ -686,10 +896,8 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                             # print('下移')
                             obj_circle.location += normal * dis
                             obj_torus.location += normal * dis
-                        getRadius()
+                        getRadius('move')
                         return {'RUNNING_MODAL'}
-
-                saveCir()
                 return {'PASS_THROUGH'}
 
         else:

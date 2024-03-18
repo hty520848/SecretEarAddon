@@ -569,7 +569,8 @@ def qiegeenum(self, context):
 def qiegesmooth2(self, context):
     bl_description = "阶梯切割平滑偏移值2"
     pianyi = bpy.context.scene.qiegeneiBianYuan
-    bpy.data.objects["StepCutplane"].modifiers["smooth"].width = pianyi
+    if bpy.data.objects.get("StepCutplane") != None:
+        bpy.data.objects["StepCutplane"].modifiers["smooth"].width = pianyi
 
 
 # 回调函数，根据绑定的属性值更改选中区域的厚度
@@ -665,6 +666,7 @@ def ChangeMouldType(self, context):
         if enum == "OP2":
             print("硬耳膜")
             apply_hard_eardrum_template()
+            bpy.context.scene.neiBianJiXian = False
         if enum == "OP3":
             print("一体外壳")
         if enum == "OP4":

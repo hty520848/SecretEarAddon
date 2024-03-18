@@ -51,7 +51,7 @@ qiegeenum = 1  # 当前切割的模式，1为环切，2为侧切
 
 operator_obj = '' # 当前操作的物体是左耳还是右耳
 
-
+border_vert = [ ] # 记录最外圈的顶点坐标
 # 复制初始模型，并赋予透明材质
 
 
@@ -622,12 +622,18 @@ def new_plane(name):
     bm.faces[1].normal_flip()
     object.hide_set(True)
 
+    # 添加倒角修改器
     bool_modifier = object.modifiers.new(
         name="smooth", type='BEVEL')
-    bool_modifier.segments = 32
-    bool_modifier.width = bpy.context.scene.qiegewaiBianYuan
+    bool_modifier.segments = 16
+    bool_modifier.width = bpy.context.scene.qiegeneiBianYuan
     bool_modifier.limit_method = 'NONE'
 
+    # 添加表面细分修改器
+    # bool_modifier2 = object.modifiers.new(
+    #     name="subsurf", type='SUBSURF')
+    # bool_modifier2.subdivision_type = 'SIMPLE'
+    # bool_modifier2.levels = 4
 
 def update_plane(obj_name):
     # 获取坐标
@@ -661,7 +667,47 @@ def update_plane(obj_name):
     # 更新网格数据
     mesh.to_mesh(bm)
     mesh.free()
+    # getborder(obj_name)
 
+def getborder(obj_name):
+    global border_vert
+    obj = bpy.data.objects[obj_name + 'StepCutplane']
+    name = obj.name
+    duplicate_obj = obj.copy()
+    duplicate_obj.data = obj.data.copy()
+    duplicate_obj.name = name + "forgetborder"
+    duplicate_obj.animation_data_clear()
+    # 将复制的物体加入到场景集合中
+    scene = bpy.context.scene
+    scene.collection.objects.link(duplicate_obj)
+    bpy.context.view_layer.objects.active = duplicate_obj
+    bpy.ops.object.modifier_remove(modifier="subsurf")
+    bpy.ops.object.modifier_remove(modifier="smooth")
+
+    obj2 = bpy.data.objects[obj_name]
+    name = obj2.name
+    duplicate_obj2 = obj2.copy()
+    duplicate_obj2.data = obj2.data.copy()
+    duplicate_obj2.name = name + "forgetborder"
+    duplicate_obj2.animation_data_clear()
+    # 将复制的物体加入到场景集合中
+    scene = bpy.context.scene
+    scene.collection.objects.link(duplicate_obj2)
+    bpy.context.view_layer.objects.active = duplicate_obj2
+    bpy.ops.object.modifier_remove(modifier="step cut")
+    bool_modifier = duplicate_obj2.modifiers.new(
+        name="step cut2", type='BOOLEAN')
+    bool_modifier.operation = 'DIFFERENCE'
+    bool_modifier.object = duplicate_obj
+    bpy.ops.object.modifier_apply(modifier="step cut2")
+    bpy.ops.object.select_all(action='DESELECT')
+    duplicate_obj2.select_set(state=True)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bm = bmesh.from_edit_mesh(duplicate_obj2.data)
+    border_vert = [v.co for v in bm.verts if v.select]
+    bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.data.objects.remove(duplicate_obj, do_unlink=True)
+    bpy.data.objects.remove(duplicate_obj2, do_unlink=True)
 
 def initialModelColor():
     yellow_material = bpy.data.materials.new(name="yellow")
@@ -1768,7 +1814,7 @@ def backToQieGe():
     if enum == "OP1":
         initCircle('右耳')
     if enum == "OP2":
-        initPlane()
+        initPlane("右耳")
 
 
 def backFromQieGe():

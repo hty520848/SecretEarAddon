@@ -416,7 +416,7 @@ class MsgbusCallBack2(bpy.types.Operator):
 
     def excute(self, context, event):
         self.draw_left()
-        subscribe_to3 = bpy.types.Area, 'width'
+        subscribe_to3 = (bpy.types.Space, "region") #先获得region再通过region注册
         bpy.msgbus.subscribe_rna(
             key=subscribe_to3,
             owner=object(),

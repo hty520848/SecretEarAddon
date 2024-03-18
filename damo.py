@@ -10,6 +10,7 @@ import math
 
 prev_on_object = False  # 全局变量,保存之前的鼠标状态,用于判断鼠标状态是否改变(如从物体上移动到公共区域或从公共区域移动到物体上)
 
+# (0, 0.25, 1, 1)
 # is_modifier = False
 
 def copy_object():
@@ -41,6 +42,7 @@ def copy_object():
                 scene.collection.objects.link(duplicate_obj)
                 moveToLeft(duplicate_obj)
                 duplicate_obj.hide_set(True)
+
 
 def backToDamo():
     # 根据保存的DamoCopy,复制一份用来替换当前激活物体
@@ -156,7 +158,7 @@ class Thickening(bpy.types.Operator):
 
     def modal(self, context, event):
         op_cls = Thickening
-       
+
         # 重绘区域
         if context.area:
             context.area.tag_redraw()
@@ -181,7 +183,7 @@ class Thickening(bpy.types.Operator):
                     bpy.ops.wm.tool_set_by_id(
                         name="builtin_brush.Draw")  # 调用加厚笔刷
                     bpy.data.brushes["SculptDraw"].direction = "ADD"
-            
+
                 if event.type == 'TIMER':
                     # 遍历顶点，根据厚度设置颜色
                     color_lay = bm.verts.layers.float_color["Color"]
@@ -217,11 +219,11 @@ class Thickening(bpy.types.Operator):
                                 # print("理论厚度：",lenth)
                                 # 根据理论厚度修改坐标
                                 bm.verts[index_color].co = oribm.verts[index_color].co - \
-                                                            disvec_color.normalized() * lenth
+                                                           disvec_color.normalized() * lenth
                                 # print("原坐标：",oribm.verts[index_color].co)
                                 # print("现坐标：",bm.verts[index_color].co)
                                 disvec_color = oribm.verts[index_color].co - \
-                                                bm.verts[index_color].co
+                                               bm.verts[index_color].co
                                 dis_color = disvec_color.dot(
                                     disvec_color)
                                 thinkness = round(
@@ -246,7 +248,6 @@ class Thickening(bpy.types.Operator):
                             colvert.x = 0
                             colvert.y = 1 + color
                             colvert.z = color * (-1)
-                    
 
                 if event.type == 'RIGHTMOUSE':  # 点击鼠标右键，改变区域选取圆环的大小
                     if event.value == 'PRESS':  # 按下鼠标右键，保存鼠标点击初始位置，标记鼠标右键已按下，移动鼠标改变圆环大小
@@ -256,7 +257,7 @@ class Thickening(bpy.types.Operator):
                     elif event.value == 'RELEASE':
                         op_cls.__right_mouse_down = False  # 松开鼠标右键，标记鼠标右键未按下，移动鼠标不再改变圆环大小，结束该事件，确定圆环的大小
                     return {'RUNNING_MODAL'}
-    
+
                 elif event.type == 'MOUSEMOVE':
                     # if event.type == 'Q':
                     # 获取鼠标光标的区域坐标
@@ -349,7 +350,7 @@ class Thickening(bpy.types.Operator):
                                 MyHandleClass.add_handler(
                                     draw_callback_px, (None, final_dis))
                                 # print(final_dis)
-                                
+
                     if op_cls.__right_mouse_down:  # 鼠标右键按下时，鼠标移动改变圆环大小
                         op_cls.__now_mouse_y = event.mouse_region_y
                         op_cls.__now_mouse_x = event.mouse_region_x
@@ -364,20 +365,15 @@ class Thickening(bpy.types.Operator):
                     bpy.ops.sculpt.sculptmode_toggle()
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")  # 切换到选择模式
 
-                me = active_obj.data
-                # 创建bmesh对象
-                bm = bmesh.new()
-                # 将网格数据复制到bmesh对象
-                bm.from_mesh(me)
                 color_lay = bm.verts.layers.float_color["Color"]
                 for vert in bm.verts:
                     colvert = vert[color_lay]
                     colvert.x = 1
                     colvert.y = 0.319
                     colvert.z = 0.133
-                MyHandleClass.remove_handler()   
+                MyHandleClass.remove_handler()
                 context.area.tag_redraw()
-    
+
             bm.to_mesh(me)
             bm.free()
             return {'PASS_THROUGH'}
@@ -462,7 +458,7 @@ class Thinning(bpy.types.Operator):
                         bpy.ops.sculpt.sculptmode_toggle()
                     bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")  # 调用加厚笔刷
                     bpy.data.brushes["SculptDraw"].direction = "SUBTRACT"
-            
+
                 if event.type == 'TIMER':
                     # 遍历顶点，根据厚度设置颜色
                     color_lay = bm.verts.layers.float_color["Color"]
@@ -498,11 +494,11 @@ class Thinning(bpy.types.Operator):
                                 # print("理论厚度：",lenth)
                                 # 根据理论厚度修改坐标
                                 bm.verts[index_color].co = oribm.verts[index_color].co + \
-                                                            disvec_color.normalized() * lenth
+                                                           disvec_color.normalized() * lenth
                                 # print("原坐标：",oribm.verts[index_color].co)
                                 # print("现坐标：",bm.verts[index_color].co)
                                 disvec_color = oribm.verts[index_color].co - \
-                                                bm.verts[index_color].co
+                                               bm.verts[index_color].co
                                 dis_color = disvec_color.dot(
                                     disvec_color)
                                 thinkness = round(
@@ -527,7 +523,6 @@ class Thinning(bpy.types.Operator):
                             colvert.x = 0
                             colvert.y = 1 + color
                             colvert.z = color * (-1)
-                    
 
                 if event.type == 'RIGHTMOUSE':  # 点击鼠标右键，改变区域选取圆环的大小
                     if event.value == 'PRESS':  # 按下鼠标右键，保存鼠标点击初始位置，标记鼠标右键已按下，移动鼠标改变圆环大小
@@ -537,7 +532,7 @@ class Thinning(bpy.types.Operator):
                     elif event.value == 'RELEASE':
                         op_cls.__right_mouse_down = False  # 松开鼠标右键，标记鼠标右键未按下，移动鼠标不再改变圆环大小，结束该事件，确定圆环的大小
                     return {'RUNNING_MODAL'}
-    
+
                 elif event.type == 'MOUSEMOVE':
                     # if event.type == 'Q':
                     # 获取鼠标光标的区域坐标
@@ -630,7 +625,7 @@ class Thinning(bpy.types.Operator):
                                 MyHandleClass.add_handler(
                                     draw_callback_px, (None, final_dis))
                                 # print(final_dis)
-                                
+
                     if op_cls.__right_mouse_down:  # 鼠标右键按下时，鼠标移动改变圆环大小
                         op_cls.__now_mouse_y = event.mouse_region_y
                         op_cls.__now_mouse_x = event.mouse_region_x
@@ -645,20 +640,15 @@ class Thinning(bpy.types.Operator):
                     bpy.ops.sculpt.sculptmode_toggle()
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")  # 切换到选择模式
 
-                me = active_obj.data
-                # 创建bmesh对象
-                bm = bmesh.new()
-                # 将网格数据复制到bmesh对象
-                bm.from_mesh(me)
                 color_lay = bm.verts.layers.float_color["Color"]
                 for vert in bm.verts:
                     colvert = vert[color_lay]
                     colvert.x = 1
                     colvert.y = 0.319
                     colvert.z = 0.133
-                MyHandleClass.remove_handler()   
+                MyHandleClass.remove_handler()
                 context.area.tag_redraw()
-    
+
             bm.to_mesh(me)
             bm.free()
             return {'PASS_THROUGH'}
@@ -666,7 +656,6 @@ class Thinning(bpy.types.Operator):
             context.window_manager.event_timer_remove(op_cls.__timer)
             op_cls.__timer = None
             return {'FINISHED'}
-
 
 
 # 打磨功能模块左侧按钮的光滑操作
@@ -691,8 +680,6 @@ class Smooth(bpy.types.Operator):
 
     def invoke(self, context, event):
         op_cls = Smooth
-
-
         # global is_modifier
         bpy.context.scene.var = 3
         print("smooth_invoke")
@@ -747,7 +734,7 @@ class Smooth(bpy.types.Operator):
                         bpy.ops.sculpt.sculptmode_toggle()
                     bpy.ops.wm.tool_set_by_id(name="builtin_brush.Smooth")  # 调用光滑笔刷
                     bpy.data.brushes["SculptDraw"].direction = "ADD"
-            
+
                 if event.type == 'TIMER':
                     # 遍历顶点，根据厚度设置颜色
                     color_lay = bm.verts.layers.float_color["Color"]
@@ -764,41 +751,6 @@ class Smooth(bpy.types.Operator):
                         if flag_color > 0:
                             thinkness *= -1
 
-                        # 厚度限制
-                        if (context.scene.localLaHouDu):
-                            # print('是否开启',context.scene.localLaHouDu)
-                            maxHoudu = context.scene.maxLaHouDu
-                            minHoudu = context.scene.minLaHouDu
-                            # print("最大厚度：",maxHoudu)
-                            # print("最小厚度：",minHoudu)
-                            if (thinkness > maxHoudu or thinkness < minHoudu):
-                                # print("原坐标：",oribm.verts[index_color].co)
-                                # print("现坐标：",bm.verts[index_color].co)
-                                # 理论厚度
-                                if thinkness > maxHoudu:
-                                    lenth = maxHoudu
-                                elif thinkness < minHoudu:
-                                    lenth = minHoudu
-                                # print("实际厚度：",thinkness)
-                                # print("理论厚度：",lenth)
-                                # 根据理论厚度修改坐标
-                                bm.verts[index_color].co = oribm.verts[index_color].co - \
-                                                            disvec_color.normalized() * lenth
-                                # print("原坐标：",oribm.verts[index_color].co)
-                                # print("现坐标：",bm.verts[index_color].co)
-                                disvec_color = oribm.verts[index_color].co - \
-                                                bm.verts[index_color].co
-                                dis_color = disvec_color.dot(
-                                    disvec_color)
-                                thinkness = round(
-                                    math.sqrt(dis_color), 2)
-                                origin_veccol = oribm.verts[index_color].normal
-                                flag_color = origin_veccol.dot(
-                                    disvec_color)
-                                if flag_color > 0:
-                                    thinkness *= -1
-                                # print("修改后的厚度：",thinkness)
-
                         color = round(thinkness / 0.8, 2)
                         if color >= 1:
                             color = 1
@@ -812,7 +764,6 @@ class Smooth(bpy.types.Operator):
                             colvert.x = 0
                             colvert.y = 1 + color
                             colvert.z = color * (-1)
-                    
 
                 if event.type == 'RIGHTMOUSE':  # 点击鼠标右键，改变区域选取圆环的大小
                     if event.value == 'PRESS':  # 按下鼠标右键，保存鼠标点击初始位置，标记鼠标右键已按下，移动鼠标改变圆环大小
@@ -822,7 +773,7 @@ class Smooth(bpy.types.Operator):
                     elif event.value == 'RELEASE':
                         op_cls.__right_mouse_down = False  # 松开鼠标右键，标记鼠标右键未按下，移动鼠标不再改变圆环大小，结束该事件，确定圆环的大小
                     return {'RUNNING_MODAL'}
-    
+
                 elif event.type == 'MOUSEMOVE':
                     # if event.type == 'Q':
                     # 获取鼠标光标的区域坐标
@@ -915,7 +866,7 @@ class Smooth(bpy.types.Operator):
                                 MyHandleClass.add_handler(
                                     draw_callback_px, (None, final_dis))
                                 # print(final_dis)
-                                
+
                     if op_cls.__right_mouse_down:  # 鼠标右键按下时，鼠标移动改变圆环大小
                         op_cls.__now_mouse_y = event.mouse_region_y
                         op_cls.__now_mouse_x = event.mouse_region_x
@@ -941,9 +892,9 @@ class Smooth(bpy.types.Operator):
                     colvert.x = 1
                     colvert.y = 0.319
                     colvert.z = 0.133
-                MyHandleClass.remove_handler()   
+                MyHandleClass.remove_handler()
                 context.area.tag_redraw()
-    
+
             bm.to_mesh(me)
             bm.free()
             return {'PASS_THROUGH'}
@@ -951,7 +902,6 @@ class Smooth(bpy.types.Operator):
             context.window_manager.event_timer_remove(op_cls.__timer)
             op_cls.__timer = None
             return {'FINISHED'}
-
 
 
 class Damo_Reset(bpy.types.Operator):
@@ -966,43 +916,38 @@ class Damo_Reset(bpy.types.Operator):
         return {'FINISHED'}
 
     def excute(self, context, event):
-        global is_copy
-        # global is_modifier
-
-        # global reset_num
-        if is_copy:
-            bpy.context.scene.var = 4
-            active_obj = bpy.context.active_object
-            name = bpy.context.object.name
-            # copyname = name + ".001"
-            ori_obj = bpy.data.objects[name + "DamoReset"]
+        # DamoOrgin是未加蜡厚度的物体
+        bpy.context.scene.var = 4
+        active_obj = bpy.context.active_object
+        name = bpy.context.object.name
+        # copyname = name + ".001"
+        reset_name = name + "DamoReset"
+        if bpy.data.objects.get(reset_name):
+            ori_obj = bpy.data.objects[reset_name]
             bpy.data.objects.remove(active_obj, do_unlink=True)
             ori_obj.name = name
             ori_obj.hide_set(False)
 
-            # bpy.ops.mesh.select_all(action='DESELECT')
-            for i in bpy.context.visible_objects:  # 迭代所有可见物体,激活当前物体
-                if i.name == name:
-                    bpy.context.view_layer.objects.active = i
-                    i.select_set(state=True)
-            is_copy = False
-            # is_modifier = False
-            # bpy.ops.geometry.color_attribute_add()
-            # active_obj = bpy.context.active_object
-            # me = active_obj.data
-            # bm = bmesh.new()
-            # bm.from_mesh(me)
-            # color_lay = bm.verts.layers.float_color["Color"]
-            # for vert in bm.verts:
-            #     colvert = vert[color_lay]
-            #     colvert.x = 0
-            #     colvert.y = 0.25
-            #     colvert.z = 1
-            # bm.to_mesh(me)
-            # bm.free()
-        else:
-            # bpy.ops.object.modifier_remove(modifier="jiahou")
-            pass
+        bpy.ops.object.select_all(action='DESELECT')
+        for i in bpy.context.visible_objects:  # 迭代所有可见物体,激活当前物体
+            if i.name == name:
+                bpy.context.view_layer.objects.active = i
+                i.select_set(state=True)
+
+        # is_modifier = False
+        # bpy.ops.geometry.color_attribute_add()
+        # active_obj = bpy.context.active_object
+        # me = active_obj.data
+        # bm = bmesh.new()
+        # bm.from_mesh(me)
+        # color_lay = bm.verts.layers.float_color["Color"]
+        # for vert in bm.verts:
+        #     colvert = vert[color_lay]
+        #     colvert.x = 0
+        #     colvert.y = 0.25
+        #     colvert.z = 1
+        # bm.to_mesh(me)
+        # bm.free()
 
         return {'FINISHED'}
 
@@ -1173,6 +1118,7 @@ class MyTool8(WorkSpaceTool):
 
     def draw_settings(context, layout, tool):
         pass
+
 
 # 注册类
 _classes = [
