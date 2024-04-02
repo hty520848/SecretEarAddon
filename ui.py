@@ -7,18 +7,18 @@
 import bpy
 import os
 import bpy.utils.previews
-from .jiahou import *
-from .damo import *
+from .jiahou import get_layer_collection, getOverride
 import bpy_extras
 from bpy_extras.io_utils import ImportHelper
 from .icon.icons import load_icons
 from .icon.icons import clear_icons
 from bpy.props import BoolProperty
-
+from .public_operation import get_prev_properties_context_right, set_pause
 import mathutils
 import bmesh
 from bpy_extras import view3d_utils
 
+is_start = False
 # 打磨面板
 class HUIER_PT_damo_R(bpy.types.Panel):
 
@@ -1022,9 +1022,7 @@ class TOPBAR_MT_edit(bpy.types.Menu):
 
 
 # ********** 3D视图下的菜单栏 **********
-
-
-def notify_test(context):
+def notify_test(context,context_right):
     override = []
     if(context.window.workspace.name == '布局.001'):
         workspace = context.window.workspace
@@ -1040,8 +1038,25 @@ def notify_test(context):
         with bpy.context.temp_override(**override[0]):
              bpy.ops.object.hide_collection(collection_index=1, extend=False)
         with bpy.context.temp_override(**override[1]):
-             bpy.ops.object.hide_collection(collection_index=2, extend=False)    
+             bpy.ops.object.hide_collection(collection_index=2, extend=False)
+        bpy.context.screen.areas[0].spaces.active.context = context_right
+        override = getOverride()
+        with bpy.context.temp_override(**override):
+            bpy.ops.object.circlecut('INVOKE_DEFAULT')
+    else:
+        bpy.context.screen.areas[0].spaces.active.context = context_right
+        global is_start
+        if not is_start:
+            is_start = True
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                bpy.ops.object.circlecut('INVOKE_DEFAULT')
 
+    set_pause(False)
+        
+    # 退出保存数据，找到离当前流程最近的last，返回该流程并根据该流程重新进入当前流程
+
+        
 
 # 切换左右耳窗口
 class Huier_OT_SwitchWorkspace(bpy.types.Operator):
@@ -1051,12 +1066,18 @@ class Huier_OT_SwitchWorkspace(bpy.types.Operator):
 
     def execute(self, context):
 
+        set_pause(True)
+        global is_start
+        is_start = False
+        
+        context_right = get_prev_properties_context_right()
+
         # 监听workspace切换到左右耳窗口
         subscribe_to = bpy.types.Window,'workspace'
         bpy.msgbus.subscribe_rna(
             key=subscribe_to,
             owner=object(),
-            args=(bpy.context,),
+            args=(bpy.context,context_right),
             notify=notify_test,
         )
         bpy.msgbus.publish_rna(key=subscribe_to)
@@ -1066,18 +1087,22 @@ class Huier_OT_SwitchWorkspace(bpy.types.Operator):
         # MyHandleClass.add_handler(
         #                             draw_left, (None,'L'))
 
+        
         if bpy.context.window.workspace.name == '布局':
             bpy.context.window.workspace = bpy.data.workspaces['布局.001']
             # 获取"MyCollection"的LayerCollection对象
             my_layer_collection = get_layer_collection(bpy.context.view_layer.layer_collection, 'Right')
             # 将"MyCollection"设置为活动层集合
             bpy.context.view_layer.active_layer_collection = my_layer_collection
+            bpy.ops.object.circlecut('INVOKE_DEFAULT')
+            
             
         if bpy.context.window.workspace.name == '布局.001':
             bpy.context.window.workspace = bpy.data.workspaces['布局']
+            bpy.ops.object.circlecut('INVOKE_DEFAULT')
+            # bpy.ops.object.circlecut('INVOKE_DEFAULT')
+
         return {'FINISHED'}
-
-
 
 class VIEW3D_HT_header(bpy.types.Header):
     bl_space_type = 'VIEW_3D'

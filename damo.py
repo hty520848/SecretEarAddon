@@ -10,11 +10,24 @@ import math
 
 prev_on_object = False  # 全局变量,保存之前的鼠标状态,用于判断鼠标状态是否改变(如从物体上移动到公共区域或从公共区域移动到物体上)
 
+
 # (0, 0.25, 1, 1)
 # is_modifier = False
 
 def copy_object():
-    for active_obj in bpy.data.objects:
+    if not bpy.data.objects.get('右耳OriginForShow'):  # 未调整蜡厚度
+        active_object = bpy.data.objects['右耳']
+        duplicate_obj = active_object.copy()
+        duplicate_obj.data = active_object.data.copy()
+        duplicate_obj.name = '右耳OriginForShow'
+        duplicate_obj.animation_data_clear()
+        # 将复制的物体加入到场景集合中
+        scene = bpy.context.scene
+        scene.collection.objects.link(duplicate_obj)
+        moveToRight(duplicate_obj)
+        duplicate_obj.hide_set(True)
+
+    for active_obj in bpy.data.objects:  # 复制DamoReset
         if active_obj.name == '右耳':
             name = active_obj.name + "DamoReset"
             is_rightobj = bpy.data.objects.get(name)
@@ -31,8 +44,8 @@ def copy_object():
 
         if active_obj.name == '左耳':
             name = active_obj.name + "DamoReset"
-            is_rightobj = bpy.data.objects.get(name)
-            if not is_rightobj:
+            is_leftobj = bpy.data.objects.get(name)
+            if not is_leftobj:
                 duplicate_obj = active_obj.copy()
                 duplicate_obj.data = active_obj.data.copy()
                 duplicate_obj.name = name
@@ -50,8 +63,11 @@ def backToDamo():
     name = bpy.context.object.name
     if name == '右耳':
         copyname = name + "DamoCopy"
+        waxname = name + "WaxForShow"
         ori_obj = bpy.data.objects[copyname]
+        wax_obj = bpy.data.objects[waxname]
         bpy.data.objects.remove(active_obj, do_unlink=True)
+        bpy.data.objects.remove(wax_obj, do_unlink=True)
         duplicate_obj = ori_obj.copy()
         duplicate_obj.data = ori_obj.data.copy()
         duplicate_obj.animation_data_clear()
@@ -61,8 +77,11 @@ def backToDamo():
         bpy.context.view_layer.objects.active = duplicate_obj
     elif name == '左耳':
         copyname = name + "DamoCopy"
+        waxname = name + "WaxForShow"
         ori_obj = bpy.data.objects[copyname]
+        wax_obj = bpy.data.objects[waxname]
         bpy.data.objects.remove(active_obj, do_unlink=True)
+        bpy.data.objects.remove(wax_obj, do_unlink=True)
         duplicate_obj = ori_obj.copy()
         duplicate_obj.data = ori_obj.data.copy()
         duplicate_obj.animation_data_clear()
@@ -89,6 +108,14 @@ def backFromDamo():
         bpy.context.collection.objects.link(duplicate_obj)
         moveToRight(duplicate_obj)
         duplicate_obj.hide_set(True)
+        duplicate_obj2 = active_obj.copy()
+        duplicate_obj2.data = active_obj.data.copy()
+        duplicate_obj2.animation_data_clear()
+        duplicate_obj2.name = name + "WaxForShow"
+        bpy.context.collection.objects.link(duplicate_obj2)
+        duplicate_obj2.data.materials.append(bpy.data.materials.get("tran_blue"))
+        moveToRight(duplicate_obj2)
+        duplicate_obj2.hide_set(True)
         active_obj = bpy.data.objects[name]
         bpy.context.view_layer.objects.active = active_obj
 
@@ -104,6 +131,14 @@ def backFromDamo():
         bpy.context.collection.objects.link(duplicate_obj)
         moveToLeft(duplicate_obj)
         duplicate_obj.hide_set(True)
+        duplicate_obj2 = active_obj.copy()
+        duplicate_obj2.data = active_obj.data.copy()
+        duplicate_obj2.animation_data_clear()
+        duplicate_obj2.name = name + "WaxForShow"
+        bpy.context.collection.objects.link(duplicate_obj2)
+        duplicate_obj2.data.materials.append(bpy.data.materials.get("tran_blue"))
+        moveToLeft(duplicate_obj2)
+        duplicate_obj2.hide_set(True)
         active_obj = bpy.data.objects[name]
         bpy.context.view_layer.objects.active = active_obj
 
@@ -172,7 +207,7 @@ class Thickening(bpy.types.Operator):
             # 将网格数据复制到bmesh对象
             bm.from_mesh(me)
             # 原始数据
-            ori_obj = bpy.data.objects[active_obj.name + "DamoReset"]
+            ori_obj = bpy.data.objects[active_obj.name + "OriginForShow"]
             orime = ori_obj.data
             oribm = bmesh.new()
             oribm.from_mesh(orime)
@@ -448,7 +483,7 @@ class Thinning(bpy.types.Operator):
             # 将网格数据复制到bmesh对象
             bm.from_mesh(me)
             # 原始数据
-            ori_obj = bpy.data.objects[active_obj.name + "DamoReset"]
+            ori_obj = bpy.data.objects[active_obj.name + "OriginForShow"]
             orime = ori_obj.data
             oribm = bmesh.new()
             oribm.from_mesh(orime)
@@ -724,7 +759,7 @@ class Smooth(bpy.types.Operator):
             # 将网格数据复制到bmesh对象
             bm.from_mesh(me)
             # 原始数据
-            ori_obj = bpy.data.objects[active_obj.name + "DamoReset"]
+            ori_obj = bpy.data.objects[active_obj.name + "OriginForShow"]
             orime = ori_obj.data
             oribm = bmesh.new()
             oribm.from_mesh(orime)
@@ -916,7 +951,6 @@ class Damo_Reset(bpy.types.Operator):
         return {'FINISHED'}
 
     def excute(self, context, event):
-        # DamoOrgin是未加蜡厚度的物体
         bpy.context.scene.var = 4
         active_obj = bpy.context.active_object
         name = bpy.context.object.name

@@ -4,14 +4,15 @@ import mathutils
 from bpy_extras import view3d_utils
 from math import sqrt, fabs
 from mathutils import Vector
-from .dig_hole import boolean_cut, get_hole_border, translate_circle_to_cylinder
+from .dig_hole import boolean_cut, get_hole_border, translate_circle_to_cylinder, frame_clear_border_list, frame_set_border_list, frame_get_border_list
 from .border_fill import fill_frame_style_inner_face
 from .soft_eardrum.thickness_and_fill import set_finish, get_fill_plane, fill
 from .soft_eardrum.soft_eardrum import soft_eardrum, get_cut_plane, plane_cut, delete_useless_part, \
-    set_co_and_normal,clear_co_and_normal
+    soft_set_co_and_normal,soft_clear_co_and_normal
+from .frame_style_eardrum.frame_style_eardrum import frame_clear_co_and_normal, frame_set_co_and_normal
 from .hard_eardrum.hard_eardrum import bottom_fill
 from ..tool import recover_and_remind_border, moveToRight, utils_re_color, convert_to_mesh, \
-    recover_to_dig, newColor
+    recover_to_dig, newColor, subdivide
 import re
 
 prev_on_object = False
@@ -113,7 +114,8 @@ class MuJudict:
     kuangjialist2 = ['HoleBorderCurve1', 0.18]
     kuangjialist3 = ['HoleBorderCurve2', 0.18]
     kuangjiadict = {'meshBottomRingBorderR': kuangjialist1, 'meshHoleBorderCurve1': kuangjialist2,
-                    'meshHoleBorderCurve2': kuangjialist3}
+                    'meshHoleBorderCurve2': kuangjialist3
+                    }
     waikedict = {}
     mianbandict = {}
 
@@ -462,7 +464,7 @@ def update_cut(curve_name, mesh_name, depth):
         set_finish(True)
         bpy.ops.object.select_all(action='DESELECT')
         recover_and_remind_border()
-        generate_cutplane(0.2)  # 生成曲线
+        soft_generate_cutplane(0.2)  # 生成曲线
         # soft_eardrum()
         get_cut_plane()
         plane_cut()
@@ -492,56 +494,73 @@ def update_cut(curve_name, mesh_name, depth):
             for obj in bpy.data.objects:
                 if re.match('HoleBorderCurve', obj.name) != None:
                     number += 1
-            while (number > 0):
-                local_curve_name = 'HoleBorderCurve' + str(number)
+
+            # 记录点的坐标，删除原有的曲线
+            frame_clear_border_list()
+            for i in range(1, number+1):
+                local_curve_name = 'HoleBorderCurve' + str(i)
                 dig_border = []
                 for point in bpy.data.objects[local_curve_name].data.splines[0].points:
                     dig_border.append(point.co[0:3])
+                frame_set_border_list(dig_border)
+                bpy.data.objects.remove(bpy.data.objects[local_curve_name], do_unlink=True)
+                    
+            # 根据点的坐标重新画线，画一个挖一个
+            border_list = frame_get_border_list()
+            for i in range(1, number+1):
                 template_highest_point = (-10.3681, 2.2440, 12.1771)
-                get_hole_border(template_highest_point, dig_border)
+                # 重新生成曲线
+                get_hole_border(template_highest_point, border_list[i-1], i)
                 translate_circle_to_cylinder()
                 boolean_cut()
-                bpy.data.objects.remove(bpy.data.objects[local_curve_name], do_unlink=True)
-                bpy.data.objects['HoleBorderCurve'].name = local_curve_name
+                local_curve_name = 'HoleBorderCurve' + str(i)
                 local_mesh_name = 'mesh' + local_curve_name
                 convert_to_mesh(local_curve_name, local_mesh_name, depth)  # 重新生成网格
-                bpy.context.view_layer.objects.active = bpy.data.objects['右耳']
-                number -= 1
+                # bpy.context.view_layer.objects.active = bpy.data.objects['右耳']
 
             fill_frame_style_inner_face()
             utils_re_color("右耳", (1, 0.319, 0.133))
 
         else:  # 下部曲线改变
             recover_and_remind_border()
-            generate_cutplane(0.2)
+            frame_generate_cutplane(0.2)
             soft_eardrum()
+            convert_to_mesh(curve_name, mesh_name, depth)
 
             number = 0
             for obj in bpy.data.objects:
                 if re.match('HoleBorderCurve', obj.name) != None:
                     number += 1
-            while (number > 0):
-                local_curve_name = 'HoleBorderCurve' + str(number)
-                dig_border = []
-                for point in bpy.data.objects[local_curve_name].data.splines[0].points:
-                    dig_border.append(point.co[0:3])
+
+            # 上部曲线不动，所以仅需删除原有的曲线
+            # frame_clear_border_list()
+            for i in range(1, number+1):
+                local_curve_name = 'HoleBorderCurve' + str(i)
+                # dig_border = []
+                # for point in bpy.data.objects[local_curve_name].data.splines[0].points:
+                #     dig_border.append(point.co[0:3])
+                # frame_set_border_list(dig_border)
+                bpy.data.objects.remove(bpy.data.objects[local_curve_name], do_unlink=True)
+                    
+            # 根据点的坐标重新画线，画一个挖一个
+            border_list = frame_get_border_list()
+            for i in range(1, number+1):
                 template_highest_point = (-10.3681, 2.2440, 12.1771)
-                get_hole_border(template_highest_point, dig_border)
+                # 重新生成曲线
+                get_hole_border(template_highest_point, border_list[i-1], i)
                 translate_circle_to_cylinder()
                 boolean_cut()
-                bpy.data.objects.remove(bpy.data.objects[local_curve_name], do_unlink=True)
-                bpy.data.objects['HoleBorderCurve'].name = local_curve_name
+                local_curve_name = 'HoleBorderCurve' + str(i)
                 local_mesh_name = 'mesh' + local_curve_name
                 convert_to_mesh(local_curve_name, local_mesh_name, depth)  # 重新生成网格
-                bpy.context.view_layer.objects.active = bpy.data.objects['右耳']
-                number -= 1
+                # bpy.context.view_layer.objects.active = bpy.data.objects['右耳']
 
             fill_frame_style_inner_face()
             utils_re_color("右耳", (1, 0.319, 0.133))
 
     if (enum_name == '硬耳膜'):
         recover_and_remind_border()
-        generate_cutplane(0.5)  # 生成曲线
+        # generate_cutplane(0.5)  # 生成曲线
         # soft_eardrum()
         get_cut_plane()
         plane_cut()
@@ -558,7 +577,7 @@ def update_cut(curve_name, mesh_name, depth):
         convert_to_mesh('BottomRingBorderR', 'meshBottomRingBorderR', 0.18)
         bpy.ops.object.timer_add_modifier_after_qmesh()
 
-def generate_cutplane(step_number):
+def soft_generate_cutplane(step_number):
     active_obj = bpy.data.objects['BottomRingBorderR']
     duplicate_obj = active_obj.copy()
     duplicate_obj.data = active_obj.data.copy()
@@ -576,14 +595,48 @@ def generate_cutplane(step_number):
     # 获取数据
     curve_data = curve_object.data
     # subdivide('CutPlane', 3) 
-    clear_co_and_normal()
+    soft_clear_co_and_normal()
     # 将曲线的每个顶点沿法向移动
     for spline in curve_data.splines:
         for point in spline.points:
             # 获取顶点原位置
             vertex_co = curve_object.matrix_world @ mathutils.Vector(point.co[0:3])
             _, _, normal, _ = target_object.closest_point_on_mesh(vertex_co)
-            set_co_and_normal(vertex_co, normal[0:3])
+            soft_set_co_and_normal(vertex_co, normal[0:3])
+            step = step_number
+            point.co = (point.co[0] + normal[0] * step, point.co[1] + normal[1] * step,
+                        point.co[2] + normal[2] * step, 1)
+            
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = bpy.data.objects['CutPlane']
+    bpy.context.object.data.bevel_depth = 0
+
+def frame_generate_cutplane(step_number):
+    active_obj = bpy.data.objects['BottomRingBorderR']
+    duplicate_obj = active_obj.copy()
+    duplicate_obj.data = active_obj.data.copy()
+    duplicate_obj.name = "CutPlane"
+    duplicate_obj.animation_data_clear()
+    # 将复制的物体加入到场景集合中
+    bpy.context.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
+
+    # 获取目标物体
+    target_object = bpy.data.objects["右耳MouldReset"]
+    # 获取曲线对象
+    curve_object = bpy.data.objects['CutPlane']
+
+    # 获取数据
+    curve_data = curve_object.data
+    # subdivide('CutPlane', 3) 
+    frame_clear_co_and_normal()
+    # 将曲线的每个顶点沿法向移动
+    for spline in curve_data.splines:
+        for point in spline.points:
+            # 获取顶点原位置
+            vertex_co = curve_object.matrix_world @ mathutils.Vector(point.co[0:3])
+            _, _, normal, _ = target_object.closest_point_on_mesh(vertex_co)
+            frame_set_co_and_normal(vertex_co, normal[0:3])
             step = step_number
             point.co = (point.co[0] + normal[0] * step, point.co[1] + normal[1] * step,
                         point.co[2] + normal[2] * step, 1)
@@ -689,13 +742,39 @@ def snapselect(curve_name, index, number):
             # 将顶点位置设置为 closest point
             point.co[0:3] = closest_co
             point.co[3] = 1
-
+    
+    colorcurve(curve_name, index, number)
 
 def copy_select_curve(curve_name):
     ''' 复制曲线数据 '''
     # 选择要复制数据的源曲线对象
     source_curve = bpy.data.objects[curve_name]
     new_name = 'selectcurve'
+    # 创建一个新的曲线对象来存储复制的数据
+    # if bpy.data.objects.get(new_name) != None:
+    #     return False
+    new_curve = bpy.data.curves.new(new_name, 'CURVE')
+    new_curve.dimensions = '3D'
+    new_obj = bpy.data.objects.new(new_name, new_curve)
+    bpy.context.collection.objects.link(new_obj)
+    moveToRight(new_obj)
+
+    # 复制源曲线的数据到新曲线
+    new_curve.splines.clear()
+    for spline in source_curve.data.splines:
+        new_spline = new_curve.splines.new(spline.type)
+        new_spline.use_cyclic_u = True
+        new_spline.use_smooth = True
+        new_spline.points.add(len(spline.points) - 1)
+        for i, point in enumerate(spline.points):
+            new_spline.points[i].co = point.co
+    # return True
+
+def copy_color_curve(curve_name):
+    ''' 复制曲线数据 '''
+    # 选择要复制数据的源曲线对象
+    source_curve = bpy.data.objects[curve_name]
+    new_name = 'colorcurve'
     # 创建一个新的曲线对象来存储复制的数据
     new_curve = bpy.data.curves.new(new_name, 'CURVE')
     new_curve.dimensions = '3D'
@@ -712,7 +791,6 @@ def copy_select_curve(curve_name):
         new_spline.points.add(len(spline.points) - 1)
         for i, point in enumerate(spline.points):
             new_spline.points[i].co = point.co
-
 
 def changearea(curve_name, index, number, depth):
     select_name = 'selectcurve'
@@ -805,6 +883,49 @@ def selectcurve(context, event, curve_name, mesh_name, depth, number):
     bpy.ops.object.select_all(action='DESELECT')
     return index
 
+def colorcurve(curve_name, index, number):
+    ''' 移动时将移动的部分标绿 '''
+
+    if bpy.data.objects.get('colorcurve') != None:
+        bpy.data.objects.remove(bpy.data.objects['colorcurve'], do_unlink=True)  # 删除原有曲线
+        bpy.data.objects.remove(bpy.data.objects['coloredcurve'], do_unlink=True)
+    point_number = len(bpy.data.objects[curve_name].data.splines[0].points)
+    copy_color_curve(curve_name)  # 复制一份数据用于分离
+    curve_obj = bpy.data.objects['colorcurve']
+    bpy.context.view_layer.objects.active = curve_obj
+    bpy.ops.object.select_all(action='DESELECT')
+    curve_obj.select_set(state=True)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.curve.select_all(action='DESELECT')
+
+    start_index = (index - number + point_number) % point_number
+    finish_index = (index + number + point_number) % point_number
+    if (start_index < finish_index):
+        for i in range(start_index, finish_index, 1):
+            curve_obj.data.splines[0].points[i].select = True
+    else:
+        for i in range(start_index, point_number, 1):
+            curve_obj.data.splines[0].points[i].select = True
+        for i in range(0, finish_index, 1):
+            curve_obj.data.splines[0].points[i].select = True
+
+    bpy.ops.curve.separate()  # 分离要进行拖拽的点
+    bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.data.objects['colorcurve'].hide_set(True)
+    copy_name = 'colorcurve' + '.001'
+    for object in bpy.data.objects:  # 改名
+        if object.name == copy_name:
+            object.name = 'coloredcurve'
+            break
+
+    bpy.data.objects['coloredcurve'].data.materials.clear()  # 清除材质
+    newColor('green', 0, 1, 0, 1, 1)
+    bpy.data.objects['coloredcurve'].data.materials.append(bpy.data.materials['green'])
+    moveToRight(bpy.data.objects['coloredcurve'])
+    bpy.context.view_layer.objects.active = bpy.data.objects['coloredcurve']
+    bpy.context.object.data.bevel_depth = 0.18
+    bpy.ops.object.select_all(action='DESELECT')
+
 
 def movecurve(co, initial_co, curve_name, index, number):
     curve_obj = bpy.data.objects[curve_name]
@@ -820,6 +941,7 @@ def movecurve(co, initial_co, curve_name, index, number):
             point = curve_data.splines[0].points[i]
             point.co[0:3] = Vector(point.co[0:3]) + dis * disfunc(abs(i - mid_index), curve_number)
             point.co[3] = 1
+            
     else:
         curve_number, mid_index = get_len(start_index, finish_index, point_number)
         for i in range(start_index, point_number, 1):
@@ -1154,10 +1276,10 @@ class TEST_OT_dragcurve(bpy.types.Operator):
         op_cls.__is_moving = False
         op_cls.__is_moving_right = False
         op_cls.__is_modifier = False
-        op_cls.__is_modifier_right = False
+        # op_cls.__is_modifier_right = False
 
-        op_cls.__prev_mouse_location_x = -1
-        op_cls.__prev_mouse_location_y = -1
+        # op_cls.__prev_mouse_location_x = None
+        # op_cls.__prev_mouse_location_y = None
 
         op_cls.__curve_name = ''
         op_cls.__mesh_name = ''
@@ -1186,13 +1308,18 @@ class TEST_OT_dragcurve(bpy.types.Operator):
                     op_cls.__now_mouse_x_right = None
                     op_cls.__now_mouse_y_right = None
                     op_cls.__is_moving_right = False
+                    context.window.cursor_warp(event.mouse_prev_press_x, event.mouse_prev_press_y)
                 if op_cls.__is_moving == True:  # 鼠标左键松开
                     op_cls.__is_moving = False
                     op_cls.__left_mouse_down = False
                     op_cls.__initial_mouse_x = None
                     op_cls.__initial_mouse_y = None
+                    if bpy.data.objects.get('colorcurve') != None:
+                        bpy.data.objects.remove(bpy.data.objects['colorcurve'], do_unlink=True)  # 删除原有曲线
+                    if bpy.data.objects.get('coloredcurve') != None:
+                        bpy.data.objects.remove(bpy.data.objects['coloredcurve'], do_unlink=True)
             if op_cls.__right_mouse_down == False:
-                if op_cls.__left_mouse_down == False and op_cls.__is_modifier_right == False and op_cls.__is_modifier == False:
+                if op_cls.__left_mouse_down == False and op_cls.__is_modifier == False:
                     if bpy.data.objects.get('selectcurve') != None:
                         bpy.data.objects.remove(bpy.data.objects['selectcurve'], do_unlink=True)  # 删除原有曲线
                     if bpy.data.objects.get('dragcurve') != None:
@@ -1200,7 +1327,8 @@ class TEST_OT_dragcurve(bpy.types.Operator):
             if op_cls.__right_mouse_down == True:  # 鼠标右键按下
                 min_number = int(op_cls.__curve_length * 0.1)
                 max_number = int(op_cls.__curve_length * 0.8)
-                op_cls.__is_modifier_right = True
+                # op_cls.__is_modifier_right = True
+                # 记录下第一次点击鼠标的位置
                 op_cls.__now_mouse_x_right = event.mouse_region_x
                 op_cls.__now_mouse_y_right = event.mouse_region_y
                 dis = int(sqrt(fabs(op_cls.__now_mouse_y_right - op_cls.__initial_mouse_y_right) * fabs(
@@ -1222,10 +1350,7 @@ class TEST_OT_dragcurve(bpy.types.Operator):
             if op_cls.__left_mouse_down == True:  # 鼠标左键按下
                 co = cal_co('右耳MouldReset', context, event)
                 op_cls.__is_modifier = True
-                if co != -1 and (op_cls.__prev_mouse_location_x != event.mouse_region_x or \
-                                 op_cls.__prev_mouse_location_y != event.mouse_region_y):
-                    op_cls.__prev_mouse_location_x = event.mouse_region_x
-                    op_cls.__prev_mouse_location_y = event.mouse_region_y
+                if co != -1:
                     if (co - op_cls.__initial_co).dot(co - op_cls.__initial_co) >= 0.2:
                         movecurve(co, op_cls.__initial_co, op_cls.__curve_name, op_cls.__index, op_cls.__number)
                         snapselect(op_cls.__curve_name, op_cls.__index, op_cls.__number)  # 将曲线吸附到物体上
@@ -1237,7 +1362,6 @@ class TEST_OT_dragcurve(bpy.types.Operator):
                     update_cut(op_cls.__curve_name, op_cls.__mesh_name, op_cls.__depth)
                     bpy.data.objects[op_cls.__mesh_name].hide_set(False)
                     op_cls.__is_modifier = False
-                    op_cls.__is_modifier_right = False
                     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
             return {'PASS_THROUGH'}
@@ -1245,12 +1369,13 @@ class TEST_OT_dragcurve(bpy.types.Operator):
         else:
             global prev_mesh_name
             _, op_cls.__mesh_name, curve_list = co_on_object(mujudict, context, event)
-            if (prev_mesh_name != op_cls.__mesh_name and op_cls.__is_modifier == False and op_cls.__is_modifier_right == False) or op_cls.__curve_name == '':
-                prev_mesh_name = op_cls.__mesh_name
-                op_cls.__curve_name = curve_list[0]
-                op_cls.__depth = curve_list[1]
-                op_cls.__curve_length = len(bpy.data.objects[op_cls.__curve_name].data.splines[0].points)
-                op_cls.__number = int(op_cls.__curve_length * 0.2)
+            if (prev_mesh_name != op_cls.__mesh_name and op_cls.__is_modifier == False) or op_cls.__curve_name == '':
+                if not bpy.data.objects.get('selectcurve'):
+                    prev_mesh_name = op_cls.__mesh_name
+                    op_cls.__curve_name = curve_list[0]
+                    op_cls.__depth = curve_list[1]
+                    op_cls.__curve_length = len(bpy.data.objects[op_cls.__curve_name].data.splines[0].points)
+                    op_cls.__number = int(op_cls.__curve_length * 0.2)
             if event.type == 'LEFTMOUSE':
                 if event.value == 'PRESS':
                     op_cls.__is_moving = True
@@ -1281,12 +1406,11 @@ class TEST_OT_dragcurve(bpy.types.Operator):
                     op_cls.__now_mouse_y_right = None
                     op_cls.__is_moving_right = False
                 return {'RUNNING_MODAL'}
-            elif event.type == 'MOUSEMOVE' and op_cls.__left_mouse_down == False and op_cls.__right_mouse_down == False:  # 鼠标移动时选择不同的曲线区域
-                if (op_cls.__prev_mouse_location_x != event.mouse_region_x or op_cls.__prev_mouse_location_y != event.mouse_region_y):
-                    op_cls.__prev_mouse_location_x = event.mouse_region_x
-                    op_cls.__prev_mouse_location_y = event.mouse_region_y
+            elif event.type == 'MOUSEMOVE' and op_cls.__left_mouse_down == False and op_cls.__right_mouse_down == False:
+                # 鼠标移动时选择不同的曲线区域
+                if op_cls.__is_modifier == False:
                     op_cls.__index = selectcurve(context, event, op_cls.__curve_name, op_cls.__mesh_name,
-                                                 op_cls.__depth, op_cls.__number)
+                                                    op_cls.__depth, op_cls.__number)
                     op_cls.__initial_co = get_co(op_cls.__curve_name, op_cls.__index)
 
         return {'PASS_THROUGH'}
@@ -1323,8 +1447,8 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
     __index = None
 
     def invoke(self, context, event):  # 初始化
-        print('smoothcurve invoke')
         bpy.context.scene.var = 21
+        print('smoothcurve invoke')
         newColor('green', 0, 1, 0, 1, 1)
         newColor('blue', 0, 0, 1, 1, 1)
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")  # 切换到公共鼠标行为
@@ -1342,10 +1466,10 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
         op_cls.__is_moving = False
         op_cls.__is_moving_right = False
         op_cls.__is_modifier = False
-        op_cls.__is_modifier_right = False
+        # op_cls.__is_modifier_right = False
 
-        op_cls.__prev_mouse_location_x = -1
-        op_cls.__prev_mouse_location_y = -1
+        # op_cls.__prev_mouse_location_x = None
+        # op_cls.__prev_mouse_location_y = None
 
         op_cls.__curve_name = ''
         op_cls.__mesh_name = ''
@@ -1374,6 +1498,7 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
                     op_cls.__now_mouse_x_right = None
                     op_cls.__now_mouse_y_right = None
                     op_cls.__is_moving_right = False
+                    context.window.cursor_warp(event.mouse_prev_press_x, event.mouse_prev_press_y)
                 if op_cls.__is_moving == True:  # 鼠标左键松开
                     op_cls.__is_moving = False
                     op_cls.__left_mouse_down = False
@@ -1382,15 +1507,19 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
                     op_cls.__now_mouse_x = None
                     op_cls.__now_mouse_y = None
             if op_cls.__right_mouse_down == False:
-                if op_cls.__left_mouse_down == False and op_cls.__is_modifier == False and op_cls.__is_modifier_right == False:
+                if op_cls.__left_mouse_down == False and op_cls.__is_modifier == False:
                     if bpy.data.objects.get('selectcurve') != None:
                         bpy.data.objects.remove(bpy.data.objects['selectcurve'], do_unlink=True)  # 删除原有曲线
                     if bpy.data.objects.get('dragcurve') != None:
                         bpy.data.objects.remove(bpy.data.objects['dragcurve'], do_unlink=True)
+                    if bpy.data.objects.get('colorcurve') != None:
+                        bpy.data.objects.remove(bpy.data.objects['colorcurve'], do_unlink=True)  # 删除原有曲线
+                    if bpy.data.objects.get('coloredcurve') != None:
+                        bpy.data.objects.remove(bpy.data.objects['coloredcurve'], do_unlink=True)
             if op_cls.__right_mouse_down == True:  # 鼠标右键按下
                 min_number = int(op_cls.__curve_length * 0.1)
                 max_number = int(op_cls.__curve_length * 0.8)
-                op_cls.__is_modifier_right = True
+                # op_cls.__is_modifier_right = True
                 op_cls.__now_mouse_x_right = event.mouse_region_x
                 op_cls.__now_mouse_y_right = event.mouse_region_y
                 dis = int(sqrt(fabs(op_cls.__now_mouse_y_right - op_cls.__initial_mouse_y_right) * fabs(
@@ -1429,7 +1558,6 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
                     update_cut(op_cls.__curve_name, op_cls.__mesh_name, op_cls.__depth)
                     bpy.data.objects[op_cls.__mesh_name].hide_set(False)
                     op_cls.__is_modifier = False
-                    op_cls.__is_modifier_right = False
                     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
             return {'PASS_THROUGH'}
@@ -1437,12 +1565,13 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
         else:
             global prev_mesh_name
             _, op_cls.__mesh_name, curve_list = co_on_object(mujudict, context, event)
-            if (prev_mesh_name != op_cls.__mesh_name and op_cls.__is_modifier == False and op_cls.__is_modifier_right == False) or op_cls.__curve_name == '':
-                prev_mesh_name = op_cls.__mesh_name
-                op_cls.__curve_name = curve_list[0]
-                op_cls.__depth = curve_list[1]
-                op_cls.__curve_length = len(bpy.data.objects[op_cls.__curve_name].data.splines[0].points)
-                op_cls.__number = int(op_cls.__curve_length * 0.2)
+            if (prev_mesh_name != op_cls.__mesh_name and op_cls.__is_modifier == False) or op_cls.__curve_name == '':
+                if not bpy.data.objects.get('selectcurve'):
+                    prev_mesh_name = op_cls.__mesh_name
+                    op_cls.__curve_name = curve_list[0]
+                    op_cls.__depth = curve_list[1]
+                    op_cls.__curve_length = len(bpy.data.objects[op_cls.__curve_name].data.splines[0].points)
+                    op_cls.__number = int(op_cls.__curve_length * 0.2)
             if event.type == 'LEFTMOUSE':
                 if event.value == 'PRESS':
                     op_cls.__is_moving = True
@@ -1475,10 +1604,9 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
                     op_cls.__now_mouse_y_right = None
                     op_cls.__is_moving_right = False
                 return {'RUNNING_MODAL'}
-            elif event.type == 'MOUSEMOVE' and op_cls.__left_mouse_down == False and op_cls.__right_mouse_down == False:  # 鼠标移动时选择不同的曲线区域
-                if (op_cls.__prev_mouse_location_x != event.mouse_region_x or op_cls.__prev_mouse_location_y != event.mouse_region_y):
-                    op_cls.__prev_mouse_location_x = event.mouse_region_x
-                    op_cls.__prev_mouse_location_y = event.mouse_region_y
+            elif event.type == 'MOUSEMOVE' and op_cls.__left_mouse_down == False and op_cls.__right_mouse_down == False:  
+                # 鼠标移动时选择不同的曲线区域
+                if op_cls.__is_modifier == False:
                     op_cls.__index = selectcurve(context, event, op_cls.__curve_name, op_cls.__mesh_name,
                                                  op_cls.__depth, op_cls.__number)
 

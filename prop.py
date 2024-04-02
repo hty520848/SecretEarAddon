@@ -569,8 +569,8 @@ def qiegeenum(self, context):
 def qiegesmooth2(self, context):
     bl_description = "阶梯切割平滑偏移值2"
     pianyi = bpy.context.scene.qiegeneiBianYuan
-    if bpy.data.objects.get("StepCutplane") != None:
-        bpy.data.objects["StepCutplane"].modifiers["smooth"].width = pianyi
+    if bpy.data.objects.get("右耳StepCutplane") != None:
+        bpy.data.objects["右耳StepCutplane"].modifiers["smooth"].width = pianyi
 
 
 # 回调函数，根据绑定的属性值更改选中区域的厚度

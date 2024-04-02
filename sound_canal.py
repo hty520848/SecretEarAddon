@@ -252,39 +252,39 @@ def select_nearest_point(co):
     # 获取曲线的数据
     curve_data = curve_obj.data
     # 遍历曲线的所有点
-    min_distance = float('inf')
-    second_min_distance = float('inf')
-    nearest_index = -1
-    second_nearest_index = -1
+    min_dis = float('inf')
+    min_dis_index = -1
 
-    for point_index, point in enumerate(curve_data.splines[0].points):
-        # 计算点与给定点之间的距离
-        distance = sqrt(sum((a - b) ** 2 for a, b in zip(point.co, co)))
-        # 更新最小距离和对应的点索引
-        if distance < min_distance:
-            second_min_distance = min_distance
-            min_distance = distance
-            second_nearest_index = nearest_index
-            nearest_index = point_index
-        elif distance < second_min_distance:
-            second_min_distance = distance
-            second_nearest_index = point_index
-    insert_index = max(nearest_index, second_nearest_index)
-    curve_object = bpy.data.objects['soundcanal']
-    curve_data = curve_object.data
-    min_co = Vector(curve_data.splines[0].points[nearest_index].co[0:3])
-    secondmin_co = Vector(curve_data.splines[0].points[second_nearest_index].co[0:3])
+    length = len(curve_data.splines[0].points) 
+        
+    for spline in curve_data.splines:
+        for point_index, point in enumerate(spline.points):
+            # 计算点与给定点之间的距离
+            distance_vector = Vector(point.co[0:3]) - co
+            distance = distance_vector.dot(distance_vector)
+            # 更新最小距离和对应的点索引
+            if distance < min_dis:
+                min_dis = distance
+                min_dis_index = point_index
+
+    if min_dis_index == 0:
+        return (Vector(curve_data.splines[0].points[0].co[0:3]), 
+                Vector(curve_data.splines[0].points[1].co[0:3]), 1)
+    
+    elif min_dis_index == length - 1:
+        return (Vector(curve_data.splines[0].points[length -2].co[0:3]), 
+                Vector(curve_data.splines[0].points[length -1].co[0:3]), length -1)
+
+    min_co = Vector(curve_data.splines[0].points[min_dis_index].co[0:3])
+    secondmin_co = Vector(curve_data.splines[0].points[min_dis_index - 1].co[0:3])
     dis_vector1 = Vector(secondmin_co - co)
     dis_vector2 = Vector(min_co - co)
     if dis_vector1.dot(dis_vector2) < 0:
-        return (min_co, secondmin_co, insert_index)
+        insert_index = min_dis_index
     else:
-        if insert_index > nearest_index:
-            insert_index = nearest_index
-            secondmin_co = Vector(curve_data.splines[0].points[second_nearest_index - 2].co[0:3])
-        else:
-            secondmin_co = Vector(curve_data.splines[0].points[second_nearest_index + 2].co[0:3])
-        return (min_co, secondmin_co, insert_index)
+        secondmin_co = Vector(curve_data.splines[0].points[min_dis_index + 1].co[0:3])
+        insert_index = min_dis_index + 1
+    return (min_co, secondmin_co, insert_index)
 
 
 def copy_curve():
@@ -402,7 +402,8 @@ class TEST_OT_addsoundcanal(bpy.types.Operator):
     def invoke(self, context, event):
         self.excute(context, event)
         return {'FINISHED'}
-    
+
+
 class TEST_OT_deletesoundcanal(bpy.types.Operator):
     bl_idname = "object.deletesoundcanal"
     bl_label = "deletesoundcanal"
@@ -426,7 +427,7 @@ class TEST_OT_deletesoundcanal(bpy.types.Operator):
             bpy.data.objects['soundcanal'].hide_set(False)
             bpy.context.view_layer.objects.active = bpy.data.objects['soundcanal']
             bpy.data.objects['soundcanal'].select_set(True)
-            bpy.ops.object.mode_set(mode='EDIT') #进入编辑模式删除点
+            bpy.ops.object.mode_set(mode='EDIT')  # 进入编辑模式删除点
             bpy.ops.curve.select_all(action='DESELECT')
             bpy.data.objects['soundcanal'].data.splines[0].points[index].select = True
             bpy.ops.curve.delete(type='VERT')
@@ -434,17 +435,17 @@ class TEST_OT_deletesoundcanal(bpy.types.Operator):
             bpy.data.objects['soundcanal'].select_set(False)
             bpy.data.objects['soundcanal'].hide_set(True)
 
-            #更新
+            # 更新
             bpy.data.objects.remove(bpy.data.objects[sphere_name], do_unlink=True)
             for key in object_dic:
                 if object_dic[key] > index:
                     object_dic[key] -= 1
             del object_dic[sphere_name]
-            global number 
+            global number
             number -= 1
             convert_soundcanal()
-            save_soundcanal_info([0,0,0])
-            
+            save_soundcanal_info([0, 0, 0])
+
     def invoke(self, context, event):
         self.excute(context, event)
         return {'FINISHED'}
@@ -456,6 +457,7 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
     bl_description = "鼠标行为切换"
 
     __timer = None
+    __flag = False
 
     def invoke(self, context, event):  # 初始化
         print('soundcanalqiehuan invoke')
@@ -463,14 +465,17 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
         newColor('red', 1, 0, 0, 0, 1)
         newColor('grey', 0.8, 0.8, 0.8, 0, 1)  # 不透明材质
         newColor('grey2', 0.8, 0.8, 0.8, 1, 0.4)  # 透明材质
-        TEST_OT_soundcanalqiehuan.__timer = context.window_manager.event_timer_add(0.5, window=context.window)
+        TEST_OT_soundcanalqiehuan.__timer = context.window_manager.event_timer_add(0.2, window=context.window)
         context.window_manager.modal_handler_add(self)
         bpy.ops.wm.tool_set_by_id(name="my_tool.addsoundcanal2")
         bpy.context.scene.var = 23
+        op_cls = TEST_OT_soundcanalqiehuan
+        op_cls.__flag = False
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
         global object_dic
+        op_cls = TEST_OT_soundcanalqiehuan
         if bpy.context.scene.var != 23:
             context.window_manager.event_timer_remove(TEST_OT_soundcanalqiehuan.__timer)
             TEST_OT_soundcanalqiehuan.__timer = None
@@ -486,6 +491,9 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
             sphere_number = on_which_shpere(context, event)
             if (event.type == 'TIMER'):
                 if sphere_number == 0:
+                    bpy.ops.object.select_all(action='DESELECT')
+                    bpy.context.view_layer.objects.active = bpy.data.objects['右耳']
+                    bpy.data.objects['右耳'].select_set(True)
                     return {'PASS_THROUGH'}
                 elif sphere_number == 1 or sphere_number == 2:
                     bpy.context.scene.tool_settings.use_snap = True
@@ -494,13 +502,13 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
                 bpy.context.view_layer.objects.active = bpy.data.objects['soundcanalsphere' + str(sphere_number)]
                 obj = context.active_object
                 if re.match('soundcanalsphere', obj.name) != None:
+                    sphere_name = 'soundcanalsphere' + str(sphere_number)
+                    index = int(object_dic[sphere_name])
+                    bpy.data.objects['soundcanal'].data.splines[0].points[index].co[0:3] = bpy.data.objects[
+                        sphere_name].location
+                    bpy.data.objects['soundcanal'].data.splines[0].points[index].co[3] = 1
                     flag = save_soundcanal_info(obj.location)
                     if flag:
-                        sphere_name = 'soundcanalsphere' + str(sphere_number)
-                        index = int(object_dic[sphere_name])
-                        bpy.data.objects['soundcanal'].data.splines[0].points[index].co[0:3] = bpy.data.objects[
-                            sphere_name].location
-                        bpy.data.objects['soundcanal'].data.splines[0].points[index].co[3] = 1
                         convert_soundcanal()
                 return {'PASS_THROUGH'}
 
@@ -511,14 +519,23 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
             elif (sphere_number == 0 and is_changed(context, event) == True):
                 bpy.ops.wm.tool_set_by_id(name="my_tool.addsoundcanal2")
 
-            if (cal_co('meshsoundcanal', context, event) == -1 and is_changed_now(context, event) == True):
-                if sphere_number == 0:
+            if cal_co('meshsoundcanal', context, event) == -1:
+                if sphere_number == 1 or sphere_number == 2 and (not op_cls.__flag):
+                    op_cls.__flag == True
+                    bpy.data.objects['meshsoundcanal'].data.materials.clear()
+                    bpy.data.objects['meshsoundcanal'].data.materials.append(bpy.data.materials["grey2"])
+                elif is_changed_now(context, event) == True:
                     bpy.data.objects['meshsoundcanal'].data.materials.clear()
                     bpy.data.objects['meshsoundcanal'].data.materials.append(bpy.data.materials["grey"])
 
-            elif cal_co('meshsoundcanal', context, event) != -1 and is_changed_now(context, event) == True:
-                bpy.data.objects['meshsoundcanal'].data.materials.clear()
-                bpy.data.objects['meshsoundcanal'].data.materials.append(bpy.data.materials["grey2"])
+            elif cal_co('meshsoundcanal', context, event) != -1:
+                if sphere_number == 1 or sphere_number == 2 and (op_cls.__flag):
+                    op_cls.__flag == False
+                    bpy.data.objects['meshsoundcanal'].data.materials.clear()
+                    bpy.data.objects['meshsoundcanal'].data.materials.append(bpy.data.materials["grey"])
+                elif is_changed_now(context, event) == True:
+                    bpy.data.objects['meshsoundcanal'].data.materials.clear()
+                    bpy.data.objects['meshsoundcanal'].data.materials.append(bpy.data.materials["grey2"])
 
         return {'PASS_THROUGH'}
 
@@ -781,7 +798,7 @@ def initial_soundcanal():
             bpy.ops.object.mode_set(mode='OBJECT')
             obj.data.materials.append(bpy.data.materials['red'])
             obj.location = bpy.data.objects['soundcanal'].data.splines[0].points[object_dic[key]].co[0:3]  # 指定的位置坐标
-            
+
         # 开启吸附
         bpy.context.scene.tool_settings.use_snap = True
         bpy.context.scene.tool_settings.snap_elements = {'FACE'}
@@ -794,10 +811,10 @@ def initial_soundcanal():
         bpy.data.objects['右耳'].hide_select = True
         convert_soundcanal()
         bpy.data.objects['soundcanal'].hide_set(True)
-        save_soundcanal_info([0,0,0])
-        bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
+        save_soundcanal_info([0, 0, 0])
+        bpy.data.objects['soundcanal'].hide_set(True)
 
-    elif len(object_dic) == 1:   # 只点击了一次
+    elif len(object_dic) == 1:  # 只点击了一次
         newColor('red', 1, 0, 0, 1, 0.8)
         newColor('grey', 0.8, 0.8, 0.8, 0, 1)
         obj = new_curve('soundcanal')
@@ -817,7 +834,6 @@ def initial_soundcanal():
         bpy.context.scene.tool_settings.snap_target = 'CENTER'
         bpy.context.scene.tool_settings.use_snap_align_rotation = True
         bpy.context.scene.tool_settings.use_snap_backface_culling = True
-        bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
 
         mesh = bpy.data.meshes.new("soundcanalsphere")
         obj = bpy.data.objects.new("soundcanalsphere1", mesh)
@@ -836,7 +852,7 @@ def initial_soundcanal():
 
         # 在指定位置生成圆球
         bmesh.ops.create_uvsphere(bm, u_segments=segments, v_segments=segments,
-                                    radius=radius * 2)
+                                  radius=radius * 2)
         bmesh.update_edit_mesh(obj.data)  # 更新网格数据
 
         bpy.ops.object.mode_set(mode='OBJECT')
@@ -845,6 +861,8 @@ def initial_soundcanal():
 
     else:  # 不存在已保存的圆球位置
         pass
+
+    bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
 
 
 def submit_soundcanal():
@@ -927,7 +945,7 @@ def frontToSoundCanal():
 
 
 def frontFromSoundCanal():
-    save_soundcanal_info([0,0,0])
+    save_soundcanal_info([0, 0, 0])
     need_to_delete_model_name_list = ['meshsoundcanal', 'soundcanal']
     for key in object_dic:
         need_to_delete_model_name_list.append(key)
@@ -1041,7 +1059,7 @@ def backToSoundCanal():
 
 
 def backFromSoundCanal():
-    save_soundcanal_info([0,0,0])
+    save_soundcanal_info([0, 0, 0])
     submit_soundcanal()
     all_objs = bpy.data.objects
     for selected_obj in all_objs:
@@ -1055,27 +1073,6 @@ def backFromSoundCanal():
     duplicate_obj.name = name + "SoundCanalLast"
     bpy.context.collection.objects.link(duplicate_obj)
     duplicate_obj.hide_set(True)
-
-
-class addsoundcanal_MyTool(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.addsoundcanal"
-    bl_label = "传声孔双击添加控制点"
-    bl_description = (
-        "使用鼠标双击添加控制点"
-    )
-    bl_icon = "ops.curves.sculpt_pinch"
-    bl_widget = None
-    bl_keymap = (
-        ("object.soundcanalqiehuan", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
 
 
 class addsoundcanal_MyTool2(bpy.types.WorkSpaceTool):
@@ -1100,6 +1097,7 @@ class addsoundcanal_MyTool2(bpy.types.WorkSpaceTool):
     def draw_settings(context, layout, tool):
         pass
 
+
 class addsoundcanal_MyTool3(bpy.types.WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
     bl_context_mode = 'OBJECT'
@@ -1110,16 +1108,17 @@ class addsoundcanal_MyTool3(bpy.types.WorkSpaceTool):
     bl_description = (
         "传声孔对圆球移动、双击操作"
     )
-    bl_icon = " "
+    bl_icon = "ops.curves.sculpt_pinch"
     bl_widget = None
     bl_keymap = (
-        ("view3d.select",{"type": 'LEFTMOUSE', "value": 'PRESS'},{"properties":[("deselect_all", True),],},),
+        ("view3d.select", {"type": 'LEFTMOUSE', "value": 'PRESS'}, {"properties": [("deselect_all", True), ], },),
         ("transform.translate", {"type": 'LEFTMOUSE', "value": 'CLICK_DRAG'}, None),
         ("object.deletesoundcanal", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
     )
 
     def draw_settings(context, layout, tool):
         pass
+
 
 class finishsoundcanal_MyTool(bpy.types.WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
@@ -1196,9 +1195,8 @@ _classes = [
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
-    bpy.utils.register_tool(addsoundcanal_MyTool, separator=True, group=False)
-    bpy.utils.register_tool(resetsoundcanal_MyTool, separator=True, group=False,
-                            after={addsoundcanal_MyTool.bl_idname})
+
+    bpy.utils.register_tool(resetsoundcanal_MyTool, separator=True, group=False)
     bpy.utils.register_tool(finishsoundcanal_MyTool, separator=True, group=False,
                             after={resetsoundcanal_MyTool.bl_idname})
     bpy.utils.register_tool(mirrorsoundcanal_MyTool, separator=True, group=False,
@@ -1211,7 +1209,7 @@ def register():
 def unregister():
     for cls in _classes:
         bpy.utils.unregister_class(cls)
-    bpy.utils.unregister_tool(addsoundcanal_MyTool)
+
     bpy.utils.unregister_tool(resetsoundcanal_MyTool)
     bpy.utils.unregister_tool(finishsoundcanal_MyTool)
     bpy.utils.unregister_tool(mirrorsoundcanal_MyTool)

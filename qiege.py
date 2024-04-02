@@ -5,7 +5,8 @@ import mathutils
 import bmesh
 from mathutils import Vector
 from bpy.types import WorkSpaceTool
-from .tool import *
+from .tool import moveToRight, moveToLeft, newMaterial, getOverride2, is_mouse_on_object, \
+    is_mouse_on_which_object, is_changed_stepcut, get_cast_index
 import math
 from math import *
 
@@ -52,6 +53,8 @@ qiegeenum = 1  # 当前切割的模式，1为环切，2为侧切
 operator_obj = '' # 当前操作的物体是左耳还是右耳
 
 border_vert = [ ] # 记录最外圈的顶点坐标
+is_saved = False # 记录圆球的位置是否被保存
+
 # 复制初始模型，并赋予透明材质
 
 
@@ -416,11 +419,10 @@ def initCircle(obj_name):
     # 获取目标物体的编辑模式网格
 
     obj_main.data.materials.clear()
-    if (checkinitialModelColor() == False):
-        initialModelColor()
+    newColor('yellow', 1.0, 0.319, 0.133, 0, 1)
+    obj_main.data.materials.clear()
     obj_main.data.materials.append(bpy.data.materials['yellow'])
-    if (checkinitialTransparency() == False):
-        initialTransparency()
+    newColor('yellow2', 1.0, 0.319, 0.133, 1, 0.5)
     obj_compare = bpy.data.objects[obj_name+'huanqiecompare']
     obj_compare.data.materials.clear()
     obj_compare.data.materials.append(bpy.data.materials['yellow2'])
@@ -495,7 +497,7 @@ def initCircle(obj_name):
     elif obj_name == '左耳':
         moveToLeft(obj)
     # 环体颜色
-    initialTorusColor()
+    newColor('red', 1, 0, 0, 0, 1)
     obj.data.materials.clear()
     obj.data.materials.append(bpy.data.materials['red'])
     # 选择圆环
@@ -608,32 +610,27 @@ def new_plane(name):
 
     bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.mesh.normals_make_consistent(inside=True)
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type='EDGE')
+    bm.edges.ensure_lookup_table()
+    bm.edges[2].select = True
 
     # 更新网格数据
     bmesh.update_edit_mesh(obj.data)
+    bpy.ops.transform.edge_bevelweight(value=1, snap=False)
 
     # 切换回对象模式
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    object = bpy.context.active_object
-    bm = bmesh.new()
-    bm.from_mesh(object.data)
-    bm.faces.ensure_lookup_table()
-    bm.faces[1].normal_flip()
-    object.hide_set(True)
+    obj.hide_set(True)
 
     # 添加倒角修改器
-    bool_modifier = object.modifiers.new(
+    bool_modifier = obj.modifiers.new(
         name="smooth", type='BEVEL')
     bool_modifier.segments = 16
     bool_modifier.width = bpy.context.scene.qiegeneiBianYuan
-    bool_modifier.limit_method = 'NONE'
+    bool_modifier.limit_method = 'WEIGHT'
 
-    # 添加表面细分修改器
-    # bool_modifier2 = object.modifiers.new(
-    #     name="subsurf", type='SUBSURF')
-    # bool_modifier2.subdivision_type = 'SIMPLE'
-    # bool_modifier2.levels = 4
 
 def update_plane(obj_name):
     # 获取坐标
@@ -667,93 +664,23 @@ def update_plane(obj_name):
     # 更新网格数据
     mesh.to_mesh(bm)
     mesh.free()
-    # getborder(obj_name)
+    
 
-def getborder(obj_name):
-    global border_vert
-    obj = bpy.data.objects[obj_name + 'StepCutplane']
-    name = obj.name
-    duplicate_obj = obj.copy()
-    duplicate_obj.data = obj.data.copy()
-    duplicate_obj.name = name + "forgetborder"
-    duplicate_obj.animation_data_clear()
-    # 将复制的物体加入到场景集合中
-    scene = bpy.context.scene
-    scene.collection.objects.link(duplicate_obj)
-    bpy.context.view_layer.objects.active = duplicate_obj
-    bpy.ops.object.modifier_remove(modifier="subsurf")
-    bpy.ops.object.modifier_remove(modifier="smooth")
+# 新建与RGB颜色相同的材质
+def newColor(id, r, g, b, is_transparency, transparency_degree):
+    mat = newMaterial(id)
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    output = nodes.new(type='ShaderNodeOutputMaterial')
+    shader = nodes.new(type='ShaderNodeBsdfPrincipled')
+    shader.inputs[0].default_value = (r, g, b, 1)
+    links.new(shader.outputs[0], output.inputs[0])
+    if is_transparency:
+        mat.blend_method = "BLEND"
+        shader.inputs[21].default_value = transparency_degree
+    return mat
 
-    obj2 = bpy.data.objects[obj_name]
-    name = obj2.name
-    duplicate_obj2 = obj2.copy()
-    duplicate_obj2.data = obj2.data.copy()
-    duplicate_obj2.name = name + "forgetborder"
-    duplicate_obj2.animation_data_clear()
-    # 将复制的物体加入到场景集合中
-    scene = bpy.context.scene
-    scene.collection.objects.link(duplicate_obj2)
-    bpy.context.view_layer.objects.active = duplicate_obj2
-    bpy.ops.object.modifier_remove(modifier="step cut")
-    bool_modifier = duplicate_obj2.modifiers.new(
-        name="step cut2", type='BOOLEAN')
-    bool_modifier.operation = 'DIFFERENCE'
-    bool_modifier.object = duplicate_obj
-    bpy.ops.object.modifier_apply(modifier="step cut2")
-    bpy.ops.object.select_all(action='DESELECT')
-    duplicate_obj2.select_set(state=True)
-    bpy.ops.object.mode_set(mode='EDIT')
-    bm = bmesh.from_edit_mesh(duplicate_obj2.data)
-    border_vert = [v.co for v in bm.verts if v.select]
-    bpy.ops.object.mode_set(mode='OBJECT')
-    bpy.data.objects.remove(duplicate_obj, do_unlink=True)
-    bpy.data.objects.remove(duplicate_obj2, do_unlink=True)
-
-def initialModelColor():
-    yellow_material = bpy.data.materials.new(name="yellow")
-    yellow_material.use_nodes = True
-    bpy.data.materials["yellow"].node_tree.nodes["Principled BSDF"].inputs[0].default_value = (
-        1.0, 0.319, 0.133, 1.0)
-
-
-# 初始化圆环颜色
-def initialTorusColor():
-    yellow_material = bpy.data.materials.new(name="red")
-    yellow_material.use_nodes = True
-    bpy.data.materials["red"].node_tree.nodes["Principled BSDF"].inputs[0].default_value = (
-        1.0, 0.0, 0, 1.0)
-
-
-def checkinitialModelColor():
-    materials = bpy.data.materials
-    for material in materials:
-        if material.name == 'yellow':
-            return True
-    return False
-
-
-def initialTransparency():
-    yellow_material_t = bpy.data.materials.new(name="yellow2")
-    yellow_material_t.use_nodes = True
-    bpy.data.materials["yellow2"].node_tree.nodes["Principled BSDF"].inputs[0].default_value = (
-        1.0, 0.319, 0.133, 1.0)
-    yellow_material_t.blend_method = "BLEND"
-    yellow_material_t.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.5
-
-
-def checkinitialTransparency():
-    materials = bpy.data.materials
-    for material in materials:
-        if material.name == 'yellow2':
-            return True
-    return False
-
-def checkinitialRed():
-    materials = bpy.data.materials
-    for material in materials:
-        if material.name == 'Red':
-            return True
-    return False
+  
 
 # 确定四个圆球的位置
 def initsphereloc(obj_name):
@@ -793,7 +720,6 @@ def initsphereloc(obj_name):
         l_old_loc_sphere3 = old_loc_sphere3
         l_old_loc_sphere4 = old_loc_sphere4
 
-    
 
 
 # 初始化侧切模块中用于切割的平面
@@ -802,12 +728,15 @@ def initPlane(obj_name):
     global r_old_loc_sphere1,r_old_loc_sphere2,r_old_loc_sphere3,r_old_loc_sphere4
     global l_old_loc_sphere1,l_old_loc_sphere2,l_old_loc_sphere3,l_old_loc_sphere4
     global operator_obj
+    global is_saved
 
     operator_obj = obj_name
 
     qiegeenum = 2
     # 初始化4个点位置
-    initsphereloc(obj_name)
+
+    if not is_saved:
+        initsphereloc(obj_name)
 
     if obj_name == '右耳':
         old_loc_sphere1 = r_old_loc_sphere1
@@ -825,12 +754,11 @@ def initPlane(obj_name):
     new_sphere(obj_name+'StepCutSphere2', old_loc_sphere2)
     new_sphere(obj_name+'StepCutSphere3', old_loc_sphere3)
     new_sphere(obj_name+'StepCutSphere4', old_loc_sphere4)
+    saveStep(obj_name)    
     new_plane(obj_name+'StepCutplane')
 
-    if checkinitialRed() == False:
-        bpy.data.materials.new(name="Red")
-    red_material = bpy.data.materials['Red']
-    red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+    newColor('red', 1, 0, 0, 0, 1)
+    red_material = bpy.data.materials['red']
     bpy.data.objects[obj_name+'StepCutSphere1'].data.materials.append(red_material)
     bpy.data.objects[obj_name+'StepCutSphere2'].data.materials.append(red_material)
     bpy.data.objects[obj_name+'StepCutSphere3'].data.materials.append(red_material)
@@ -862,10 +790,8 @@ def initPlane(obj_name):
             obj.hide_select = True
             obj_copy.hide_select = True
 
-    if (checkinitialModelColor() == False):
-        initialModelColor()
-    if (checkinitialTransparency() == False):
-        initialTransparency()
+    newColor('yellow', 1.0, 0.319, 0.133, 0, 1)
+    newColor('yellow2', 1.0, 0.319, 0.133, 1, 0.5)
 
     bpy.data.objects[obj_name].data.materials.clear()
     bpy.data.objects[obj_name].data.materials.append(bpy.data.materials['yellow'])
@@ -1064,8 +990,8 @@ def quitCut():
         obj = bpy.data.objects[operator_obj+"huanqiecompare"]
         obj.hide_set(False)
         bpy.context.view_layer.objects.active = obj
-        obj.name = '右耳'
-        obj.data.materials.clear()
+        obj.name = operator_obj
+        
     # 已切割
     # else:
     #     print('已切割')
@@ -1076,9 +1002,11 @@ def quitCut():
 
 def quitStepCut(obj_name):
     global finish
-
+    global is_saved
     # 切割未完成
     if finish == False:
+        saveStep(obj_name)
+        is_saved = True
         for i in bpy.context.visible_objects:  # 迭代所有可见物体,激活当前物体
             if i.name == obj_name:
                 bpy.context.view_layer.objects.active = i
@@ -1112,7 +1040,6 @@ def quitStepCut(obj_name):
     #     obj_main = bpy.data.objects['右耳']
     #     oridata.to_mesh(obj_main.data)
 
-
 class Circle_Cut(bpy.types.Operator):
     bl_idname = "object.circlecut"
     bl_label = "圆环切割"
@@ -1126,6 +1053,7 @@ class Circle_Cut(bpy.types.Operator):
     __initial_mouse_x = None  # 点击鼠标右键的初始位置
     __initial_mouse_y = None
     __is_moving = False
+    __running = False
 
     def invoke(self, context, event):
 
@@ -1133,21 +1061,27 @@ class Circle_Cut(bpy.types.Operator):
 
         global qiegeenum
         qiegeenum = 1
+        if not self.is_running():
+            print('invokeCir')
 
-        print('invokeCir')
+            op_cls.__initial_rotation_x = None
+            op_cls.__initial_rotation_y = None
+            op_cls.__left_mouse_down = False
+            op_cls.__right_mouse_down = False
+            op_cls.__now_mouse_x = None
+            op_cls.__now_mouse_y = None
+            op_cls.__initial_mouse_x = None
+            op_cls.__initial_mouse_y = None
 
-        op_cls.__initial_rotation_x = None
-        op_cls.__initial_rotation_y = None
-        op_cls.__left_mouse_down = False
-        op_cls.__right_mouse_down = False
-        op_cls.__now_mouse_x = None
-        op_cls.__now_mouse_y = None
-        op_cls.__initial_mouse_x = None
-        op_cls.__initial_mouse_y = None
+            op_cls.__running = True
 
-        context.window_manager.modal_handler_add(self)
-        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-        return {'RUNNING_MODAL'}
+            context.window_manager.modal_handler_add(self)
+            # bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+            return {'RUNNING_MODAL'}
+        else:
+            print('finishCir')
+            op_cls.__running = False
+            return {'FINISHED'}
 
     def modal(self, context, event):
         global old_radius, finish
@@ -1156,6 +1090,10 @@ class Circle_Cut(bpy.types.Operator):
 
         if context.area:
             context.area.tag_redraw()
+
+        if not self.is_running():
+            return {'FINISHED'}
+
         # 未切割时起效
         if finish == False:
             if qiegeenum == 1:
@@ -1167,16 +1105,17 @@ class Circle_Cut(bpy.types.Operator):
                 area2 = override2['area']
 
                 workspace = bpy.context.window.workspace.name
-                # 双窗口模式下
-                if workspace == '布局.001':
-                    # 根据鼠标位置判断当前操作窗口
-                    if(mouse_x > area.width and mouse_y > area2.y):
-                        # print('右窗口')
-                        operator_obj = context.scene.rightWindowObj
-                    else:
-                        # print('左窗口')
-                        operator_obj = context.scene.leftWindowObj
+                # # 双窗口模式下
+                # if workspace == '布局.001':
+                #     # 根据鼠标位置判断当前操作窗口
+                #     if(mouse_x > area.width and mouse_y > area2.y):
+                #         # print('右窗口')
+                #         operator_obj = context.scene.rightWindowObj
+                #     else:
+                #         # print('左窗口')
+                #         operator_obj = context.scene.leftWindowObj
 
+                operator_obj = context.scene.leftWindowObj
                 obj_torus = bpy.data.objects[operator_obj+'Torus']
                 active_obj = bpy.data.objects[operator_obj+'Circle']
                 bpy.ops.object.select_all(action='DESELECT')
@@ -1364,6 +1303,9 @@ class Circle_Cut(bpy.types.Operator):
         else:
             return {'PASS_THROUGH'}
 
+    @classmethod
+    def is_running(cls):
+        return cls.__running
 
 class Step_Cut(bpy.types.Operator):
     bl_idname = "object.stepcut"
@@ -1483,8 +1425,11 @@ class Finish_Cut(bpy.types.Operator):
             # 完成切割
             finish = True
             saveStep(operator_obj)
+            global is_saved
+            is_saved = True
             for i in bpy.context.visible_objects:
                 if i.name == operator_obj:
+                    i.hide_select = False
                     bpy.context.view_layer.objects.active = i
                     bpy.ops.object.modifier_apply(modifier="step cut",single_user=True)
             for i in bpy.context.visible_objects:
@@ -1548,6 +1493,8 @@ class Reset_Cut(bpy.types.Operator):
             # 回到原来的位置
             global r_old_loc_sphere1, r_old_loc_sphere2, r_old_loc_sphere3, r_old_loc_sphere4
             initsphereloc(operator_obj)
+            global is_saved
+            is_saved = False
             # 回到原来的位置
             bpy.data.objects[operator_obj+'StepCutSphere1'].location = r_old_loc_sphere1
             bpy.data.objects[operator_obj+'StepCutSphere2'].location = r_old_loc_sphere2
@@ -1746,8 +1693,8 @@ def frontToQieGe():
     if enum == "OP1":
         initCircle('右耳')
         workspace = bpy.context.window.workspace.name
-        if workspace == '布局.001':
-            initCircle('左耳')
+        # if workspace == '布局.001':
+        #     initCircle('左耳')
     if enum == "OP2":
         initPlane('右耳')
         workspace = bpy.context.window.workspace.name
@@ -1760,12 +1707,12 @@ def frontFromQieGe():
     enum = bpy.context.scene.qieGeTypeEnum
     if enum == "OP1":
         quitCut()
-        initialModelColor()
-        bpy.data.objects[operator_obj].data.materials.append(bpy.data.materials['yellow'])
+        bpy.data.objects[operator_obj].data.materials.clear()
+        bpy.data.objects[operator_obj].data.materials.append(bpy.data.materials['Yellow'])
     if enum == "OP2":
         quitStepCut(operator_obj)
-        initialModelColor()
-        bpy.data.objects[operator_obj].data.materials.append(bpy.data.materials['yellow'])
+        bpy.data.objects[operator_obj].data.materials.clear()
+        bpy.data.objects[operator_obj].data.materials.append(bpy.data.materials['Yellow'])
     # 将切割模式中运行的Model退出
     qiegeenum = 0
 

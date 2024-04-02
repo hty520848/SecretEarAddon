@@ -13,7 +13,6 @@ prev_on_object = False
 
 prev_on_object_stepcut = 5
 
-
 # 厚度显示
 class MyHandleClass:
     _handler = None
@@ -427,6 +426,14 @@ def is_mouse_on_object(context, event):
     region1 = override1['region']
     region2 = override2['region']
     area = override2['area']
+    # if context.window.workspace.name == '布局':
+    #     region1 = bpy.data.workspaces['布局'].screens[0].areas[3].regions[0]
+    #     region2 = bpy.data.workspaces['布局'].screens[0].areas[4].regions[0]
+    # else:
+    #     region1 = bpy.data.workspaces['布局.001'].screens[0].areas[3].regions[0]
+    #     region2 = bpy.data.workspaces['布局.001'].screens[0].areas[4].regions[0]
+    #     area = bpy.data.workspaces['布局.001'].screens[0].areas[4]
+    
     if event.mouse_region_x > region1.width:
         new_x = event.mouse_region_x - region1.width
         mv = mathutils.Vector((new_x, event.mouse_region_y))
@@ -686,6 +693,7 @@ def is_changed_stepcut(obj_name,context, event):
 
 
 def convert_to_mesh(curve_name, mesh_name, depth):
+    last_active_obj = bpy.context.active_object
     active_obj = bpy.data.objects[curve_name]
     duplicate_obj = active_obj.copy()
     duplicate_obj.data = active_obj.data.copy()
@@ -702,7 +710,9 @@ def convert_to_mesh(curve_name, mesh_name, depth):
     duplicate_obj.select_set(state=True)
     bpy.context.object.data.bevel_depth = depth  # 设置曲线倒角深度
     bpy.ops.object.convert(target='MESH')  # 转化为网格
-    duplicate_obj.select_set(state=False)
+    bpy.context.view_layer.objects.active = last_active_obj
+    bpy.ops.object.select_all(action='DESELECT')
+    last_active_obj.select_set(state=True)
 
 def recover_and_remind_border():
     '''
@@ -785,14 +795,6 @@ def recover_to_dig():
         # todo 先加到右耳集合，后续调整左右耳适配
         moveToRight(duplicate_obj)
 
-        duplicate_obj = cur_obj.copy()
-        duplicate_obj.data = cur_obj.data.copy()
-        duplicate_obj.animation_data_clear()
-        duplicate_obj.name = cur_obj.name + "OriginForFill"
-        bpy.context.collection.objects.link(duplicate_obj)
-        duplicate_obj.hide_set(True)
-        moveToRight(duplicate_obj)
-
 
 def utils_re_color(target_object_name, color):
     flag = False
@@ -827,6 +829,7 @@ def delete_useless_object(need_to_delete_model_name_list):
 
 
 def subdivide(curve_name, subdivide_number):
+    last_active_obj = bpy.context.active_object
     bpy.ops.object.select_all(action='DESELECT')
     bpy.context.view_layer.objects.active = bpy.data.objects[curve_name]
     bpy.data.objects[curve_name].select_set(True)
@@ -834,7 +837,10 @@ def subdivide(curve_name, subdivide_number):
     bpy.ops.curve.select_all(action='SELECT')
     bpy.ops.curve.subdivide(number_cuts=subdivide_number)  # 细分次数
     bpy.ops.object.mode_set(mode='OBJECT')
-    bpy.data.objects[curve_name].select_set(False)
+    bpy.context.view_layer.objects.active = last_active_obj
+    bpy.ops.object.select_all(action='DESELECT')
+    last_active_obj.select_set(state=True)
+
 
 # 计算原点与给定坐标点之间的角度（弧度）
 def calculate_angle(x, y):

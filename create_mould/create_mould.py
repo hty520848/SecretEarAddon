@@ -178,6 +178,10 @@ def backFromCreateMould():
     enum = bpy.context.scene.muJuTypeEnum
     if enum == "OP1":
         set_finish(True)
+        
+    bpy.context.view_layer.objects.active = bpy.data.objects['右耳']
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.data.objects['右耳'].select_set(state=True)
 
 
 def apply_template():

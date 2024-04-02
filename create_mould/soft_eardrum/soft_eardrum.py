@@ -379,11 +379,11 @@ def delete_useless_part():
     # 最后删掉没用的CutPlane
     bpy.data.objects.remove(bpy.data.objects["CutPlane"], do_unlink=True)
 
-def clear_co_and_normal():
+def soft_clear_co_and_normal():
     global border_vert_co_and_normal
     border_vert_co_and_normal = [ ]
 
-def set_co_and_normal(co, normal):
+def soft_set_co_and_normal(co, normal):
     global border_vert_co_and_normal
     border_vert_co_and_normal.append((co, normal))
 

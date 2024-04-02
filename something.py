@@ -582,3 +582,77 @@ bpy.msgbus.subscribe_rna(
 
 def msgbus_callback3(*args):
     bpy.ops.object.msgbuscallback3('INVOKE_DEFAULT')
+
+def getOverride():
+    area_type = 'PROPERTIES'  # change this to use the correct Area Type context you want to process in
+    areas = [area for area in bpy.context.window.screen.areas if area.type == area_type]
+
+    if len(areas) <= 0:
+        raise Exception(f"Make sure an Area of type {area_type} is open or visible in your screen!")
+
+    override = {
+        'window': bpy.context.window,
+        'screen': bpy.context.window.screen,
+        'area': areas[0],
+        'region': [region for region in areas[0].regions if region.type == 'WINDOW'][0],
+    }
+
+    return override
+
+def getOverride2():
+    area_type = 'VIEW_3D'  # change this to use the correct Area Type context you want to process in
+    areas = [area for area in bpy.context.window.screen.areas if area.type == area_type]
+
+    if len(areas) <= 0:
+        raise Exception(f"Make sure an Area of type {area_type} is open or visible in your screen!")
+
+    override = {
+        'window': bpy.context.window,
+        'screen': bpy.context.window.screen,
+        'area': areas[1],
+        'region': [region for region in areas[1].regions if region.type == 'WINDOW'][0],
+    }
+
+    return override
+
+def getOverride3():
+    area_type = 'VIEW_3D'  # change this to use the correct Area Type context you want to process in
+    areas = [area for area in bpy.context.window.screen.areas if area.type == area_type]
+
+    if len(areas) <= 0:
+        raise Exception(f"Make sure an Area of type {area_type} is open or visible in your screen!")
+
+    override = {
+        'window': bpy.context.window,
+        'screen': bpy.context.window.screen,
+        'area': areas[2],
+        'region': [region for region in areas[2].regions if region.type == 'WINDOW'][0],
+    }
+
+    return override
+
+class HUIER_OT_closearea(bpy.types.Operator):
+    bl_idname = "obj.closearea"
+    bl_label = "关闭区域"
+    
+    def execute(self, context):
+        override = getOverride()
+        with bpy.context.temp_override(**override):
+            bpy.ops.screen.area_close()
+        
+        return {'FINISHED'}
+
+class HUIER_OT_addarea(bpy.types.Operator):
+    bl_idname = "obj.addarea"
+    bl_label = "新增区域"
+    
+    def execute(self, context):
+        override = getOverride2()
+        with bpy.context.temp_override(**override):
+           bpy.ops.screen.area_split(direction='HORIZONTAL', factor=0.5, cursor=(0, 0))
+        
+        override = getOverride3()
+        with bpy.context.temp_override(**override):
+           bpy.context.area.ui_type = 'PROPERTIES'
+
+        return {'FINISHED'}
