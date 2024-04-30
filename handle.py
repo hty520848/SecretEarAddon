@@ -26,68 +26,127 @@ def initialTransparency():
     mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.01
 
 
-# 判断鼠标是否在物体上
-def is_mouse_on_object(context, event):
-    name = "Cube"  # TODO      右耳为导入的模型名称
-    obj = bpy.data.objects[name]
+# 判断鼠标是否在上
+def is_mouse_on_handle(context, event):
+    name = "Cube"
+    obj = bpy.data.objects.get(name)
+    if (obj != None):
+        is_on_object = False  # 初始化变量
 
-    is_on_object = False  # 初始化变量
+        if context.area:
+            context.area.tag_redraw()
 
-    if context.area:
-        context.area.tag_redraw()
+        # 获取鼠标光标的区域坐标
+        mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
 
-    # 获取鼠标光标的区域坐标
-    mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
+        # 获取信息和空间信息
+        region, space = get_region_and_space(
+            context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
+        )
 
-    # 获取信息和空间信息
-    region, space = get_region_and_space(
-        context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
-    )
+        ray_dir = view3d_utils.region_2d_to_vector_3d(
+            region,
+            space.region_3d,
+            mv
+        )
+        ray_orig = view3d_utils.region_2d_to_origin_3d(
+            region,
+            space.region_3d,
+            mv
+        )
 
-    ray_dir = view3d_utils.region_2d_to_vector_3d(
-        region,
-        space.region_3d,
-        mv
-    )
-    ray_orig = view3d_utils.region_2d_to_origin_3d(
-        region,
-        space.region_3d,
-        mv
-    )
+        start = ray_orig
+        end = ray_orig + ray_dir
 
-    start = ray_orig
-    end = ray_orig + ray_dir
+        # 确定光线和对象的相交
+        mwi = obj.matrix_world.inverted()
+        mwi_start = mwi @ start
+        mwi_end = mwi @ end
+        mwi_dir = mwi_end - mwi_start
 
-    # 确定光线和对象的相交
-    mwi = obj.matrix_world.inverted()
-    mwi_start = mwi @ start
-    mwi_end = mwi @ end
-    mwi_dir = mwi_end - mwi_start
+        if obj.type == 'MESH':
+            if (obj.mode == 'OBJECT' or obj.mode == "SCULPT"):
+                mesh = obj.data
+                bm = bmesh.new()
+                bm.from_mesh(mesh)
+                tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
 
-    if obj.type == 'MESH':
-        if (obj.mode == 'OBJECT' or obj.mode == "SCULPT"):
-            mesh = obj.data
-            bm = bmesh.new()
-            bm.from_mesh(mesh)
-            tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
+                _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
 
-            _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
-
-            if fidx is not None:
-                is_on_object = True  # 如果发生交叉，将变量设为True
-    return is_on_object
+                if fidx is not None:
+                    is_on_object = True  # 如果发生交叉，将变量设为True
+        return is_on_object
+    return False
 
 
 # 判断鼠标状态是否发生改变
 def is_changed(context, event):
-    name = "Cube"  # TODO     右耳为导入的模型名称
-    obj = bpy.data.objects[name]
+    name = "Cube"
+    obj = bpy.data.objects.get(name)
+    if (obj != None):
+        curr_on_object = False  # 当前鼠标是否在物体上,初始化为False
+        global prev_on_object  # 之前鼠标是否在物体上
 
-    curr_on_object = False  # 当前鼠标是否在物体上,初始化为False
-    global prev_on_object  # 之前鼠标是否在物体上
+        if context.area:
+            context.area.tag_redraw()
 
-    if context.area:
-        context.area.tag_redraw()
+        # 获取鼠标光标的区域坐标
+        mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
+
+        # 获取信息和空间信息
+        region, space = get_region_and_space(
+            context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
+        )
+
+        ray_dir = view3d_utils.region_2d_to_vector_3d(
+            region,
+            space.region_3d,
+            mv
+        )
+        ray_orig = view3d_utils.region_2d_to_origin_3d(
+            region,
+            space.region_3d,
+            mv
+        )
+
+        start = ray_orig
+        end = ray_orig + ray_dir
+
+        # 确定光线和对象的相交
+        mwi = obj.matrix_world.inverted()
+        mwi_start = mwi @ start
+        mwi_end = mwi @ end
+        mwi_dir = mwi_end - mwi_start
+
+        if obj.type == 'MESH':
+            if (obj.mode == 'OBJECT' or obj.mode == "SCULPT"):
+                mesh = obj.data
+                bm = bmesh.new()
+                bm.from_mesh(mesh)
+                tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
+
+                _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
+
+                if fidx is not None:
+                    curr_on_object = True  # 如果发生交叉，将变量设为True
+        if (curr_on_object != prev_on_object):
+            prev_on_object = curr_on_object
+            return True
+        else:
+            return False
+    return False
+
+
+
+#获取鼠标在右耳上的坐标
+def cal_co(context, event):
+    '''
+    返回鼠标点击位置的坐标，没有相交则返回-1
+    :return: 相交的坐标
+    '''
+
+    active_obj = bpy.data.objects["右耳"]
+    co = []
 
     # 获取鼠标光标的区域坐标
     mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
@@ -96,7 +155,6 @@ def is_changed(context, event):
     region, space = get_region_and_space(
         context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
     )
-
     ray_dir = view3d_utils.region_2d_to_vector_3d(
         region,
         space.region_3d,
@@ -112,28 +170,24 @@ def is_changed(context, event):
     end = ray_orig + ray_dir
 
     # 确定光线和对象的相交
-    mwi = obj.matrix_world.inverted()
+    mwi = active_obj.matrix_world.inverted()
     mwi_start = mwi @ start
     mwi_end = mwi @ end
     mwi_dir = mwi_end - mwi_start
 
-    if obj.type == 'MESH':
-        if (obj.mode == 'OBJECT' or obj.mode == "SCULPT"):
-            mesh = obj.data
+    if active_obj.type == 'MESH':
+        if active_obj.mode == 'OBJECT':
+            mesh = active_obj.data
             bm = bmesh.new()
             bm.from_mesh(mesh)
             tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
 
-            _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
+            co, _, _, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
 
-            if fidx is not None:
-                curr_on_object = True  # 如果发生交叉，将变量设为True
-    if (curr_on_object != prev_on_object):
-        prev_on_object = curr_on_object
-        return True
-    else:
-        return False
+            if co is not None:
+                return co  # 如果发生交叉，返回坐标的值
 
+    return -1
 
 def frontToHandle():
     all_objs = bpy.data.objects
@@ -167,6 +221,12 @@ def frontFromHandle():
         bpy.data.objects.remove(handle_compare_obj, do_unlink=True)
     if (plane_obj != None):
         bpy.data.objects.remove(plane_obj, do_unlink=True)
+
+
+    #还原透明材质
+    mat = newShader("Transparency")  # 创建材质
+    mat.blend_method = "BLEND"
+    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
 
     name = "右耳"  # TODO    根据导入文件名称更改Handle
     obj = bpy.data.objects[name]
@@ -285,6 +345,11 @@ def backFromHandle():
     saveInfo()
     handleSubmit()
 
+    # 还原透明材质
+    mat = newShader("Transparency")  # 创建材质
+    mat.blend_method = "BLEND"
+    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
+
     all_objs = bpy.data.objects
     for selected_obj in all_objs:
         if (selected_obj.name == "右耳HandleLast"):
@@ -331,7 +396,6 @@ def initial():
     global prev_rotation_z
     global prev_handle_offset
     global is_add_handle
-
     if(is_add_handle == True):
         addHandle()
         # 将Plane激活并选中
@@ -347,6 +411,8 @@ def initial():
         plane_obj.rotation_euler[2] = prev_rotation_z
         bpy.ops.object.handleadd('INVOKE_DEFAULT')
         bpy.context.scene.erMoFuJianOffset = prev_handle_offset
+    else:
+        bpy.ops.wm.tool_set_by_id(name="my_tool.handle_add")
 
 
 
@@ -416,20 +482,30 @@ def handleSubmit():
 
 def addHandle():
     # 添加平面Plane和附件Cube
-    bpy.ops.mesh.primitive_cube_add(enter_editmode=False, align='WORLD', location=(-20, 6, 1), scale=(1, 1, 1))
-    bpy.ops.mesh.primitive_cube_add(enter_editmode=False, align='WORLD', location=(-20, 6, 1), scale=(1, 1, 1))
-    bpy.ops.mesh.primitive_plane_add(enter_editmode=False, align='WORLD', location=(-20, 6, 0), scale=(1, 1, 1))
+    # bpy.ops.mesh.primitive_cube_add(enter_editmode=False, align='WORLD', location=(-20, 6, 1), scale=(1, 1, 1))
+    # bpy.ops.mesh.primitive_cube_add(enter_editmode=False, align='WORLD', location=(-20, 6, 1), scale=(1, 1, 1))
+    bpy.ops.wm.stl_import(filepath="C:\\Users\\28712\Desktop\\耳膜附件\\软耳膜附件.stl")
+    bpy.ops.wm.stl_import(filepath="C:\\Users\\28712\Desktop\\耳膜附件\\软耳膜附件.stl")
+    bpy.ops.mesh.primitive_plane_add(enter_editmode=False, align='WORLD', location=(-100, -100, 0), scale=(4, 1.6, 1))
 
     name = "右耳"  # TODO    根据导入文件名称更改
     obj = bpy.data.objects[name]
-    cubename = "Cube"
+    cubename = "软耳膜附件"
     cube_obj = bpy.data.objects[cubename]
+    cube_obj.name = "Cube"
+    cube_obj.location[0] = -100
+    cube_obj.location[1] = -100
     moveToRight(cube_obj)
-    cubecomparename = "Cube.001"
+    cubecomparename = "软耳膜附件.001"
     cube_compare_obj = bpy.data.objects[cubecomparename]
+    cube_compare_obj.name = "Cube.001"
+    cube_compare_obj.location[0] = -100
+    cube_compare_obj.location[1] = -100
     moveToRight(cube_compare_obj)
     planename = "Plane"
     plane_obj = bpy.data.objects[planename]
+    plane_obj.scale[0] = 4
+    plane_obj.scale[1] = 1.6
     moveToRight(plane_obj)
 
     # 为附件添加材质
@@ -493,6 +569,10 @@ def addHandle():
     plane_obj.location[1] = 10
     plane_obj.location[2] = 10
 
+    plane_obj.scale[0] = 2
+    plane_obj.scale[1] = 0.8
+    plane_obj.scale[2] = 0.5
+
 
 class HandleReset(bpy.types.Operator):
     bl_idname = "object.handlereset"
@@ -508,8 +588,9 @@ class HandleReset(bpy.types.Operator):
         return {'FINISHED'}
 
     def execute(self, context):
-        print("附件重置")
+        saveInfo()
         handleReset()
+        bpy.ops.wm.tool_set_by_id(name="my_tool.handle_add")
         return {'FINISHED'}
 
 
@@ -521,17 +602,22 @@ class HandleAdd(bpy.types.Operator):
 
         bpy.context.scene.var = 14
         global is_add_handle
+        global prev_handle_offset
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
         if (not is_add_handle):
             is_add_handle = True
             addHandle()
+            bpy.context.scene.erMoFuJianOffset = prev_handle_offset
             # 将Plane激活并选中
             planename = "Plane"
             plane_obj = bpy.data.objects.get(planename)
             plane_obj.select_set(True)
             bpy.context.view_layer.objects.active = plane_obj
+            co = cal_co(context, event)
+            if(co != -1):
+                plane_obj.location = co
 
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
@@ -539,21 +625,31 @@ class HandleAdd(bpy.types.Operator):
     def modal(self, context, event):
         cubename = "Cube"
         handle_obj = bpy.data.objects.get(cubename)
+        planename = "Plane"
+        plane_obj = bpy.data.objects.get(planename)
+        cur_obj_name = "右耳"
+        cur_obj = bpy.data.objects.get(cur_obj_name)
         if (bpy.context.scene.var == 14):
-            if (is_mouse_on_object(context, event) and is_changed(context, event)):
+            if (is_mouse_on_handle(context, event) and is_changed(context, event)):
                 # 调用handle的鼠标行为,将附件设置为选中的颜色
                 yellow_material = bpy.data.materials.new(name="Yellow")
                 yellow_material.diffuse_color = (1.0, 1.0, 0.0, 1.0)
                 handle_obj.data.materials.clear()
                 handle_obj.data.materials.append(yellow_material)
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
-            elif ((not is_mouse_on_object(context, event)) and is_changed(context, event)):
+                plane_obj.select_set(True)
+                bpy.context.view_layer.objects.active = plane_obj
+                cur_obj.select_set(False)
+            elif ((not is_mouse_on_handle(context, event)) and is_changed(context, event)):
                 # 调用公共鼠标行为,将附件设置为默认颜色
                 red_material = bpy.data.materials.new(name="Red")
                 red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
                 handle_obj.data.materials.clear()
                 handle_obj.data.materials.append(red_material)
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                cur_obj.select_set(True)
+                bpy.context.view_layer.objects.active = cur_obj
+                plane_obj.select_set(False)
             return {'PASS_THROUGH'}
         else:
             return {'FINISHED'}
@@ -571,7 +667,7 @@ class HandleSubmit(bpy.types.Operator):
         return {'FINISHED'}
 
     def execute(self, context):
-        print("附件提交")
+        saveInfo()
         handleSubmit()
         return {'FINISHED'}
 
@@ -610,8 +706,12 @@ class MyTool_Handle2(WorkSpaceTool):
     bl_icon = "ops.pose.relax"
     bl_widget = None
     bl_keymap = (
-        ("object.handleadd", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
+        # ("object.handleadd", {"type": 'MOUSEMOVE', "value": 'ANY'},
+        #  {}),
+        ("object.handleadd", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
+        ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
+        ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
     )
 
     def draw_settings(context, layout, tool):
@@ -650,14 +750,14 @@ _classes = [
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
-    # bpy.utils.register_tool(MyTool_Handle1, separator=True, group=False)
-    # bpy.utils.register_tool(MyTool_Handle2, separator=True, group=False, after={MyTool_Handle1.bl_idname})
-    # bpy.utils.register_tool(MyTool_Handle3, separator=True, group=False, after={MyTool_Handle2.bl_idname})
+    bpy.utils.register_tool(MyTool_Handle1, separator=True, group=False)
+    bpy.utils.register_tool(MyTool_Handle2, separator=True, group=False, after={MyTool_Handle1.bl_idname})
+    bpy.utils.register_tool(MyTool_Handle3, separator=True, group=False, after={MyTool_Handle2.bl_idname})
 
 
 def unregister():
     for cls in _classes:
         bpy.utils.unregister_class(cls)
-    # bpy.utils.unregister_tool(MyTool_Handle1)
-    # bpy.utils.unregister_tool(MyTool_Handle2)
-    # bpy.utils.unregister_tool(MyTool_Handle3)
+    bpy.utils.unregister_tool(MyTool_Handle1)
+    bpy.utils.unregister_tool(MyTool_Handle2)
+    bpy.utils.unregister_tool(MyTool_Handle3)

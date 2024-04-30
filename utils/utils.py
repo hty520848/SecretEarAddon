@@ -1,6 +1,7 @@
 import bpy
 import bmesh
 import math
+from ..tool import set_vert_group,moveToRight
 
 
 # 获取VIEW_3D区域的上下文
@@ -26,11 +27,13 @@ def utils_get_override():
 
 # 对顶点进行排序用于画圈
 def utils_get_order_border_vert(selected_verts):
+    size = len(selected_verts)
+    finish = False
     # 尝试使用距离最近的点
     order_border_vert = []
     now_vert = selected_verts[0]
     unprocessed_vertex = selected_verts  # 未处理顶点
-    while len(unprocessed_vertex) > 1:
+    while len(unprocessed_vertex) > 1 and not finish:
         order_border_vert.append(now_vert)
         unprocessed_vertex.remove(now_vert)
 
@@ -43,6 +46,8 @@ def utils_get_order_border_vert(selected_verts):
             if distance < min_distance:
                 min_distance = distance
                 now_vert = vert
+        if min_distance > 2 and len(unprocessed_vertex) < 0.1 * size:
+            finish = True
 
     return order_border_vert
 
@@ -107,7 +112,7 @@ def utils_re_color(target_object_name, color):
 def utils_copy_object(origin_name, copy_name):
     copy_flag = False
     for obj in bpy.context.view_layer.objects:
-        if obj.name == "origin_name":
+        if obj.name == origin_name:
             copy_flag = True
             cur_obj = obj
             break
@@ -118,42 +123,100 @@ def utils_copy_object(origin_name, copy_name):
         duplicate_obj.animation_data_clear()
         duplicate_obj.name = copy_name
         bpy.context.collection.objects.link(duplicate_obj)
+        duplicate_obj.hide_set(True)
+        moveToRight(duplicate_obj)
     return copy_flag
 
 def judge_normals():
-    flag = True
     cut_plane = bpy.data.objects["CutPlane"]
     cut_plane_mesh = bmesh.from_edit_mesh(cut_plane.data)
-
+    sum = 0
     for v in cut_plane_mesh.verts:
-        if v.normal[2] > 0:
-            flag = False
-
-    return flag
+        sum += v.normal[2]
+    return sum < 0
 
 
 def get_cut_plane():
+    # 外边界顶点组
     bpy.data.objects["右耳"].select_set(False)
-    cut_plane = bpy.data.objects["CutPlane"]
-    bpy.context.view_layer.objects.active = cut_plane
-    cut_plane.select_set(True)
+    cut_plane_outer = bpy.data.objects["CutPlane"]
+    bpy.context.view_layer.objects.active = cut_plane_outer
+    cut_plane_outer.select_set(True)
     bpy.ops.object.convert(target='MESH')
 
-    # 填充平面
     bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    # bpy.ops.mesh.fill()
-    bpy.ops.mesh.remove_doubles(threshold=0.5)
-    bpy.ops.mesh.edge_face_add()
+    bm = bmesh.from_edit_mesh(cut_plane_outer.data)
+    vert_index = [v.index for v in bm.verts]
+    bpy.ops.object.mode_set(mode='OBJECT')
+    set_vert_group("Outer", vert_index)
 
+    # 中间边界顶点组
+    bpy.data.objects["CutPlane"].select_set(False)
+    cut_plane_center = bpy.data.objects["Center"]
+    bpy.context.view_layer.objects.active = cut_plane_center
+    cut_plane_center.select_set(True)
+    bpy.ops.object.convert(target='MESH')
+
+    bpy.ops.object.mode_set(mode='EDIT')
+    bm = bmesh.from_edit_mesh(cut_plane_center.data)
+    vert_index = [v.index for v in bm.verts]
+    bpy.ops.object.mode_set(mode='OBJECT')
+    set_vert_group("Center", vert_index)
+
+    # 内边界顶点组
+    bpy.data.objects["Center"].select_set(False)
+    cut_plane_inner = bpy.data.objects["Inner"]
+    bpy.context.view_layer.objects.active = cut_plane_inner
+    cut_plane_inner.select_set(True)
+    bpy.ops.object.convert(target='MESH')
+
+    bpy.ops.object.mode_set(mode='EDIT')
+    bm = bmesh.from_edit_mesh(cut_plane_inner.data)
+    vert_index = [v.index for v in bm.verts]
+    bpy.ops.object.mode_set(mode='OBJECT')
+    set_vert_group("Inner", vert_index)
+
+    # 合并
+    bpy.context.view_layer.objects.active = cut_plane_outer
+    cut_plane_outer.select_set(True)
+    cut_plane_center.select_set(True)
+    cut_plane_inner.select_set(True)
+    bpy.ops.object.join()
+
+    # 拼接成面
+    bpy.ops.object.mode_set(mode='EDIT')
+    # 最内补面
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='Inner')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.edge_face_add()
+    # 桥接内中边界
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='Inner')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.object.vertex_group_set_active(group='Center')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.bridge_edge_loops()
+    # 桥接中外边界
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='Outer')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.object.vertex_group_set_active(group='Center')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.bridge_edge_loops()
+
+    bpy.ops.mesh.select_all(action='SELECT')
     if judge_normals():
         bpy.ops.mesh.flip_normals()
 
-    bpy.data.objects["CutPlane"].select_set(False)
-    bpy.context.view_layer.objects.active = bpy.data.objects["右耳"]
-    bpy.data.objects["右耳"].select_set(True)
-    cut_plane.hide_set(True)
+    bpy.ops.mesh.remove_doubles(threshold=0.18)
+
     bpy.ops.object.mode_set(mode='OBJECT')
+
+    bpy.data.objects["CutPlane"].select_set(False)
+    main_obj = bpy.data.objects["右耳"]
+    bpy.context.view_layer.objects.active = main_obj
+    main_obj.select_set(True)
 
 
 def plane_boolean_cut():
@@ -164,14 +227,8 @@ def plane_boolean_cut():
             bpy.context.view_layer.objects.active = obj
     # 获取活动对象
     obj = bpy.context.active_object
-    # 添加一个修饰器
-    modifier = obj.modifiers.new(name="BottomCut", type='BOOLEAN')
-    bpy.context.object.modifiers["BottomCut"].operation = 'DIFFERENCE'
-    bpy.context.object.modifiers["BottomCut"].object = bpy.data.objects["CutPlane"]
 
-    bpy.context.object.modifiers["BottomCut"].solver = 'EXACT'
-    # 应用修改器
-    bpy.ops.object.modifier_apply(modifier="BottomCut", single_user=True)
+    utils_bool_difference(obj.name,"CutPlane")
 
     # 获取下边界顶点用于挤出
     bpy.ops.object.mode_set(mode='EDIT')
@@ -238,7 +295,20 @@ def delete_useless_part():
     bpy.data.objects.remove(bpy.data.objects["CutPlane"], do_unlink=True)
 
 
-def plane_cut():
+def utils_plane_cut():
     get_cut_plane()
     plane_boolean_cut()
     delete_useless_part()
+
+def utils_bool_difference(main_obj_name,cut_obj_name):
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.data.objects[main_obj_name].select_set(True)
+    cut_obj = bpy.data.objects[cut_obj_name]
+    # 该布尔插件会直接删掉切割平面，最好是使用复制去切，以防后续会用到
+    duplicate_obj = cut_obj.copy()
+    duplicate_obj.data = cut_obj.data.copy()
+    duplicate_obj.animation_data_clear()
+    bpy.context.collection.objects.link(duplicate_obj)
+    duplicate_obj.select_set(True)
+    # 使用布尔插件
+    bpy.ops.object.booltool_auto_difference()

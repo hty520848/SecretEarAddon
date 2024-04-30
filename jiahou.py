@@ -12,6 +12,7 @@ import bmesh
 import re
 from datetime import *
 import sys
+from pynput import mouse
 
 is_copy_local_thickening = False  # 判断加厚状态，值为True时为未提交，值为False为提交后或重置后(未处于加厚预览状态)
                                   #主要用于加厚按钮中，第一次加厚初始化状态数组。局部加厚模块切换时的状态判断
@@ -21,16 +22,28 @@ local_thickening_objects_array = []  # 保存局部加厚功能中每一步加�
 objects_array_index = -1  # 数组指针，指向数组中当前需要访问状态的元素，用于单步撤回操作,指向数组中与当前激活物体相同的对象
 
 prev_localthick_area_index = []  # 保存上次局部加厚的顶点,主要用于判断选中的局部加厚区域是否改变,在定时器的自动加厚中使用
-
 is_timer_start = False  # 判断定时器是否已启动,若已经启动,则扩大或缩小局部加厚的invoke中不再添加定时器
 
 switch_selected_vertex_index = []  # 用于保存当前模型的局部加厚区域,从其他模式切换到局部加厚模式时根据该区域初始化模型
 
+left_pressed_thick = False
+left_pressed_mousemove_num = 0
+
+prev_localthick_offset = 0              #记录面板参数offset上次修改的值
+prev_localthick_borderwidth = 0         #记录面板参数borderwidth上次修改的值
+is_thickening_completed1 = True         #判断局部加厚参数更新是否完成,防止多次更新同时进行
 
 is_submit = False           #判断是否提交过   主要用于局部加厚模块切换时颜色顶点索引的保存
 
 operator_obj = '' # 当前操作的物体是左耳还是右耳
 
+left_selected_vertex_index = []    # 保存左耳加厚区域点index
+right_selected_vertex_index = []    # 保存右耳加厚区域点index
+left_is_submit = False             # 保存左耳的submit状态，用于限制提交修改后的操作
+right_is_submit = False            # 保存右耳的submit状态
+
+local_thickening_mouse_listener = None                #添加鼠标监听
+left_mouse_release = False           #鼠标左键是否按下
 
 # 获取区域和空间，鼠标行为切换相关
 def get_region_and_space(context, area_type, region_type, space_type):
@@ -182,12 +195,19 @@ def initialTransparency():
     bpy.data.materials["Transparency"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
 
 
+#添加的鼠标监听中,鼠标点击绑定的函数
+def on_click(x, y, button, pressed):
+    # 鼠标点击事件处理函数
+    if button == mouse.Button.left and not pressed:
+        global left_mouse_release
+        left_mouse_release = True
 
 # 前面的打磨功能切换到 局部加厚模式时
 def frontToLocalThickening():
     global switch_selected_vertex_index
     global objects_array_index
     global is_copy_local_thickening
+    global left_is_submit,right_is_submit
     # 进入局部加厚模块时,是否已经加厚过,初始化了状态数组的第一个模型
     if (is_copy_local_thickening == True):
         objects_array_index = 0
@@ -242,196 +262,20 @@ def frontToLocalThickening():
         # 绘制局部加厚区域圆环
         draw_border_curve()
     # 从当前的局部加厚切换到前面的打磨时
+    
+    # 重置提交状态
+    left_is_submit = False
+    right_is_submit = False
 
-# 局部加厚镜像
-class Local_Thickening_Mirror(bpy.types.Operator):
-    bl_idname = "obj.localthickeningjingxiang"
-    bl_label = "将右耳加厚区域镜像到左耳"
+    # 添加监听
+    global local_thickening_mouse_listener
+    if(local_thickening_mouse_listener == None):
+        local_thickening_mouse_listener = mouse.Listener(
+            on_click=on_click
+        )
+        # 启动监听器
+        local_thickening_mouse_listener.start()
 
-    def invoke(self, context, event):
-        bpy.context.scene.var = 30
-        # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
-        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-        self.execute(context)
-        return {'FINISHED'}
-
-    def execute(self, context):
-        global switch_selected_vertex_index,operator_obj
-
-        workspace = context.window.workspace.name
-
-        # 只有在双窗口下执行镜像
-        if workspace == '布局.001':
-            # print('开始镜像')
-            # 目标物体
-            tar_obj = context.scene.leftWindowObj
-            ori_obj = context.scene.rightWindowObj
-            print('镜像目标',tar_obj)
-            print('镜像来源',ori_obj)
-
-            operator_obj = tar_obj
-
-            cast_vertex_index = []
-            # 右窗口物体
-            obj_right = bpy.data.objects[ori_obj]
-            # 左窗口物体
-            obj_left = bpy.data.objects[tar_obj]
-
-            bpy.ops.object.select_all(action='DESELECT')
-            bpy.context.view_layer.objects.active = obj_left
-            obj_left.select_set(True)
-
-
-            # 若存在LocalThickCopy,则将其删除并重新生成
-            all_objs = bpy.data.objects
-            for selected_obj in all_objs:
-                if (selected_obj.name == tar_obj+"LocalThickCopy" or selected_obj.name == tar_obj+"LocalThickCompare"):
-                    bpy.data.objects.remove(selected_obj, do_unlink=True)
-            
-            # 根据当前激活物体复制得到用于重置的LocalThickCopy和初始时的参照物LocalThickCompare
-            active_obj = bpy.context.active_object
-            name = active_obj.name
-            duplicate_obj1 = active_obj.copy()
-            duplicate_obj1.data = active_obj.data.copy()
-            duplicate_obj1.animation_data_clear()
-            duplicate_obj1.name = name + "LocalThickCompare"
-            bpy.context.collection.objects.link(duplicate_obj1)
-            if tar_obj == '右耳':
-                moveToRight(duplicate_obj1)
-            elif tar_obj == '左耳':
-                moveToLeft(duplicate_obj1)
-            duplicate_obj1.hide_set(True)
-            duplicate_obj1.hide_set(False)
-            duplicate_obj2 = active_obj.copy()
-            duplicate_obj2.data = active_obj.data.copy()
-            duplicate_obj2.animation_data_clear()
-            duplicate_obj2.name = name + "LocalThickCopy"
-            bpy.context.collection.objects.link(duplicate_obj2)
-            if tar_obj == '右耳':
-                moveToRight(duplicate_obj2)
-            elif tar_obj == '左耳':
-                moveToLeft(duplicate_obj2)
-            duplicate_obj2.hide_set(True)  # 将LocalThickCopy隐藏
-            active_obj = bpy.data.objects[name]  # 将右耳设置为当前激活物体
-            bpy.context.view_layer.objects.active = active_obj
-
-            # y轴镜像
-            bpy.ops.transform.mirror(orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL', constraint_axis=(False, True, False))
-
-            if obj_right.type == 'MESH':
-                left_me = obj_left.data
-                left_bm = bmesh.new()
-                left_bm.from_mesh(left_me)         
-                                    
-            print('before num',len(switch_selected_vertex_index))
-
-            rotate_angle, height_difference = get_change_parameters()
-            print('rotate_angle',rotate_angle)
-            print('height_difference',height_difference)
-
-            # 计算投影点
-            for i in switch_selected_vertex_index:
-                face_index = normal_ray_cast(i,rotate_angle, height_difference)
-                if face_index is not None:
-                    left_bm.faces.ensure_lookup_table()
-                    face = left_bm.faces[face_index]
-                    face_verts = face.verts
-                    for vert in face_verts:
-                        if vert.index not in cast_vertex_index:
-                            cast_vertex_index.append(vert.index)
-
-            print('after num',len(cast_vertex_index))
-
-            # 填充中心未被选中的点
-            for index in cast_vertex_index:
-                left_bm.verts.ensure_lookup_table()
-                vert = left_bm.verts[index]
-                # 遍历这些顶点的相邻节点
-                for edge in vert.link_edges:
-                    # 获取边的顶点
-                    v1 = edge.verts[0]
-                    v2 = edge.verts[1]
-                    # 确保获取的顶点不是当前顶点
-                    link_vert = v1 if v1 != vert else v2
-                    if link_vert.index not in cast_vertex_index:
-                        edge_num = len(link_vert.link_edges)
-                        num = 0
-                        for edge in link_vert.link_edges:
-                            v1 = edge.verts[0]
-                            v2 = edge.verts[1]
-                            link = v1 if v1 != link_vert else v2
-                            if link.index in cast_vertex_index:
-                                num += 1
-                        if num >= edge_num - 2:
-                            cast_vertex_index.append(link_vert.index)
-            
-            # 去除边界点
-            for index in cast_vertex_index:
-                left_bm.verts.ensure_lookup_table()
-                vert = left_bm.verts[index]
-                vert.select_set(True)
-
-            border_vert_index = []
-            for index in cast_vertex_index:
-                left_bm.verts.ensure_lookup_table()
-                vert = left_bm.verts[index]
-            #    print('sel',vert.select)
-                # 遍历这些顶点的相邻节点
-                for edge in vert.link_edges:
-                    # 获取边的顶点
-                    v1 = edge.verts[0]
-                    v2 = edge.verts[1]
-                    # 确保获取的顶点不是当前顶点
-                    link_vert = v1 if v1 != vert else v2
-                    if link_vert.select == False and index not in border_vert_index:
-                        border_vert_index.append(index)
-
-            print('boder num',len(border_vert_index))
-            for index in border_vert_index:
-                if index in cast_vertex_index:
-                    cast_vertex_index.remove(index)
-
-            print('after num3',len(cast_vertex_index))
-
-            # 给投影点上色
-            left_bm.verts.ensure_lookup_table()
-            color_lay = left_bm.verts.layers.float_color["Color"]
-            for vert_index in cast_vertex_index:
-                colvert = left_bm.verts[vert_index][color_lay]
-                colvert.x = 0.133
-                colvert.y = 1.000
-                colvert.z = 1.000
-            left_bm.to_mesh(left_me)
-            left_bm.free()
-
-            initialTransparency()
-            offset = bpy.context.scene.localThicking_offset  # 获取局部加厚面板中的偏移量参数
-            borderWidth = bpy.context.scene.localThicking_borderWidth  # 获取局部加厚面板中的边界宽度参数
-
-            thickening_offset_borderwidth(0, 0, True)
-            thickening_offset_borderwidth(offset, borderWidth, False)
-
-            # 将加厚函数中添加的修改器应用并删除该修改器,防止卡顿
-            bpy.ops.object.modifier_apply(modifier="LaplacianSmooth",single_user=True)
-            draw_border_curve()
-            # 绘制局部加厚区域圆环
-            draw_border_curve()
-
-            # 镜像还原
-            bpy.ops.object.select_all(action='DESELECT')
-            bpy.context.view_layer.objects.active = obj_left
-            obj_left.select_set(True)
-            bpy.ops.transform.mirror(orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL', constraint_axis=(False, True, False))
-
-            collection1 = bpy.data.collections['Right']
-            collection2 = bpy.data.collections['Left']
-            for obj in collection1.objects:
-                        print('Right',obj.name)
-            for obj in collection2.objects:
-                        print('Left',obj.name)
-        
-
-        return {'FINISHED'}
 
 def frontFromLocalThickening():
     # 保存模型上选中的局部加厚区域中的顶点索引,同样保存模型上已选中点放在submit功能模块中
@@ -479,6 +323,11 @@ def frontFromLocalThickening():
     # 删除局部加厚中的圆环
     draw_border_curve()
 
+    #将添加的鼠标监听删除
+    global local_thickening_mouse_listener
+    if (local_thickening_mouse_listener != None):
+        local_thickening_mouse_listener.stop()
+        local_thickening_mouse_listener = None
 
 # 后面的其他功能切换到局部加厚模式时
 def backToLocalThickening():
@@ -571,7 +420,14 @@ def backToLocalThickening():
         moveToRight(duplicate_obj2)
         duplicate_obj2.name = name
         bpy.context.view_layer.objects.active = duplicate_obj2
-
+    # 添加监听
+    global local_thickening_mouse_listener
+    if (local_thickening_mouse_listener == None):
+        local_thickening_mouse_listener = mouse.Listener(
+            on_click=on_click
+        )
+        # 启动监听器
+        local_thickening_mouse_listener.start()
 
 # 从当前的局部加厚切换到后面的其他功能时
 def backFromLocalThickening():
@@ -595,6 +451,10 @@ def backFromLocalThickening():
             bm.to_mesh(me)
             bm.free()
 
+
+    #将加厚的区域应用拉普拉斯修改器应用
+    applySmooth()
+
     # 将当前模型的预览提交
     initialModelColor()
     if bpy.context.mode == "OBJECT":
@@ -604,6 +464,8 @@ def backFromLocalThickening():
     if bpy.context.mode == "PAINT_VERTEX":
         bpy.ops.paint.vertex_paint_toggle()
     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    #删除局部加厚中的圆环
+    draw_border_curve()
 
     # 删除场景中局部加厚相关的初始时的参照物LocalThickCompare
     selected_objs = bpy.data.objects
@@ -613,8 +475,7 @@ def backFromLocalThickening():
         if (selected_obj.name == name + "LocalThickCompare"):
             bpy.data.objects.remove(selected_obj, do_unlink=True)
 
-    # 删除局部加厚中的圆环
-    draw_border_curve()
+
 
     all_objs = bpy.data.objects
     for selected_obj in all_objs:
@@ -628,6 +489,248 @@ def backFromLocalThickening():
     duplicate_obj1.name = name + "LocalThickLast"
     bpy.context.collection.objects.link(duplicate_obj1)
     duplicate_obj1.hide_set(True)
+
+    # 将添加的鼠标监听删除
+    global local_thickening_mouse_listener
+    if (local_thickening_mouse_listener != None):
+        local_thickening_mouse_listener.stop()
+        local_thickening_mouse_listener = None
+
+# 保存加厚顶点
+def saveSelected():
+    global left_selected_vertex_index,right_selected_vertex_index
+    selected_vertex_index = []
+    active_obj = bpy.context.active_object
+    if active_obj.type == 'MESH':
+        me = active_obj.data
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bm.verts.ensure_lookup_table()
+        color_lay = bm.verts.layers.float_color["Color"]
+        for vert in bm.verts:
+            colvert = vert[color_lay]
+            if round(colvert.x, 3) != 1.000 and round(colvert.y, 3) != 0.319 and round(colvert.z, 3) != 0.133:
+                selected_vertex_index.append(vert.index)
+        bm.to_mesh(me)
+        bm.free()
+    name = active_obj.name
+    if name == '右耳':
+        right_selected_vertex_index = selected_vertex_index
+    elif name == '左耳':
+        left_selected_vertex_index = selected_vertex_index
+
+    # print('顶点数',len(selected_vertex_index))
+
+# 局部加厚镜像
+class Local_Thickening_Mirror(bpy.types.Operator):
+    bl_idname = "obj.localthickeningjingxiang"
+    bl_label = "将右耳加厚区域镜像到左耳"
+
+    def invoke(self, context, event):
+        bpy.context.scene.var = 30
+        # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        self.execute(context)
+        return {'FINISHED'}
+
+    def execute(self, context):
+        global switch_selected_vertex_index, operator_obj
+        global left_selected_vertex_index,right_selected_vertex_index
+
+        workspace = context.window.workspace.name
+
+        # 只有在双窗口下执行镜像
+        try:
+            if workspace == '布局.001':
+                active_obj = bpy.context.active_object
+                name = active_obj.name
+                if name == '左耳':
+                    is_submit = left_is_submit
+                else:
+                    is_submit = right_is_submit
+
+                # 判断是否提交修改,未提交时才可镜像
+                if not is_submit:
+                    # print('开始镜像')
+                    # 目标物体
+                    tar_obj = context.scene.leftWindowObj
+                    ori_obj = context.scene.rightWindowObj
+                    print('镜像目标', tar_obj)
+                    print('镜像来源', ori_obj)
+
+                    operator_obj = tar_obj
+
+                    cast_vertex_index = []
+                    # 右窗口物体
+                    obj_right = bpy.data.objects[ori_obj]
+                    # 左窗口物体
+                    obj_left = bpy.data.objects[tar_obj]
+
+                    bpy.ops.object.select_all(action='DESELECT')
+                    bpy.context.view_layer.objects.active = obj_left
+                    obj_left.select_set(True)
+
+                    # 若存在LocalThickCopy,则将其删除并重新生成
+                    all_objs = bpy.data.objects
+                    for selected_obj in all_objs:
+                        if (
+                                selected_obj.name == tar_obj + "LocalThickCopy" or selected_obj.name == tar_obj + "LocalThickCompare"):
+                            bpy.data.objects.remove(selected_obj, do_unlink=True)
+
+                    # 根据当前激活物体复制得到用于重置的LocalThickCopy和初始时的参照物LocalThickCompare
+                    active_obj = bpy.context.active_object
+                    name = active_obj.name
+                    duplicate_obj1 = active_obj.copy()
+                    duplicate_obj1.data = active_obj.data.copy()
+                    duplicate_obj1.animation_data_clear()
+                    duplicate_obj1.name = name + "LocalThickCompare"
+                    bpy.context.collection.objects.link(duplicate_obj1)
+                    if tar_obj == '右耳':
+                        moveToRight(duplicate_obj1)
+                        selected_vertex_index = left_selected_vertex_index
+                    elif tar_obj == '左耳':
+                        moveToLeft(duplicate_obj1)
+                        selected_vertex_index = right_selected_vertex_index
+                    duplicate_obj1.hide_set(True)
+                    duplicate_obj1.hide_set(False)
+                    duplicate_obj2 = active_obj.copy()
+                    duplicate_obj2.data = active_obj.data.copy()
+                    duplicate_obj2.animation_data_clear()
+                    duplicate_obj2.name = name + "LocalThickCopy"
+                    bpy.context.collection.objects.link(duplicate_obj2)
+                    if tar_obj == '右耳':
+                        moveToRight(duplicate_obj2)
+                    elif tar_obj == '左耳':
+                        moveToLeft(duplicate_obj2)
+                    duplicate_obj2.hide_set(True)  # 将LocalThickCopy隐藏
+                    active_obj = bpy.data.objects[name]  # 将右耳设置为当前激活物体
+                    bpy.context.view_layer.objects.active = active_obj
+
+                    # y轴镜像
+                    bpy.ops.transform.mirror(orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)),
+                                            orient_matrix_type='GLOBAL', constraint_axis=(False, True, False))
+
+                    if obj_right.type == 'MESH':
+                        left_me = obj_left.data
+                        left_bm = bmesh.new()
+                        left_bm.from_mesh(left_me)
+
+                    print('before num', len(selected_vertex_index))
+
+                    rotate_angle, height_difference = get_change_parameters()
+                    print('rotate_angle', rotate_angle)
+                    print('height_difference', height_difference)
+
+                    # 计算投影点
+                    for i in selected_vertex_index:
+                        face_index = normal_ray_cast(i, rotate_angle, height_difference)
+                        if face_index is not None:
+                            left_bm.faces.ensure_lookup_table()
+                            face = left_bm.faces[face_index]
+                            face_verts = face.verts
+                            for vert in face_verts:
+                                if vert.index not in cast_vertex_index:
+                                    cast_vertex_index.append(vert.index)
+
+                    print('初始投射点', len(cast_vertex_index))
+
+                    # 投射点数量过少
+                    if len(cast_vertex_index) < len(selected_vertex_index) * 0.9:
+                        # 填充中心未被选中的点
+                        for index in cast_vertex_index:
+                            left_bm.verts.ensure_lookup_table()
+                            vert = left_bm.verts[index]
+                            # 遍历这些顶点的相邻节点
+                            for edge in vert.link_edges:
+                                # 获取边的顶点
+                                v1 = edge.verts[0]
+                                v2 = edge.verts[1]
+                                # 确保获取的顶点不是当前顶点
+                                link_vert = v1 if v1 != vert else v2
+                                if link_vert.index not in cast_vertex_index:   
+                                    edge_num = len(link_vert.link_edges)
+                                    num = 0
+                                    for edge in link_vert.link_edges:
+                                        v1 = edge.verts[0]
+                                        v2 = edge.verts[1]
+                                        link = v1 if v1 != link_vert else v2
+                                        if link.index in cast_vertex_index:
+                                            num += 1
+                                    if num >= edge_num - 3:
+                                        cast_vertex_index.append(link_vert.index)
+                    
+                        print('增加边缘点后', len(cast_vertex_index))
+
+                    if len(cast_vertex_index) > len(selected_vertex_index) * 1.2:
+                        # 去除边界点
+                        for index in cast_vertex_index:
+                            left_bm.verts.ensure_lookup_table()
+                            vert = left_bm.verts[index]
+                            vert.select_set(True)
+
+                        border_vert_index = []
+                        for index in cast_vertex_index:
+                            left_bm.verts.ensure_lookup_table()
+                            vert = left_bm.verts[index]
+                            #    print('sel',vert.select)
+                            # 遍历这些顶点的相邻节点
+                            for edge in vert.link_edges:
+                                # 获取边的顶点
+                                v1 = edge.verts[0]
+                                v2 = edge.verts[1]
+                                # 确保获取的顶点不是当前顶点
+                                link_vert = v1 if v1 != vert else v2
+                                if link_vert.select == False and index not in border_vert_index:
+                                    border_vert_index.append(index)
+
+                        print('boder num', len(border_vert_index))
+                        for index in border_vert_index:
+                            if index in cast_vertex_index:
+                                cast_vertex_index.remove(index)
+
+                        print('去除边界点后', len(cast_vertex_index))
+
+                    # 存储投射后的得到点
+                    if tar_obj == '右耳':
+                        right_selected_vertex_index = cast_vertex_index
+                    elif tar_obj == '左耳':
+                        left_selected_vertex_index = cast_vertex_index 
+
+                    # 给投影点上色
+                    left_bm.verts.ensure_lookup_table()
+                    color_lay = left_bm.verts.layers.float_color["Color"]
+                    for vert_index in cast_vertex_index:
+                        colvert = left_bm.verts[vert_index][color_lay]
+                        colvert.x = 0.133
+                        colvert.y = 1.000
+                        colvert.z = 1.000
+                    left_bm.to_mesh(left_me)
+                    left_bm.free()
+
+                    initialTransparency()
+                    offset = bpy.context.scene.localThicking_offset  # 获取局部加厚面板中的偏移量参数
+                    borderWidth = bpy.context.scene.localThicking_borderWidth  # 获取局部加厚面板中的边界宽度参数
+
+                    thickening_offset_borderwidth(0, 0, True)
+                    thickening_offset_borderwidth(offset, borderWidth, False)
+
+                    # 将加厚函数中添加的修改器应用并删除该修改器,防止卡顿
+                    bpy.ops.object.modifier_apply(modifier="LaplacianSmooth", single_user=True)
+                    # draw_border_curve()
+                    # 绘制局部加厚区域圆环
+                    draw_border_curve()
+
+                    # 镜像还原
+                    bpy.ops.object.select_all(action='DESELECT')
+                    bpy.context.view_layer.objects.active = obj_left
+                    obj_left.select_set(True)
+                    bpy.ops.transform.mirror(orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)),
+                                            orient_matrix_type='GLOBAL', constraint_axis=(False, True, False))
+
+        except:
+            print('镜像出错')
+                
+        return {'FINISHED'}
 
 # 获取当前激活物体上局部加厚区域是否改变
 def isSelectedAreaChanged():
@@ -815,13 +918,150 @@ def auto_thickening():
         bm.to_mesh(me)
         bm.free()
 
-    thickening_offset_borderwidth(0, 0, True)
-    thickening_offset_borderwidth(offset, borderWidth, False)
 
-    # 将加厚函数中添加的修改器应用并删除该修改器,防止卡顿
-    bpy.ops.object.modifier_apply(modifier="LaplacianSmooth",single_user=True)
+    # thickening_offset_borderwidth(0, 0, True)
+    # 重新根据offset和borderwidth对模型进行加厚
+    thickening_offset_borderwidth(offset, borderWidth, False)
+    #刷新重新生成圆环
     draw_border_curve()
 
+
+#将加厚区域重置,加厚厚度为0
+def thickening_reset():
+    # 执行加厚操作
+    active_obj = bpy.context.active_object
+    if active_obj.type == 'MESH':
+        # 获取当前激活物体的网格数据
+        me = active_obj.data
+        # 创建bmesh对象
+        bm = bmesh.new()
+        # 将网格数据复制到bmesh对象
+        bm.from_mesh(me)
+        bm.verts.ensure_lookup_table()
+
+        # 获取厚度对比物体的网格激活物体
+        name = bpy.context.active_object.name
+        copyname = name + "LocalThickCopy"  # TODO    根据最终参照物体替换
+        ori_obj = bpy.data.objects[copyname]
+        ori_me = ori_obj.data
+        ori_bm = bmesh.new()
+        ori_bm.from_mesh(ori_me)
+        ori_bm.verts.ensure_lookup_table()
+
+
+        select_vert = []  # 被选择的顶点
+        color_lay = bm.verts.layers.float_color["Color"]
+        for vert in bm.verts:
+            colvert = vert[color_lay]
+            if round(colvert.x, 3) != 1.000 and round(colvert.y, 3) != 0.319 and round(colvert.z, 3) != 0.133:
+                vert.co = ori_bm.verts[vert.index].co
+
+        bm.to_mesh(me)
+        bm.free()
+        ori_bm.free()
+
+
+#将选中的局部加厚区域应用拉普拉斯平滑修改器,优化加厚效果
+def applySmooth():
+
+    cur_obj_name = "右耳"                                #TODO 切换为导入名称
+    cur_obj = bpy.data.objects.get(cur_obj_name)
+    select_vert = []         #存储模型上选中的局部加厚区域顶点的索引
+    if(cur_obj != None and cur_obj.type == 'MESH'):
+        # 获取当前激活物体的网格数据
+        me = cur_obj.data
+        # 创建bmesh对象
+        bm = bmesh.new()
+        # 将网格数据复制到bmesh对象
+        bm.from_mesh(me)
+        bm.verts.ensure_lookup_table()
+
+        color_lay = bm.verts.layers.float_color["Color"]
+        for vert in bm.verts:
+            colvert = vert[color_lay]
+            if round(colvert.x, 3) != 1.000 and round(colvert.y, 3) != 0.319 and round(colvert.z, 3) != 0.133:
+                select_vert.append(vert)
+
+        #扩大选中的顶点区域,便于拉普拉斯平滑修改器进行平滑
+        add_select_vert = []
+        select_vert_index = []  # 被选择顶点的顶点索引,主要是用于指定顶点组
+        add_select_vert.extend(select_vert)
+        for i in range(2):  # 将选中区域扩大两圈
+            for vert in select_vert:
+                for edge in vert.link_edges:
+                    v1 = edge.verts[0]
+                    v2 = edge.verts[1]
+                    link_vert = v1 if v1 != vert else v2
+                    if not (link_vert in select_vert):
+                        add_select_vert.append(link_vert)
+            for vert in add_select_vert:  # 根据扩大区域重置选择区域
+                if not (vert in select_vert):
+                    select_vert.append(vert)
+        for vert in select_vert:  # 根据选中区域得到选中区域的顶点索引并存储到集合中
+            select_vert_index.append(vert.index)
+            vert.select_set(True)
+
+        bm.to_mesh(me)
+        bm.free()
+
+        # 创建一个新的顶点组,并将选中的顶点指定到新创建的顶点组中
+        localthick_smooth_vertex_group = cur_obj.vertex_groups.get("LocalThickSmoothVertexGroup")
+        if (localthick_smooth_vertex_group == None):
+            localthick_smooth_vertex_group = cur_obj.vertex_groups.new(name="LocalThickSmoothVertexGroup")
+        for vert_index in select_vert_index:
+            localthick_smooth_vertex_group.add([vert_index], 1, 'ADD')
+
+        # 创建拉普拉斯平滑修改器,并指定作用域新创建的顶点组,应用修改器,将加厚的区域进行平滑
+        modifier_name = "LocalThickLaplacianSmooth"
+        target_modifier = None
+        for modifier in cur_obj.modifiers:
+            if modifier.name == modifier_name:  # TODO  优化：   将创建修改器放到加厚的invoke中，应用修改器放到提交中
+                target_modifier = modifier
+        if (target_modifier == None):
+            bpy.ops.object.modifier_add(type='LAPLACIANSMOOTH')
+            localthick_smooth_modifier = bpy.context.object.modifiers["LaplacianSmooth"]
+            localthick_smooth_modifier.name = "LocalThickLaplacianSmooth"
+        bpy.context.active_object.modifiers["LocalThickLaplacianSmooth"].vertex_group = "LocalThickSmoothVertexGroup"
+        bpy.context.active_object.modifiers["LocalThickLaplacianSmooth"].lambda_border = 5
+        bpy.context.active_object.modifiers["LocalThickLaplacianSmooth"].lambda_factor = 10
+        bpy.ops.object.modifier_apply(modifier="LocalThickLaplacianSmooth", single_user=True)
+        #删除创建的顶点组
+        localthick_smooth_vertex_group = cur_obj.vertex_groups.get("LocalThickSmoothVertexGroup")
+        if (localthick_smooth_vertex_group != None):
+            cur_obj.vertex_groups.remove(localthick_smooth_vertex_group)
+
+
+
+#保存局部加厚中的选中的顶点信息并重置全局变量
+def localThickSaveInfo():
+    global is_copy_local_thickening
+    global local_thickening_objects_array
+    global objects_array_index
+    global switch_selected_vertex_index
+    global is_submit
+
+    is_copy_local_thickening = False
+    is_submit = True
+
+    # 重置局部加厚中保存模型各个状态的数组
+    local_thickening_objects_array = []
+    objects_array_index = -1
+
+    # 提交前将模型中局部加厚的点索引给保存下来
+    switch_selected_vertex_index = []
+    active_obj = bpy.context.active_object
+    if active_obj.type == 'MESH':
+        me = active_obj.data
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bm.verts.ensure_lookup_table()
+        color_lay = bm.verts.layers.float_color["Color"]
+        for vert in bm.verts:
+            colvert = vert[color_lay]
+            if round(colvert.x, 3) != 1.000 and round(colvert.y, 3) != 0.319 and round(colvert.z, 3) != 0.133:
+                switch_selected_vertex_index.append(vert.index)
+        bm.to_mesh(me)
+        bm.free()
 
 # offset和borderWidth为面板参数,reset为将该局部加厚区域顶点重置会原模型高度
 def thickening_offset_borderwidth(offset, borderWidth, reset):
@@ -897,58 +1137,8 @@ def thickening_offset_borderwidth(offset, borderWidth, reset):
                     vert.co = ori_bm.verts[vert.index].co
             area_index += 1
 
-        # 选择局部加厚区域中的顶点,不知为何执行get_continuous_area方法后,select_vert集合为空,需要重新选择
-        for vert in bm.verts:
-            colvert = vert[color_lay]
-            if round(colvert.x, 3) != 1.000 and round(colvert.y, 3) != 0.319 and round(colvert.z, 3) != 0.133:
-                select_vert.append(vert)
-
-        # 扩大选中的顶点区域,便于拉普拉斯平滑修改器进行平滑
-        add_select_vert = []
-        select_vert_index = []  # 被选择顶点的顶点索引,主要是用于指定顶点组
-        add_select_vert.extend(select_vert)
-        for i in range(2):  # 将选中区域扩大两圈
-            for vert in select_vert:
-                for edge in vert.link_edges:
-                    v1 = edge.verts[0]
-                    v2 = edge.verts[1]
-                    link_vert = v1 if v1 != vert else v2
-                    if not (link_vert in select_vert):
-                        add_select_vert.append(link_vert)
-            for vert in add_select_vert:  # 根据扩大区域重置选择区域
-                if not (vert in select_vert):
-                    select_vert.append(vert)
-        for vert in select_vert:  # 根据选中区域得到选中区域的顶点索引并存储到集合中
-            select_vert_index.append(vert.index)
-            vert.select_set(True)
-
         bm.to_mesh(me)
         bm.free()
-
-        # 获取当前活动对象
-        obj = bpy.context.active_object
-        # 创建一个新的顶点组,并将选中的顶点指定到新创建的顶点组中
-        new_vertex_group = obj.vertex_groups.get("MyVertexGroup")
-        if (obj.vertex_groups.get("MyVertexGroup") == None):
-            new_vertex_group = obj.vertex_groups.new(name="MyVertexGroup")
-        for vert_index in select_vert_index:
-            new_vertex_group.add([vert_index], 1, 'ADD')
-
-        # 创建拉普拉斯平滑修改器,并指定作用域新创建的顶点组,应用修改器,将加厚的区域进行平滑
-        modifier_name = "LaplacianSmooth"
-        target_modifier = None
-        for modifier in obj.modifiers:
-            if modifier.name == modifier_name:  # TODO  优化：   将创建修改器放到加厚的invoke中，应用修改器放到提交中
-                target_modifier = modifier
-        if (target_modifier == None):
-            bpy.ops.object.modifier_add(type='LAPLACIANSMOOTH')
-        bpy.context.active_object.modifiers["LaplacianSmooth"].vertex_group = "MyVertexGroup"
-        bpy.context.active_object.modifiers["LaplacianSmooth"].lambda_border = 5
-        bpy.context.active_object.modifiers["LaplacianSmooth"].lambda_factor = 10
-        # bpy.ops.object.modifier_apply(modifier="LaplacianSmooth")                       #submit提交或者扩大,缩小区域时apply应用,扩大区域或缩小区域时,清除修改器,防止卡顿
-        # 删除创建的顶点组
-        # vertex_group_to_delete = obj.vertex_groups.get("MyVertexGroup")
-        # obj.vertex_groups.remove(vertex_group_to_delete)
 
 
 # 根据选中区域绘制出边界
@@ -976,15 +1166,27 @@ def draw_border_curve():
         continuous_area = get_continuous_area(select_vert, color_lay, borderWidth)
         bpy.context.view_layer.objects.active = active_obj
 
+        active_obj_name = bpy.context.active_object.name
         for obj in bpy.data.objects:
-            pattern = r'BorderCurveObject'
-            if re.match(pattern, obj.name):
-                active_obj = bpy.context.active_object
-                bpy.context.view_layer.objects.active = obj
-                red_material = bpy.data.materials.new(name="Red")
-                red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
-                bpy.context.active_object.data.materials.append(red_material)
-                bpy.context.view_layer.objects.active = active_obj
+            if (active_obj_name == "右耳"):
+                pattern = r'右耳BorderCurveObject'
+                if re.match(pattern, obj.name):
+                    active_obj = bpy.context.active_object
+                    bpy.context.view_layer.objects.active = obj
+                    red_material = bpy.data.materials.new(name="Red")
+                    red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                    bpy.context.active_object.data.materials.append(red_material)
+                    bpy.context.view_layer.objects.active = active_obj
+            elif (active_obj_name == "左耳"):
+                pattern = r'左耳BorderCurveObject'
+                if re.match(pattern, obj.name):
+                    active_obj = bpy.context.active_object
+                    bpy.context.view_layer.objects.active = obj
+                    red_material = bpy.data.materials.new(name="Red")
+                    red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                    bpy.context.active_object.data.materials.append(red_material)
+                    bpy.context.view_layer.objects.active = active_obj
+
 
 
 def backup(context):
@@ -1155,97 +1357,24 @@ class Forward(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class TestFunc(bpy.types.Operator):
-    bl_idname = "obj.testfunc"
-    bl_label = "功能测试"
-
-    def invoke(self, context, event):
-
-        # auto_thickening()
-        # backFromLocalThickening(context)
-        # backToLocalThickening(context)
-
-        # if bpy.context.mode == "OBJECT":
-        #     bpy.ops.paint.vertex_paint_toggle()
-        # bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
-        # bpy.data.brushes["Draw"].color = (0.4, 1, 1)
-        # bpy.data.brushes["Draw"].curve_preset = 'CONSTANT'
-        # bpy.context.scene.tool_settings.unified_paint_settings.size = 100
-        # bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'
-        # bpy.ops.object.autothick
-        # print("testfunc")
-        # bpy.ops.object.timer_auto_thick()
-        # frontFromLocalThickening()
-        frontToLocalThickening()
-        # backFromLocalThickening()
-        # backToLocalThickening()
-
-        return {'FINISHED'}
-        # context.window_manager.modal_handler_add(self)                  #进入modal模式
-        # return {'RUNNING_MODAL'}
-
-    def modal(self, context, event):
-        op_cls = TestFunc
-
-        timer = context.window_manager.event_timer_add(0.5, window=context.window)
-        if (True):
-            if (bpy.context.scene.var == 5):
-                pass
-            else:
-                context.window_manager.event_timer_remove(timer)
-            return {'PASS_THROUGH'}
-        else:
-            return {'FINISHED'}
-
-        return {'FINISHED'}
 
 
-class TestFunc1(bpy.types.Operator):
-    bl_idname = "obj.testfunc1"
-    bl_label = "功能测试"
+def localThickOffsetBorderwidthUpdate():
+    global prev_localthick_offset
+    global prev_localthick_borderwidth
+    global is_thickening_completed1
 
-    def invoke(self, context, event):
-        # auto_thickening()
-        # backFromLocalThickening(context)
-        # backToLocalThickening(context)
-
-        # if bpy.context.mode == "OBJECT":
-        #     bpy.ops.paint.vertex_paint_toggle()
-        # bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
-        # bpy.data.brushes["Draw"].color = (0.4, 1, 1)
-        # bpy.data.brushes["Draw"].curve_preset = 'CONSTANT'
-        # bpy.context.scene.tool_settings.unified_paint_settings.size = 100
-        # bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'
-        # bpy.ops.object.autothick
-        # print("testfunc")
-        # bpy.ops.object.timer_auto_thick()
-        frontFromLocalThickening()
-        # frontToLocalThickening()
-        # backFromLocalThickening()
-        # backToLocalThickening()
-        # selected_objs = bpy.data.objects
-        # for selected_obj in selected_objs:
-        #     print(selected_obj.name)
-        return {'FINISHED'}
-
-
-class InitialColor(bpy.types.Operator):
-    bl_idname = "obj.initialcolor"
-    bl_label = "初始化模型颜色"
-
-    def execute(self, context):
-        bpy.data.screens["Layout"].show_statusbar = False
-        initialModelColor()
-        return {'FINISHED'}
-
-
-class InitialTransparency(bpy.types.Operator):
-    bl_idname = "obj.initialtransparency"
-    bl_label = "将模型变为透明"
-
-    def execute(self, context):
-        initialTransparency()
-        return {'FINISHED'}
+    offset = bpy.context.scene.localThicking_offset
+    borderWidth = bpy.context.scene.localThicking_borderWidth
+    if(prev_localthick_offset != offset or prev_localthick_borderwidth != borderWidth):
+        if (is_thickening_completed1):
+            is_thickening_completed1 = False
+            print("localupdate")
+            thickening_reset()
+            thickening_offset_borderwidth(offset, borderWidth, False)
+            prev_localthick_offset = offset
+            prev_localthick_borderwidth = borderWidth
+            is_thickening_completed1 = True
 
 
 # 定时器 在扩大或缩小局部加厚区域模式下添加该定时器,每隔一段时间自动检测是否需要加厚,当不再扩大或缩小区域的笔刷上时,退出
@@ -1258,7 +1387,7 @@ class TimerAutoThick(bpy.types.Operator):
     def execute(self, context):
         op_cls = TimerAutoThick
         op_cls.__timer = context.window_manager.event_timer_add(
-            0.5, window=context.window)
+            0.2, window=context.window)
         global is_timer_start  # 防止添加多余的定时器
         is_timer_start = True
         print("timerbegin")
@@ -1272,19 +1401,23 @@ class TimerAutoThick(bpy.types.Operator):
         if context.area:
             context.area.tag_redraw()
         if (bpy.context.scene.var == 5):
-            if event.type == 'TIMER':
-                if ((not isOnLocalThickArea(context, event)) and isSelectedAreaChanged()):
-                    draw_border_curve()  # 根据选中区域绘制出边界
-                    auto_thickening()
-                    draw_border_curve()
-            return {'PASS_THROUGH'}
+            if (is_mouse_on_object(context, event)):
+                if event.type == 'TIMER':
+                    # localThickOffsetBorderwidthUpdate()  # 局部加厚高度随面板参数的改变而更新改变
+                    if ((not isOnLocalThickArea(context, event)) and isSelectedAreaChanged()):
+                        auto_thickening()         #根据选中区域进行加厚
+                        draw_border_curve()       # 根据选中区域绘制出边界
+                        print("增大区域的自动加厚")
+                return {'PASS_THROUGH'}
         elif (bpy.context.scene.var == 6):
-            if event.type == 'TIMER':
-                if ((isOnLocalThickArea(context, event)) and isSelectedAreaChanged()):
-                    draw_border_curve()  # 根据选中区域绘制出边界
-                    auto_thickening()
-                    draw_border_curve()
-            return {'PASS_THROUGH'}
+            if (is_mouse_on_object(context, event)):
+                if event.type == 'TIMER':
+                    # localThickOffsetBorderwidthUpdate()  # 局部加厚高度随面板参数的改变而更新改变
+                    if ((isOnLocalThickArea(context, event)) and isSelectedAreaChanged()):
+                        auto_thickening()         #根据选中区域进行加厚
+                        draw_border_curve()       # 根据选中区域绘制出边界
+                        print("缩小区域的自动加厚")
+                return {'PASS_THROUGH'}
         else:
             is_timer_start = False
             print("timerend")
@@ -1328,11 +1461,14 @@ class Local_Thickening_Reset(bpy.types.Operator):
         duplicate_obj.data = ori_obj.data.copy()
         duplicate_obj.animation_data_clear()
         duplicate_obj.name = name + "LocalThickCompare"
-        scene = bpy.context.scene  # 将其颜色全部覆盖重置再保存到数组中
-        scene.collection.objects.link(duplicate_obj)
+        bpy.context.scene.collection.objects.link(duplicate_obj)  # 将其颜色全部覆盖重置再保存到数组中
+        if name == '右耳':
+            moveToRight(duplicate_obj)
+        elif name == '左耳':
+            moveToLeft(duplicate_obj)
 
         # 根据LocalThickCopy复制出一份物体并替换为当前激活物体
-        active_obj = bpy.context.active_object  # 将当前激活的模型替换为执行加厚操作之前的模型
+        active_obj = bpy.context.active_object
         name = bpy.context.object.name
         copyname = name + "LocalThickCopy"  # TODO  LocalThickCopy
         ori_obj = bpy.data.objects[copyname]
@@ -1341,9 +1477,14 @@ class Local_Thickening_Reset(bpy.types.Operator):
         duplicate_obj.data = ori_obj.data.copy()
         duplicate_obj.animation_data_clear()
         duplicate_obj.name = name
-        scene = bpy.context.scene  # 将其颜色全部覆盖重置再保存到数组中
-        scene.collection.objects.link(duplicate_obj)
+        bpy.context.scene.collection.objects.link(duplicate_obj)  # 将其颜色全部覆盖重置再保存到数组中
         bpy.context.view_layer.objects.active = duplicate_obj
+        if name == '右耳':
+            moveToRight(duplicate_obj)
+        elif name == '左耳':
+            moveToLeft(duplicate_obj)
+
+        saveSelected()   # 保存选中节点
 
         draw_border_curve()  # 删除局部加厚中的圆环
 
@@ -1361,71 +1502,74 @@ class Local_Thickening_AddArea(bpy.types.Operator):
     __initial_mouse_y = None
 
     def invoke(self, context, event):
-
-        global is_timer_start
-        bpy.context.scene.var = 5
         op_cls = Local_Thickening_AddArea
+
+        bpy.context.scene.var = 5
+
+        op_cls.__right_mouse_down = False  # 初始化鼠标右键行为操作，通过鼠标右键控制圆环大小
+        op_cls.__now_mouse_x = None
+        op_cls.__now_mouse_y = None
+        op_cls.__initial_mouse_x = None
+        op_cls.__initial_mouse_y = None
+
         print("Local_Thickening_AddArea_invoke")
         if bpy.context.mode == "OBJECT":  # 将默认的物体模式切换到顶点绘制模式
             bpy.ops.paint.vertex_paint_toggle()
         bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")  # 调用自由线笔刷
         bpy.data.brushes["Draw"].color = (0.4, 1, 1)  # 设置笔刷颜色,该颜色用于扩大局部加厚区域
         bpy.data.brushes["Draw"].curve_preset = 'CONSTANT'  # 衰减设置为常量
-        bpy.context.scene.tool_settings.unified_paint_settings.size = 100  # 将用于框选区域的圆环半径设置为100
+        redius = context.scene.localThicking_circleRedius
+        bpy.context.scene.tool_settings.unified_paint_settings.size = int(redius * 25)  # 设置笔刷圆环大小
         bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'  # 锁定圆环和模型的比例
         if bpy.context.mode == "PAINT_VERTEX":  # 将默认的顶点绘制模式切换到物体模式
             bpy.ops.paint.vertex_paint_toggle()
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")  # 切换到选择模式，执行公共鼠标行为
-        op_cls.__right_mouse_down = False  # 初始化鼠标右键行为操作，通过鼠标右键控制圆环大小
-        op_cls.__now_mouse_x = None
-        op_cls.__now_mouse_y = None
-        op_cls.__initial_mouse_x = None
-        op_cls.__initial_mouse_y = None
-        # 将加厚函数中添加的修改器应用并删除该修改器,防止卡顿
-        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth",single_user=True)
-        # 开启定时器,局部加厚区域扩大时,自动加厚
-        if (is_timer_start == False):
-            bpy.ops.object.timer_auto_thick()
+
         context.window_manager.modal_handler_add(self)  # 进入modal模式
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
         op_cls = Local_Thickening_AddArea
-
+        global left_mouse_release
         if (bpy.context.scene.var == 5):
+            if (left_mouse_release):
+                if(isSelectedAreaChanged()):
+                    auto_thickening()
+                    draw_border_curve()
+                    left_mouse_release = False
             if (is_mouse_on_object(context, event)):
                 if (is_changed(context, event)):
-                    if bpy.context.mode == "OBJECT":  # 将默认的物体模式切换到顶点绘制模式
+                    if bpy.context.mode == "OBJECT":         #将默认的物体模式切换到顶点绘制模式,调用颜色绘制笔刷
                         bpy.ops.paint.vertex_paint_toggle()
-                    bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")  # 调用自由线笔刷
-                if event.type == 'RIGHTMOUSE':  # 点击鼠标右键，改变区域选取圆环的大小
-                    if event.value == 'PRESS':  # 按下鼠标右键，保存鼠标点击初始位置，标记鼠标右键已按下，移动鼠标改变圆环大小
-                        op_cls.__initial_mouse_x = event.mouse_region_x
-                        op_cls.__initial_mouse_y = event.mouse_region_y
-                        op_cls.__right_mouse_down = True
-                    elif event.value == 'RELEASE':
-                        op_cls.__right_mouse_down = False  # 松开鼠标右键，标记鼠标右键未按下，移动鼠标不再改变圆环大小，结束该事件，确定圆环的大小
-                    return {'RUNNING_MODAL'}
+                    bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
+                    redius = context.scene.localThicking_circleRedius
+                    bpy.context.scene.tool_settings.unified_paint_settings.size = int(redius * 25)
+                    bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'  # 锁定圆环和模型的比例
+                if event.type=='RIGHTMOUSE':                   #点击鼠标右键，改变区域选取圆环的大小
+                    if event.value=='PRESS':                               #按下鼠标右键，保存鼠标点击初始位置，标记鼠标右键已按下，移动鼠标改变圆环大小
+                        op_cls.__initial_mouse_x=event.mouse_region_x
+                        op_cls.__initial_mouse_y=event.mouse_region_y
+                        op_cls.__right_mouse_down=True
+                    elif event.value=='RELEASE':
+                        op_cls.__right_mouse_down=False                    #松开鼠标右键，标记鼠标右键未按下，移动鼠标不再改变圆环大小，结束该事件，确定圆环的大小
+                    # return {'RUNNING_MODAL'}
                 elif event.type == 'MOUSEMOVE':
-                    if op_cls.__right_mouse_down:  # 鼠标右键按下时，鼠标移动改变圆环大小
-                        op_cls.__now_mouse_y = event.mouse_region_y
-                        op_cls.__now_mouse_x = event.mouse_region_x
-                        dis = int(sqrt(fabs(op_cls.__now_mouse_y - op_cls.__initial_mouse_y) * fabs(
-                            op_cls.__now_mouse_y - op_cls.__initial_mouse_y) + fabs(
-                            op_cls.__now_mouse_x - op_cls.__initial_mouse_x) * fabs(
-                            op_cls.__now_mouse_x - op_cls.__initial_mouse_x)))
-                        bpy.data.scenes["Scene"].tool_settings.unified_paint_settings.size = dis
-                    showThickness(context, event)  # 鼠标位于模型上时，显示模型上鼠标指针处的厚度
+                    if op_cls.__right_mouse_down:                          #鼠标右键按下时，鼠标移动改变圆环大小
+                        op_cls.__now_mouse_y=event.mouse_region_y
+                        op_cls.__now_mouse_x=event.mouse_region_x
+                        dis=int(sqrt(fabs(op_cls.__now_mouse_y-op_cls.__initial_mouse_y)*fabs(op_cls.__now_mouse_y-op_cls.__initial_mouse_y)+fabs(op_cls.__now_mouse_x-op_cls.__initial_mouse_x)*fabs(op_cls.__now_mouse_x-op_cls.__initial_mouse_x)))
+                        bpy.data.scenes["Scene"].tool_settings.unified_paint_settings.size=dis
                     time = datetime.now().strftime("%f")
                     if int(time[-2:]) % 3 == 0:
-                        draw_border_curve()  # 根据选中区域绘制出边界
-                        # auto_thickening()
-                        # draw_border_curve()
+                        draw_border_curve()
+                    showThickness(context, event)         # 添加厚度显示,鼠标位于模型上时，显示模型上鼠标指针处的厚度
             elif ((not is_mouse_on_object(context, event)) and is_changed(context, event)):
-                if bpy.context.mode == "PAINT_VERTEX":  # 将默认的顶点绘制模式切换到物体模式
+                if bpy.context.mode == "PAINT_VERTEX":  # 将默认的顶点绘制模式切换到物体模式,使用公共鼠标行为
                     bpy.ops.paint.vertex_paint_toggle()
-                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")  # 切换到选择笔刷
+                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
                 MyHandleClass.remove_handler()  # 鼠标不在模型上时，移除厚度显示
+
+            saveSelected()   # 保存选中节点
 
             return {'PASS_THROUGH'}
         else:
@@ -1443,71 +1587,67 @@ class Local_Thickening_ReduceArea(bpy.types.Operator):
     __initial_mouse_y = None
 
     def invoke(self, context, event):
-
-        global is_timer_start
-        bpy.context.scene.var = 6
         op_cls = Local_Thickening_ReduceArea
-        print("Local_Thickening_AddArea_invoke")
+        bpy.context.scene.var = 6
+        print("Local_Thickening_ReduceArea_invoke")
         if bpy.context.mode == "OBJECT":  # 将默认的物体模式切换到顶点绘制模式
             bpy.ops.paint.vertex_paint_toggle()
         bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")  # 设置笔刷颜色,该颜色用于缩小局部加厚区域
         bpy.data.brushes["Draw"].color = (1, 0.6, 0.4)  # 调用自由线笔刷
         bpy.data.brushes["Draw"].curve_preset = 'CONSTANT'  # 衰减设置为常量
-        bpy.context.scene.tool_settings.unified_paint_settings.size = 100  # 将用于框选区域的圆环半径设置为100
+        redius = context.scene.localThicking_circleRedius
+        bpy.context.scene.tool_settings.unified_paint_settings.size = int(redius * 25)  # 设置笔刷圆环大小
         bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'  # 锁定圆环和模型的比例
         if bpy.context.mode == "VERTEX_PAINT":  # 将默认的顶点绘制模式切换到物体模式
             bpy.ops.paint.vertex_paint_toggle()
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")  # 切换到选择模式，执行公共鼠标行为
-        op_cls.__right_mouse_down = False  # 初始化鼠标右键行为操作，通过鼠标右键控制圆环大小
-        op_cls.__now_mouse_x = None
-        op_cls.__now_mouse_y = None
-        op_cls.__initial_mouse_x = None
-        op_cls.__initial_mouse_y = None
-        # 将加厚函数中添加的修改器应用并删除该修改器,防止卡顿
-        bpy.ops.object.modifier_apply(modifier="LaplacianSmooth",single_user=True)
-        # 开启定时器,局部加厚区域缩小时,自动加厚
-        if (is_timer_start == False):
-            bpy.ops.object.timer_auto_thick()
+
         context.window_manager.modal_handler_add(self)  # 进入modal模式
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
         op_cls = Local_Thickening_ReduceArea
-
+        global left_mouse_release
         if (bpy.context.scene.var == 6):
+            if (left_mouse_release):
+                if (isSelectedAreaChanged()):
+                    auto_thickening()
+                    draw_border_curve()
+                    left_mouse_release = False
             if (is_mouse_on_object(context, event)):
                 if (is_changed(context, event)):
-                    if bpy.context.mode == "OBJECT":  # 将默认的物体模式切换到顶点绘制模式
+                    if bpy.context.mode == "OBJECT":            # 将默认的物体模式切换到顶点绘制模式,调用颜色绘制笔刷
                         bpy.ops.paint.vertex_paint_toggle()
-                    bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")  # 调用自由线笔刷
-                if event.type == 'RIGHTMOUSE':  # 点击鼠标右键，改变区域选取圆环的大小
-                    if event.value == 'PRESS':  # 按下鼠标右键，保存鼠标点击初始位置，标记鼠标右键已按下，移动鼠标改变圆环大小
-                        op_cls.__initial_mouse_x = event.mouse_region_x
-                        op_cls.__initial_mouse_y = event.mouse_region_y
-                        op_cls.__right_mouse_down = True
-                    elif event.value == 'RELEASE':
-                        op_cls.__right_mouse_down = False  # 松开鼠标右键，标记鼠标右键未按下，移动鼠标不再改变圆环大小，结束该事件，确定圆环的大小
-                    return {'RUNNING_MODAL'}
+                    bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
+                    redius = context.scene.localThicking_circleRedius
+                    bpy.context.scene.tool_settings.unified_paint_settings.size = int(redius * 25)  # 设置笔刷圆环大小
+                    bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'  # 锁定圆环和模型的比例
+                if event.type=='RIGHTMOUSE':                   #点击鼠标右键，改变区域选取圆环的大小
+                    if event.value=='PRESS':                               #按下鼠标右键，保存鼠标点击初始位置，标记鼠标右键已按下，移动鼠标改变圆环大小
+                        op_cls.__initial_mouse_x=event.mouse_region_x
+                        op_cls.__initial_mouse_y=event.mouse_region_y
+                        op_cls.__right_mouse_down=True
+                    elif event.value=='RELEASE':
+                        op_cls.__right_mouse_down=False                    #松开鼠标右键，标记鼠标右键未按下，移动鼠标不再改变圆环大小，结束该事件，确定圆环的大小
+                    # return {'RUNNING_MODAL'}
                 elif event.type == 'MOUSEMOVE':
-                    if op_cls.__right_mouse_down:  # 鼠标右键按下时，鼠标移动改变圆环大小
-                        op_cls.__now_mouse_y = event.mouse_region_y
-                        op_cls.__now_mouse_x = event.mouse_region_x
-                        dis = int(sqrt(fabs(op_cls.__now_mouse_y - op_cls.__initial_mouse_y) * fabs(
-                            op_cls.__now_mouse_y - op_cls.__initial_mouse_y) + fabs(
-                            op_cls.__now_mouse_x - op_cls.__initial_mouse_x) * fabs(
-                            op_cls.__now_mouse_x - op_cls.__initial_mouse_x)))
-                        bpy.data.scenes["Scene"].tool_settings.unified_paint_settings.size = dis
-                    showThickness(context, event)  # 鼠标位于模型上时，显示模型上鼠标指针处的厚度
-                    time = datetime.now().strftime("%f")
-                    if int(time[-2:]) % 2 == 0:
-                        draw_border_curve()  # 根据选中区域绘制出边界
-                        # auto_thickening()
-                        # draw_border_curve()
+                    if op_cls.__right_mouse_down:                          #鼠标右键按下时，鼠标移动改变圆环大小
+                        op_cls.__now_mouse_y=event.mouse_region_y
+                        op_cls.__now_mouse_x=event.mouse_region_x
+                        dis=int(sqrt(fabs(op_cls.__now_mouse_y-op_cls.__initial_mouse_y)*fabs(op_cls.__now_mouse_y-op_cls.__initial_mouse_y)+fabs(op_cls.__now_mouse_x-op_cls.__initial_mouse_x)*fabs(op_cls.__now_mouse_x-op_cls.__initial_mouse_x)))
+                        bpy.data.scenes["Scene"].tool_settings.unified_paint_settings.size=dis
+                    time = datetime.now().strftime("%f")        #刷新选中区域,重新绘制圆环
+                    if int(time[-2:]) % 5 == 0:
+                        draw_border_curve()
+                    showThickness(context, event)               # 添加厚度显示,鼠标位于模型上时，显示模型上鼠标指针处的厚度
             elif ((not is_mouse_on_object(context, event)) and is_changed(context, event)):
-                if bpy.context.mode == "PAINT_VERTEX":  # 将默认的顶点绘制模式切换到物体模式
+                if bpy.context.mode == "PAINT_VERTEX":  # 将默认的顶点绘制模式切换到物体模式,使用公共鼠标行为
                     bpy.ops.paint.vertex_paint_toggle()
-                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")  # 切换到选择笔刷
+                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
                 MyHandleClass.remove_handler()  # 鼠标不在模型上时，移除厚度显示
+            
+            saveSelected()   # 保存选中节点
+
             return {'PASS_THROUGH'}
         else:
             return {'FINISHED'}
@@ -1635,44 +1775,14 @@ class Local_Thickening_Submit(bpy.types.Operator):
     bl_label = "提交做出的加厚修改"
 
     def execute(self, context):
-
-        global is_copy_local_thickening
-        global local_thickening_objects_array
-        global objects_array_index
-        global switch_selected_vertex_index
-        global is_submit
+        global left_is_submit,right_is_submit,operator_obj
 
         bpy.context.scene.var = 8
-        is_copy_local_thickening = False
-        is_submit = True
 
-        # 重置局部加厚中保存模型各个状态的数组
-        local_thickening_objects_array = []
-        objects_array_index = -1
-
-        # 提交前将模型中局部加厚的点索引给保存下来
-        switch_selected_vertex_index = []
-        active_obj = bpy.context.active_object
-        if active_obj.type == 'MESH':
-            me = active_obj.data
-            bm = bmesh.new()
-            bm.from_mesh(me)
-            bm.verts.ensure_lookup_table()
-            color_lay = bm.verts.layers.float_color["Color"]
-            for vert in bm.verts:
-                colvert = vert[color_lay]
-                if round(colvert.x, 3) != 1.000 and round(colvert.y, 3) != 0.319 and round(colvert.z, 3) != 0.133:
-                    switch_selected_vertex_index.append(vert.index)
-            bm.to_mesh(me)
-            bm.free()
-
-        # #将加厚函数中添加的修改器应用并删除该修改器
-        # bpy.ops.object.modifier_apply(modifier="LaplacianSmooth")
-        # 删除创建的顶点组
-        obj = bpy.context.active_object
-        vertex_group_to_delete = obj.vertex_groups.get("MyVertexGroup")
-        if (vertex_group_to_delete != None):
-            obj.vertex_groups.remove(vertex_group_to_delete)
+        #保存局部加厚中选中的顶点信息并将全局变量重置
+        localThickSaveInfo()
+        #将模型上加厚的区域应用拉普拉斯平滑修改器,优化平滑效果
+        applySmooth()
 
         if (bpy.context.scene.var == 8):
             # 将当前激活模型由透明状态切换为非透明状态并将模型中选中的局部加厚区域重置
@@ -1685,6 +1795,14 @@ class Local_Thickening_Submit(bpy.types.Operator):
                 bpy.ops.paint.vertex_paint_toggle()
             bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             draw_border_curve()  # 将局部加厚区域中的圆环删除
+            saveSelected()   # 保存选中节点
+            active_obj = bpy.context.active_object
+            name = active_obj.name
+            print('提交',name)
+            if name == '左耳':
+                left_is_submit = True
+            else:
+                right_is_submit = True
         return {'FINISHED'}
 
 
@@ -1964,8 +2082,6 @@ class MyTool12_JiaHou(WorkSpaceTool):
 
 
 _classes = [
-    InitialColor,
-    InitialTransparency,
     Local_Thickening_Reset,
     Local_Thickening_AddArea,
     Local_Thickening_ReduceArea,
@@ -1974,8 +2090,6 @@ _classes = [
     Local_Thickening_Mirror,
     BackUp,
     Forward,
-    TestFunc,
-    TestFunc1,
     TimerAutoThick
 ]
 
@@ -1983,34 +2097,34 @@ _classes = [
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
-    # bpy.utils.register_tool(MyTool_JiaHou, separator=True, group=False)
-    # bpy.utils.register_tool(MyTool3_JiaHou, separator=True, group=False, after={MyTool_JiaHou.bl_idname})
-    # bpy.utils.register_tool(MyTool5_JiaHou, separator=True, group=False, after={MyTool3_JiaHou.bl_idname})
-    # bpy.utils.register_tool(MyTool7_JiaHou, separator=True, group=False, after={MyTool5_JiaHou.bl_idname})
-    # bpy.utils.register_tool(MyTool9_JiaHou, separator=True, group=False, after={MyTool7_JiaHou.bl_idname})
-    # bpy.utils.register_tool(MyTool11_JiaHou,separator=True, group=False,after={MyTool9_JiaHou.bl_idname})
+    bpy.utils.register_tool(MyTool_JiaHou, separator=True, group=False)
+    bpy.utils.register_tool(MyTool3_JiaHou, separator=True, group=False, after={MyTool_JiaHou.bl_idname})
+    bpy.utils.register_tool(MyTool5_JiaHou, separator=True, group=False, after={MyTool3_JiaHou.bl_idname})
+    bpy.utils.register_tool(MyTool7_JiaHou, separator=True, group=False, after={MyTool5_JiaHou.bl_idname})
+    bpy.utils.register_tool(MyTool9_JiaHou, separator=True, group=False, after={MyTool7_JiaHou.bl_idname})
+    bpy.utils.register_tool(MyTool11_JiaHou,separator=True, group=False,after={MyTool9_JiaHou.bl_idname})
 
-    # bpy.utils.register_tool(MyTool2_JiaHou, separator=True, group=False)
-    # bpy.utils.register_tool(MyTool4_JiaHou, separator=True, group=False, after={MyTool2_JiaHou.bl_idname})
-    # bpy.utils.register_tool(MyTool6_JiaHou, separator=True, group=False, after={MyTool4_JiaHou.bl_idname})
-    # bpy.utils.register_tool(MyTool8_JiaHou, separator=True, group=False, after={MyTool6_JiaHou.bl_idname})
-    # bpy.utils.register_tool(MyTool10_JiaHou, separator=True, group=False, after={MyTool8_JiaHou.bl_idname})
-    # bpy.utils.register_tool(MyTool12_JiaHou,separator=True, group=False,after={MyTool10_JiaHou.bl_idname})
+    bpy.utils.register_tool(MyTool2_JiaHou, separator=True, group=False)
+    bpy.utils.register_tool(MyTool4_JiaHou, separator=True, group=False, after={MyTool2_JiaHou.bl_idname})
+    bpy.utils.register_tool(MyTool6_JiaHou, separator=True, group=False, after={MyTool4_JiaHou.bl_idname})
+    bpy.utils.register_tool(MyTool8_JiaHou, separator=True, group=False, after={MyTool6_JiaHou.bl_idname})
+    bpy.utils.register_tool(MyTool10_JiaHou, separator=True, group=False, after={MyTool8_JiaHou.bl_idname})
+    bpy.utils.register_tool(MyTool12_JiaHou,separator=True, group=False,after={MyTool10_JiaHou.bl_idname})
 
 
 def unregister():
     for cls in _classes:
         bpy.utils.unregister_class(cls)
-    # bpy.utils.unregister_tool(MyTool_JiaHou)
-    # bpy.utils.unregister_tool(MyTool3_JiaHou)
-    # bpy.utils.unregister_tool(MyTool5_JiaHou)
-    # bpy.utils.unregister_tool(MyTool7_JiaHou)
-    # bpy.utils.unregister_tool(MyTool9_JiaHou)
-    # bpy.utils.unregister_tool(MyTool11_JiaHou)
+    bpy.utils.unregister_tool(MyTool_JiaHou)
+    bpy.utils.unregister_tool(MyTool3_JiaHou)
+    bpy.utils.unregister_tool(MyTool5_JiaHou)
+    bpy.utils.unregister_tool(MyTool7_JiaHou)
+    bpy.utils.unregister_tool(MyTool9_JiaHou)
+    bpy.utils.unregister_tool(MyTool11_JiaHou)
 
-    # bpy.utils.unregister_tool(MyTool2_JiaHou)
-    # bpy.utils.unregister_tool(MyTool4_JiaHou)
-    # bpy.utils.unregister_tool(MyTool6_JiaHou)
-    # bpy.utils.unregister_tool(MyTool8_JiaHou)
-    # bpy.utils.unregister_tool(MyTool10_JiaHou)
-    # bpy.utils.unregister_tool(MyTool12_JiaHou)
+    bpy.utils.unregister_tool(MyTool2_JiaHou)
+    bpy.utils.unregister_tool(MyTool4_JiaHou)
+    bpy.utils.unregister_tool(MyTool6_JiaHou)
+    bpy.utils.unregister_tool(MyTool8_JiaHou)
+    bpy.utils.unregister_tool(MyTool10_JiaHou)
+    bpy.utils.unregister_tool(MyTool12_JiaHou)

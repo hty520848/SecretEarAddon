@@ -255,7 +255,7 @@ def select_nearest_point(co):
     min_dis = float('inf')
     min_dis_index = -1
 
-    length = len(curve_data.splines[0].points) 
+    length = len(curve_data.splines[0].points)
 
     for spline in curve_data.splines:
         for point_index, point in enumerate(spline.points):
@@ -268,12 +268,12 @@ def select_nearest_point(co):
                 min_dis_index = point_index
 
     if min_dis_index == 0:
-        return (Vector(curve_data.splines[0].points[0].co[0:3]), 
+        return (Vector(curve_data.splines[0].points[0].co[0:3]),
                 Vector(curve_data.splines[0].points[1].co[0:3]), 1)
-    
+
     elif min_dis_index == length - 1:
-        return (Vector(curve_data.splines[0].points[length -2].co[0:3]), 
-                Vector(curve_data.splines[0].points[length -1].co[0:3]), length -1)
+        return (Vector(curve_data.splines[0].points[length - 2].co[0:3]),
+                Vector(curve_data.splines[0].points[length - 1].co[0:3]), length - 1)
 
     min_co = Vector(curve_data.splines[0].points[min_dis_index].co[0:3])
     secondmin_co = Vector(curve_data.splines[0].points[min_dis_index - 1].co[0:3])
@@ -477,10 +477,11 @@ class TEST_OT_ventcanalqiehuan(bpy.types.Operator):
         global object_dic
         op_cls = TEST_OT_ventcanalqiehuan
         if bpy.context.scene.var != 26:
-            context.window_manager.event_timer_remove(TEST_OT_ventcanalqiehuan.__timer)
-            TEST_OT_ventcanalqiehuan.__timer = None
-            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-            print('ventcanalqiehuan finish')
+            if not op_cls.__timer:
+                context.window_manager.event_timer_remove(TEST_OT_ventcanalqiehuan.__timer)
+                op_cls.__timer = None
+                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                print('ventcanalqiehuan finish')
             return {'FINISHED'}
 
         if context.area:
@@ -491,9 +492,6 @@ class TEST_OT_ventcanalqiehuan(bpy.types.Operator):
             sphere_number = on_which_shpere(context, event)
             if (event.type == 'TIMER'):
                 if sphere_number == 0:
-                    bpy.ops.object.select_all(action='DESELECT')
-                    bpy.context.view_layer.objects.active = bpy.data.objects['右耳']
-                    bpy.data.objects['右耳'].select_set(True)
                     return {'PASS_THROUGH'}
                 elif sphere_number == 1 or sphere_number == 2:
                     bpy.context.scene.tool_settings.use_snap = True
@@ -514,9 +512,14 @@ class TEST_OT_ventcanalqiehuan(bpy.types.Operator):
 
             if (sphere_number != 0 and is_changed(context, event) == True):
                 # bpy.ops.wm.tool_set_by_id(name="builtin.select")
+                bpy.data.objects['右耳'].hide_select = True
                 bpy.ops.wm.tool_set_by_id(name="my_tool.addventcanal3")
 
             elif (sphere_number == 0 and is_changed(context, event) == True):
+                bpy.ops.object.select_all(action='DESELECT')
+                bpy.context.view_layer.objects.active = bpy.data.objects['右耳']
+                bpy.data.objects['右耳'].hide_select = False
+                bpy.data.objects['右耳'].select_set(True)
                 bpy.ops.wm.tool_set_by_id(name="my_tool.addventcanal2")
 
             if cal_co('meshventcanal', context, event) == -1:
@@ -571,29 +574,32 @@ class TEST_OT_resetventcanal(bpy.types.Operator):
     def excute(self, context, event):
         # 删除多余的物体
         global object_dic
-        need_to_delete_model_name_list = ['meshventcanal', 'ventcanal']
-        for key in object_dic:
-            bpy.data.objects.remove(bpy.data.objects[key], do_unlink=True)
-        delete_useless_object(need_to_delete_model_name_list)
-        object_dic.clear()
-        # 将VentCanalReset复制并替代当前操作模型
-        oriname = "右耳"  # TODO    右耳最终需要替换为导入时的文件名
-        ori_obj = bpy.data.objects.get(oriname)
-        copyname = "右耳VentCanalReset"
-        copy_obj = bpy.data.objects.get(copyname)
-        if (ori_obj != None and copy_obj != None):
-            bpy.data.objects.remove(ori_obj, do_unlink=True)
-            duplicate_obj = copy_obj.copy()
-            duplicate_obj.data = copy_obj.data.copy()
-            duplicate_obj.animation_data_clear()
-            duplicate_obj.name = oriname
-            bpy.context.collection.objects.link(duplicate_obj)
-            moveToRight(duplicate_obj)
-        # bpy.data.objects['右耳'].data.materials.clear()
-        # bpy.data.objects['右耳'].data.materials.append(bpy.data.materials['Yellow'])
-        # utils_re_color("右耳", (1, 0.319, 0.133))
-        global number
-        number = 0
+        global ventcanal_finish
+        if not ventcanal_finish:
+            need_to_delete_model_name_list = ['meshventcanal', 'ventcanal']
+            for key in object_dic:
+                bpy.data.objects.remove(bpy.data.objects[key], do_unlink=True)
+            delete_useless_object(need_to_delete_model_name_list)
+            object_dic.clear()
+            # 将VentCanalReset复制并替代当前操作模型
+            oriname = "右耳"  # TODO    右耳最终需要替换为导入时的文件名
+            ori_obj = bpy.data.objects.get(oriname)
+            copyname = "右耳VentCanalReset"
+            copy_obj = bpy.data.objects.get(copyname)
+            if (ori_obj != None and copy_obj != None):
+                bpy.data.objects.remove(ori_obj, do_unlink=True)
+                duplicate_obj = copy_obj.copy()
+                duplicate_obj.data = copy_obj.data.copy()
+                duplicate_obj.animation_data_clear()
+                duplicate_obj.name = oriname
+                bpy.context.collection.objects.link(duplicate_obj)
+                moveToRight(duplicate_obj)
+            # bpy.data.objects['右耳'].data.materials.clear()
+            # bpy.data.objects['右耳'].data.materials.append(bpy.data.materials['Yellow'])
+            # utils_re_color("右耳", (1, 0.319, 0.133))
+            global number
+            number = 0
+            bpy.ops.object.ventcanalqiehuan('INVOKE_DEFAULT')
 
 
 def new_curve(curve_name):
@@ -1078,6 +1084,7 @@ def backFromVentCanal():
             bpy.data.objects.remove(selected_obj, do_unlink=True)
     name = "右耳"  # TODO    根据导入文件名称更改
     obj = bpy.data.objects[name]
+    obj.hide_select = False
     duplicate_obj = obj.copy()
     duplicate_obj.data = obj.data.copy()
     duplicate_obj.animation_data_clear()

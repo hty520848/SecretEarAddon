@@ -43,67 +43,125 @@ def get_region_and_space(context, area_type, region_type, space_type):
 
 
 # 判断鼠标是否在物体上
-def is_mouse_on_object(context, event):
-    name = "右耳"  # TODO      右耳为导入的模型名称
-    obj = bpy.data.objects[name]
+def is_mouse_on_label(context, event):
+    name = "Text"  # TODO      右耳为导入的模型名称
+    obj = bpy.data.objects.get(name)
+    if(obj != None):
+        is_on_object = False  # 初始化变量
 
-    is_on_object = False  # 初始化变量
+        if context.area:
+            context.area.tag_redraw()
 
-    if context.area:
-        context.area.tag_redraw()
+        # 获取鼠标光标的区域坐标
+        mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
 
-    # 获取鼠标光标的区域坐标
-    mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
+        # 获取信息和空间信息
+        region, space = get_region_and_space(
+            context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
+        )
 
-    # 获取信息和空间信息
-    region, space = get_region_and_space(
-        context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
-    )
+        ray_dir = view3d_utils.region_2d_to_vector_3d(
+            region,
+            space.region_3d,
+            mv
+        )
+        ray_orig = view3d_utils.region_2d_to_origin_3d(
+            region,
+            space.region_3d,
+            mv
+        )
 
-    ray_dir = view3d_utils.region_2d_to_vector_3d(
-        region,
-        space.region_3d,
-        mv
-    )
-    ray_orig = view3d_utils.region_2d_to_origin_3d(
-        region,
-        space.region_3d,
-        mv
-    )
+        start = ray_orig
+        end = ray_orig + ray_dir
 
-    start = ray_orig
-    end = ray_orig + ray_dir
+        # 确定光线和对象的相交
+        mwi = obj.matrix_world.inverted()
+        mwi_start = mwi @ start
+        mwi_end = mwi @ end
+        mwi_dir = mwi_end - mwi_start
 
-    # 确定光线和对象的相交
-    mwi = obj.matrix_world.inverted()
-    mwi_start = mwi @ start
-    mwi_end = mwi @ end
-    mwi_dir = mwi_end - mwi_start
+        if obj.type == 'MESH':
+            if (obj.mode == 'OBJECT' or obj.mode == "SCULPT"):
+                mesh = obj.data
+                bm = bmesh.new()
+                bm.from_mesh(mesh)
+                tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
 
-    if obj.type == 'MESH':
-        if (obj.mode == 'OBJECT' or obj.mode == "SCULPT"):
-            mesh = obj.data
-            bm = bmesh.new()
-            bm.from_mesh(mesh)
-            tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
+                _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
 
-            _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
-
-            if fidx is not None:
-                is_on_object = True  # 如果发生交叉，将变量设为True
-    return is_on_object
+                if fidx is not None:
+                    is_on_object = True  # 如果发生交叉，将变量设为True
+        return is_on_object
+    return False
 
 
 # 判断鼠标状态是否发生改变
 def is_changed(context, event):
-    name = "右耳"  # TODO     右耳为导入的模型名称
+    name = "右耳"
     obj = bpy.data.objects[name]
+    if(obj != None):
+        curr_on_object = False  # 当前鼠标是否在物体上,初始化为False
+        global prev_on_object  # 之前鼠标是否在物体上
 
-    curr_on_object = False  # 当前鼠标是否在物体上,初始化为False
-    global prev_on_object  # 之前鼠标是否在物体上
+        if context.area:
+            context.area.tag_redraw()
 
-    if context.area:
-        context.area.tag_redraw()
+        # 获取鼠标光标的区域坐标
+        mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
+
+        # 获取信息和空间信息
+        region, space = get_region_and_space(
+            context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
+        )
+
+        ray_dir = view3d_utils.region_2d_to_vector_3d(
+            region,
+            space.region_3d,
+            mv
+        )
+        ray_orig = view3d_utils.region_2d_to_origin_3d(
+            region,
+            space.region_3d,
+            mv
+        )
+
+        start = ray_orig
+        end = ray_orig + ray_dir
+
+        # 确定光线和对象的相交
+        mwi = obj.matrix_world.inverted()
+        mwi_start = mwi @ start
+        mwi_end = mwi @ end
+        mwi_dir = mwi_end - mwi_start
+
+        if obj.type == 'MESH':
+            if (obj.mode == 'OBJECT' or obj.mode == "SCULPT"):
+                mesh = obj.data
+                bm = bmesh.new()
+                bm.from_mesh(mesh)
+                tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
+
+                _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
+
+                if fidx is not None:
+                    curr_on_object = True  # 如果发生交叉，将变量设为True
+        if (curr_on_object != prev_on_object):
+            prev_on_object = curr_on_object
+            return True
+        else:
+            return False
+    return False
+
+
+#获取鼠标在右耳上的坐标
+def cal_co(context, event):
+    '''
+    返回鼠标点击位置的坐标，没有相交则返回-1
+    :return: 相交的坐标
+    '''
+
+    active_obj = bpy.data.objects["右耳"]
+    co = []
 
     # 获取鼠标光标的区域坐标
     mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
@@ -112,7 +170,6 @@ def is_changed(context, event):
     region, space = get_region_and_space(
         context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
     )
-
     ray_dir = view3d_utils.region_2d_to_vector_3d(
         region,
         space.region_3d,
@@ -128,28 +185,24 @@ def is_changed(context, event):
     end = ray_orig + ray_dir
 
     # 确定光线和对象的相交
-    mwi = obj.matrix_world.inverted()
+    mwi = active_obj.matrix_world.inverted()
     mwi_start = mwi @ start
     mwi_end = mwi @ end
     mwi_dir = mwi_end - mwi_start
 
-    if obj.type == 'MESH':
-        if (obj.mode == 'OBJECT' or obj.mode == "SCULPT"):
-            mesh = obj.data
+    if active_obj.type == 'MESH':
+        if active_obj.mode == 'OBJECT':
+            mesh = active_obj.data
             bm = bmesh.new()
             bm.from_mesh(mesh)
             tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
 
-            _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
+            co, _, _, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
 
-            if fidx is not None:
-                curr_on_object = True  # 如果发生交叉，将变量设为True
-    if (curr_on_object != prev_on_object):
-        prev_on_object = curr_on_object
-        return True
-    else:
-        return False
+            if co is not None:
+                return co  # 如果发生交叉，返回坐标的值
 
+    return -1
 
 '''
 该模式下激活物体一直为text文本,因此切换到其他模式时,应该将当前激活物体设置为右耳
@@ -174,6 +227,7 @@ def frontToLabel():
     duplicate_obj1.animation_data_clear()
     duplicate_obj1.name = name + "LabelReset"
     bpy.context.collection.objects.link(duplicate_obj1)
+    moveToRight(duplicate_obj1)
     duplicate_obj1.hide_set(True)
     initial()  # 初始化
 
@@ -182,7 +236,7 @@ def frontFromLabel():
     # 根据LabelReset,复制出一份物体替代当前操作物体
     # 删除LabelReset与LabelLast
 
-    #此处提交主要时为了删除Plane和Text
+    #若模型上存在未提交的字体,则记录信息并提交该字体
     labelSubmit()
 
     name = "右耳"  # TODO    根据导入文件名称更改
@@ -203,7 +257,10 @@ def frontFromLabel():
     for selected_obj in all_objs:
         if (selected_obj.name == "右耳LabelReset" or selected_obj.name == "右耳LabelLast"):
             bpy.data.objects.remove(selected_obj, do_unlink=True)
-
+    global label_info_save
+    for i in range(len(label_info_save)):
+        label_info = label_info_save[i]
+        print(label_info.text)
 
 def backToLabel():
     # 判断是否存在LabelReset
@@ -241,6 +298,7 @@ def backToLabel():
             ori_obj.animation_data_clear()
             ori_obj.name = name + "LabelReset"
             bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
             ori_obj.hide_set(True)
         elif (bpy.data.objects.get("右耳VentCanalLast") != None):
             lastname = "右耳VentCanalLast"
@@ -250,6 +308,7 @@ def backToLabel():
             ori_obj.animation_data_clear()
             ori_obj.name = name + "LabelReset"
             bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
             ori_obj.hide_set(True)
         elif (bpy.data.objects.get("右耳SoundCanalLast") != None):
             lastname = "右耳SoundCanalLast"
@@ -259,6 +318,7 @@ def backToLabel():
             ori_obj.animation_data_clear()
             ori_obj.name = name + "LabelReset"
             bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
             ori_obj.hide_set(True)
         elif (bpy.data.objects.get("右耳MouldLast") != None):
             lastname = "右耳MouldLast"
@@ -268,6 +328,7 @@ def backToLabel():
             ori_obj.animation_data_clear()
             ori_obj.name = name + "LabelReset"
             bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
             ori_obj.hide_set(True)
         elif (bpy.data.objects.get("右耳QieGeLast") != None):
             lastname = "右耳QieGeLast"
@@ -277,6 +338,7 @@ def backToLabel():
             ori_obj.animation_data_clear()
             ori_obj.name = name + "LabelReset"
             bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
             ori_obj.hide_set(True)
         elif (bpy.data.objects.get("右耳LocalThickLast") != None):
             lastname = "右耳LocalThickLast"
@@ -286,6 +348,7 @@ def backToLabel():
             ori_obj.animation_data_clear()
             ori_obj.name = name + "LabelReset"
             bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
             ori_obj.hide_set(True)
         else:
             lastname = "右耳DamoCopy"
@@ -295,6 +358,7 @@ def backToLabel():
             ori_obj.animation_data_clear()
             ori_obj.name = name + "LabelReset"
             bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
             ori_obj.hide_set(True)
         bpy.data.objects.remove(obj, do_unlink=True)
         duplicate_obj = ori_obj.copy()
@@ -312,6 +376,7 @@ def backFromLabel():
     # 将模型上未初始化的Label提交
     # 将提交之后的模型保存LabelLast,用于模块切换,若存在LabelLast,则先将其删除
 
+    #将模型提交
     labelSubmit()
 
     all_objs = bpy.data.objects
@@ -325,6 +390,7 @@ def backFromLabel():
     duplicate_obj1.animation_data_clear()
     duplicate_obj1.name = name + "LabelLast"
     bpy.context.collection.objects.link(duplicate_obj1)
+    moveToRight(duplicate_obj1)
     duplicate_obj1.hide_set(True)
 
 #在label提交前会保存label的相关信息
@@ -361,6 +427,7 @@ def initial():
             depth = labelInfo.depth
             size = labelInfo.size
             style = labelInfo.style
+            print(style)
             l_x = labelInfo.l_x
             l_y = labelInfo.l_y
             l_z = labelInfo.l_z
@@ -380,9 +447,11 @@ def initial():
         r_x = labelInfo.r_x
         r_y = labelInfo.r_y
         r_z = labelInfo.r_z
-        bpy.context.scene.labelText = text
         # 先根据text信息添加一个label,激活鼠标行为
         bpy.ops.object.labeladd('INVOKE_DEFAULT')
+        #更新label的text时,会将之前物体删除并将信息保存到label_info_save中,多余的信息需要删除
+        bpy.context.scene.labelText = text
+        label_info_save.pop()
         # 获取添加后的label,并根据参数设置其形状大小
         planename = "Plane"
         plane_obj = bpy.data.objects.get(planename)
@@ -395,6 +464,8 @@ def initial():
         plane_obj.rotation_euler[0] = r_x
         plane_obj.rotation_euler[1] = r_y
         plane_obj.rotation_euler[2] = r_z
+    else:
+        bpy.ops.wm.tool_set_by_id(name="my_tool.label_add")
 
 
 # 模块切换时,根据提交时保存的信息,添加label进行初始化,先根据信息添加label,之后再将label提交。与submit函数相比,提交时不必保存label信息。
@@ -595,6 +666,9 @@ def addLabel(text):
     plane_obj.location[1] = -6.0
     plane_obj.location[2] = 3.2
 
+    moveToRight(plane_obj)
+    moveToRight(text_obj)
+
 
 def labelDepthUpdate(depth):
     '''
@@ -677,7 +751,7 @@ def labelTextUpdate(text):
 
 def labelSubmit():
     '''
-    提交操作,应用修改器,将Plane删除并将Text实体化
+    提交操作,保存信息,应用修改器,将Plane删除并将Text实体化
     '''
     enum = bpy.context.scene.styleEnum
 
@@ -719,6 +793,7 @@ def labelSubmit():
             bpy.context.object.modifiers["Boolean"].operation = 'UNION'
         bpy.context.object.modifiers["Boolean"].object = text_obj
         bpy.ops.object.modifier_apply(modifier="Boolean",single_user=True)
+        #开启自动平滑功能
         bpy.context.object.data.use_auto_smooth = True
 
         #删除平面和字体
@@ -744,14 +819,6 @@ class LabelTest(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class LabelTest1(bpy.types.Operator):
-    bl_idname = "object.labeltestfunc1"
-    bl_label = "功能测试"
-
-    def invoke(self, context, event):
-        labelSubmit()
-
-        return {'FINISHED'}
 
 #保存提交前的每个Label信息
 class LabelInfoSave(object):
@@ -799,7 +866,7 @@ class LabelReset(bpy.types.Operator):
             bpy.data.objects.remove(text_obj, do_unlink=True)
         if (plane_obj != None):
             bpy.data.objects.remove(plane_obj, do_unlink=True)
-        # 将LabelCopy复制并替代当前操作模型
+        # 将LabelReset复制并替代当前操作模型
         oriname = "右耳"  # TODO    右耳最终需要替换为导入时的文件名  右耳LabelCopy同理
         ori_obj = bpy.data.objects.get(oriname)
         copyname = "右耳LabelReset"
@@ -811,6 +878,8 @@ class LabelReset(bpy.types.Operator):
             duplicate_obj.animation_data_clear()
             duplicate_obj.name = oriname
             bpy.context.collection.objects.link(duplicate_obj)
+            moveToRight(duplicate_obj)
+        bpy.ops.wm.tool_set_by_id(name="my_tool.label_add")
         return {'FINISHED'}
 
 
@@ -834,18 +903,42 @@ class LabelAdd(bpy.types.Operator):
         plane_obj = bpy.data.objects.get(planename)
         plane_obj.select_set(True)
         bpy.context.view_layer.objects.active = plane_obj
+        co = cal_co(context,event)
+        if(co != -1):
+            plane_obj.location = co
+
 
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
+        cubename = "Text"
+        label_obj = bpy.data.objects.get(cubename)
+        planename = "Plane"
+        plane_obj = bpy.data.objects.get(planename)
+        cur_obj_name = "右耳"
+        cur_obj = bpy.data.objects.get(cur_obj_name)
         if (bpy.context.scene.var == 11):
             if (is_mouse_on_object(context, event) and is_changed(context, event)):
                 # 调用label的鼠标行为
+                # yellow_material = bpy.data.materials.new(name="Yellow")
+                # yellow_material.diffuse_color = (1.0, 1.0, 0.0, 1.0)
+                # label_obj.data.materials.clear()
+                # label_obj.data.materials.append(yellow_material)
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+                plane_obj.select_set(True)
+                bpy.context.view_layer.objects.active = plane_obj
+                cur_obj.select_set(False)
             elif ((not is_mouse_on_object(context, event)) and is_changed(context, event)):
                 # 调用公共鼠标行为
+                # red_material = bpy.data.materials.new(name="Red")
+                # red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                # label_obj.data.materials.clear()
+                # label_obj.data.materials.append(red_material)
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                cur_obj.select_set(True)
+                bpy.context.view_layer.objects.active = cur_obj
+                plane_obj.select_set(False)
             return {'PASS_THROUGH'}
         else:
             return {'FINISHED'}
@@ -856,7 +949,7 @@ class LabelSubmit(bpy.types.Operator):
     bl_label = "标签提交"
 
     def invoke(self, context, event):
-        bpy.context.scene.var == 12
+        bpy.context.scene.var = 12
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
@@ -902,8 +995,12 @@ class MyTool_Label2(WorkSpaceTool):
     bl_icon = "ops.mesh.primitive_torus_add_gizmo"
     bl_widget = None
     bl_keymap = (
-        ("object.labeladd", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
+        # ("object.labeladd", {"type": 'MOUSEMOVE', "value": 'ANY'},
+        #  {}),
+        ("object.labeladd", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
+        ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
+        ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
     )
 
     def draw_settings(context, layout, tool):
@@ -937,21 +1034,20 @@ _classes = [
     LabelAdd,
     LabelSubmit,
     LabelTest,
-    LabelTest1
 ]
 
 
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
-    # bpy.utils.register_tool(MyTool_Label1, separator=True, group=False)
-    # bpy.utils.register_tool(MyTool_Label2, separator=True, group=False, after={MyTool_Label1.bl_idname})
-    # bpy.utils.register_tool(MyTool_Label3, separator=True, group=False, after={MyTool_Label2.bl_idname})
+    bpy.utils.register_tool(MyTool_Label1, separator=True, group=False)
+    bpy.utils.register_tool(MyTool_Label2, separator=True, group=False, after={MyTool_Label1.bl_idname})
+    bpy.utils.register_tool(MyTool_Label3, separator=True, group=False, after={MyTool_Label2.bl_idname})
 
 
 def unregister():
     for cls in _classes:
         bpy.utils.unregister_class(cls)
-    # bpy.utils.unregister_tool(MyTool_Label1)
-    # bpy.utils.unregister_tool(MyTool_Label2)
-    # bpy.utils.unregister_tool(MyTool_Label3)
+    bpy.utils.unregister_tool(MyTool_Label1)
+    bpy.utils.unregister_tool(MyTool_Label2)
+    bpy.utils.unregister_tool(MyTool_Label3)

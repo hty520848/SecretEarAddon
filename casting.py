@@ -29,6 +29,7 @@ def frontToCasting():
     duplicate_obj1.animation_data_clear()
     duplicate_obj1.name = name + "CastingReset"
     bpy.context.collection.objects.link(duplicate_obj1)
+    moveToRight(duplicate_obj1)
     duplicate_obj1.hide_set(True)
     castingInitial()  # 初始化
     global prev_casting_thickness
@@ -45,6 +46,9 @@ def frontFromCasting():
     compare_obj = bpy.data.objects.get("CastingCompare")
     if (compare_obj != None):
         bpy.data.objects.remove(compare_obj, do_unlink=True)
+    compare_last_obj = bpy.data.objects.get("右耳CastingCompareLast")
+    if (compare_last_obj != None):
+        bpy.data.objects.remove(compare_last_obj, do_unlink=True)
 
     name = "右耳"  # TODO    根据导入文件名称更改
     obj = bpy.data.objects[name]
@@ -104,6 +108,7 @@ def backToCasting():
             ori_obj.animation_data_clear()
             ori_obj.name = name + "CastingReset"
             bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
             ori_obj.hide_set(True)
         elif (bpy.data.objects.get("右耳HandleLast") != None):
             lastname = "右耳HandleLast"
@@ -113,6 +118,7 @@ def backToCasting():
             ori_obj.animation_data_clear()
             ori_obj.name = name + "CastingReset"
             bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
             ori_obj.hide_set(True)
         elif (bpy.data.objects.get("右耳VentCanalLast") != None):
             lastname = "右耳VentCanalLast"
@@ -131,6 +137,7 @@ def backToCasting():
             ori_obj.animation_data_clear()
             ori_obj.name = name + "CastingReset"
             bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
             ori_obj.hide_set(True)
         elif (bpy.data.objects.get("右耳MouldLast") != None):
             lastname = "右耳MouldLast"
@@ -140,6 +147,7 @@ def backToCasting():
             ori_obj.animation_data_clear()
             ori_obj.name = name + "CastingReset"
             bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
             ori_obj.hide_set(True)
         elif (bpy.data.objects.get("右耳QieGeLast") != None):
             lastname = "右耳QieGeLast"
@@ -149,6 +157,7 @@ def backToCasting():
             ori_obj.animation_data_clear()
             ori_obj.name = name + "CastingReset"
             bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
             ori_obj.hide_set(True)
         elif (bpy.data.objects.get("右耳LocalThickLast") != None):
             lastname = "右耳LocalThickLast"
@@ -158,6 +167,7 @@ def backToCasting():
             ori_obj.animation_data_clear()
             ori_obj.name = name + "CastingReset"
             bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
             ori_obj.hide_set(True)
         else:
             lastname = "右耳DamoCopy"
@@ -167,6 +177,7 @@ def backToCasting():
             ori_obj.animation_data_clear()
             ori_obj.name = name + "CastingReset"
             bpy.context.collection.objects.link(ori_obj)
+            moveToRight(ori_obj)
             ori_obj.hide_set(True)
         bpy.data.objects.remove(obj, do_unlink=True)
         duplicate_obj = ori_obj.copy()
@@ -199,6 +210,7 @@ def backFromCasting():
     duplicate_obj1.animation_data_clear()
     duplicate_obj1.name = name + "CastingLast"
     bpy.context.collection.objects.link(duplicate_obj1)
+    moveToRight(duplicate_obj1)
     duplicate_obj1.hide_set(True)
 
 
@@ -208,28 +220,36 @@ def castingThicknessUpdate(thickness):
     global is_casting_submit
     if(not is_casting_submit):
          # 执行加厚操作
-        cur_obj = bpy.data.objects["右耳"]
-        casting_compare_obj = bpy.data.objects["CastingCompare"]
-        if cur_obj.type == 'MESH':
-            # 获取当前激活物体的网格数据
-            me = cur_obj.data
-            # 创建bmesh对象
-            bm = bmesh.new()
-            # 将网格数据复制到bmesh对象
-            bm.from_mesh(me)
-            bm.verts.ensure_lookup_table()
-
-            ori_me = casting_compare_obj.data
-            ori_bm = bmesh.new()
-            ori_bm.from_mesh(ori_me)
-            ori_bm.verts.ensure_lookup_table()
-
-            for vert in bm.verts:
-                vert.co = ori_bm.verts[vert.index].co + ori_bm.verts[vert.index].normal.normalized() * thickness
-            bm.to_mesh(me)
-            bm.free()
-            ori_bm.free()
-#
+        # cur_obj = bpy.data.objects["右耳"]
+        # casting_compare_obj = bpy.data.objects["CastingCompare"]
+        # if cur_obj.type == 'MESH':
+        #     # 获取当前激活物体的网格数据
+        #     me = cur_obj.data
+        #     # 创建bmesh对象
+        #     bm = bmesh.new()
+        #     # 将网格数据复制到bmesh对象
+        #     bm.from_mesh(me)
+        #     bm.verts.ensure_lookup_table()
+        #
+        #     ori_me = casting_compare_obj.data
+        #     ori_bm = bmesh.new()
+        #     ori_bm.from_mesh(ori_me)
+        #     ori_bm.verts.ensure_lookup_table()
+        #
+        #     for vert in bm.verts:
+        #         vert.co = ori_bm.verts[vert.index].co + ori_bm.verts[vert.index].normal.normalized() * thickness
+        #     bm.to_mesh(me)
+        #     bm.free()
+        #     ori_bm.free()
+         cur_obj = bpy.data.objects.get("右耳")
+         if(cur_obj != None):
+             modifier_name = "CastingModifier"
+             target_modifier = None
+             for modifier in cur_obj.modifiers:
+                 if modifier.name == modifier_name:
+                     target_modifier = modifier
+             if (target_modifier != None):
+                 bpy.context.object.modifiers["CastingModifier"].thickness = thickness
 
 def castingInitial():
     global is_casting_submit
@@ -246,6 +266,7 @@ def castingInitial():
     duplicate_obj.name = "CastingCompare"
     duplicate_obj.animation_data_clear()
     bpy.context.scene.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
     cur_obj.select_set(False)
     duplicate_obj.select_set(True)
     bpy.context.view_layer.objects.active = duplicate_obj
@@ -257,6 +278,11 @@ def castingInitial():
     red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
     duplicate_obj.data.materials.clear()
     duplicate_obj.data.materials.append(red_material)
+    #为对比物体添加顶点组   主要是为了去除实体化后的物体的原始内壁模型
+    casting_vertex_group = duplicate_obj.vertex_groups.get("CastingVertexGroup")
+    if (casting_vertex_group == None):
+        casting_vertex_group = duplicate_obj.vertex_groups.new(name="CastingVertexGroup")
+        casting_vertex_group.add([0], 1, 'ADD')
     #为当前操作物体添加透明材质
     duplicate_obj.select_set(False)
     cur_obj.select_set(True)
@@ -279,63 +305,171 @@ def castingInitial():
     # cur_obj.data.materials.append(mat)
     # bpy.data.materials['Transparency'].blend_method = "BLEND"
     # bpy.data.materials["Transparency"].node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
-    initialTransparency()
-    cur_obj.data.materials.clear()
-    cur_obj.data.materials.append(bpy.data.materials['Transparency'])
+    # initialTransparency()
+    # cur_obj.data.materials.clear()
+    # cur_obj.data.materials.append(bpy.data.materials['Transparency'])
+    # 为当前物体添加顶点组   主要是为了去除实体化后的物体的原始内壁模型
+    casting_vertex_group = cur_obj.vertex_groups.get("CastingVertexGroup")
+    if (casting_vertex_group == None):
+        casting_vertex_group = cur_obj.vertex_groups.new(name="CastingVertexGroup")
+        casting_vertex_group.add([0], 1, 'ADD')
 
     #为操作物体添加实体化修改器,通过参数实现铸造厚度
-    # modifier_name = "CastingModifier"
-    # target_modifier = None
-    # for modifier in cur_obj.modifiers:
-    #     if modifier.name == modifier_name:
-    #         target_modifier = modifier
-    # if (target_modifier == None):
-    #     bpy.ops.object.modifier_add(type='SOLIDIFY')
-    #     hard_eardrum_modifier = bpy.context.object.modifiers["Solidify"]
-    #     hard_eardrum_modifier.name = "CastingModifier"
-    # bpy.context.object.modifiers["CastingModifier"].offset = 1
-    # bpy.context.object.modifiers["CastingModifier"]
+    modifier_name = "CastingModifier"
+    target_modifier = None
+    for modifier in cur_obj.modifiers:
+        if modifier.name == modifier_name:
+            target_modifier = modifier
+    if (target_modifier == None):
+        bpy.ops.object.modifier_add(type='SOLIDIFY')
+        soft_eardrum_casting_modifier = bpy.context.object.modifiers["Solidify"]
+        soft_eardrum_casting_modifier.name = "CastingModifier"
+    bpy.context.object.modifiers["CastingModifier"].solidify_mode = 'NON_MANIFOLD'
+    bpy.context.object.modifiers["CastingModifier"].nonmanifold_thickness_mode = 'EVEN'
+    bpy.context.object.modifiers["CastingModifier"].offset = 1
+    bpy.context.object.modifiers["CastingModifier"].thickness = 0.5
+
+
+
 
     #通过法线放缩实现铸造厚度
-    casting_compare_obj = bpy.data.objects["CastingCompare"]
-    if cur_obj.type == 'MESH':
-        # 获取当前激活物体的网格数据
-        me = cur_obj.data
-        # 创建bmesh对象
-        bm = bmesh.new()
-        # 将网格数据复制到bmesh对象
-        bm.from_mesh(me)
-        bm.verts.ensure_lookup_table()
-
-        ori_me = casting_compare_obj.data
-        ori_bm = bmesh.new()
-        ori_bm.from_mesh(ori_me)
-        ori_bm.verts.ensure_lookup_table()
-
-        for vert in bm.verts:
-            vert.co = ori_bm.verts[vert.index].co + ori_bm.verts[vert.index].normal.normalized() * 0.2
-        bm.to_mesh(me)
-        bm.free()
-        ori_bm.free()
+    # casting_compare_obj = bpy.data.objects["CastingCompare"]
+    # if cur_obj.type == 'MESH':
+    #     # 获取当前激活物体的网格数据
+    #     me = cur_obj.data
+    #     # 创建bmesh对象
+    #     bm = bmesh.new()
+    #     # 将网格数据复制到bmesh对象
+    #     bm.from_mesh(me)
+    #     bm.verts.ensure_lookup_table()
+    #
+    #     ori_me = casting_compare_obj.data
+    #     ori_bm = bmesh.new()
+    #     ori_bm.from_mesh(ori_me)
+    #     ori_bm.verts.ensure_lookup_table()
+    #
+    #     for vert in bm.verts:
+    #         vert.co = ori_bm.verts[vert.index].co + ori_bm.verts[vert.index].normal.normalized() * 0.2
+    #     bm.to_mesh(me)
+    #     bm.free()
+    #     ori_bm.free()
 
 
 
 
 def castingSubmit():
     global is_casting_submit
-    is_casting_submit = True
-    #将对比物材质由红色改为黄色
-    compare_obj = bpy.data.objects.get("CastingCompare")
-    if (compare_obj != None):
-        compare_obj = bpy.data.objects["CastingCompare"]
-        compare_obj.select_set(True)
-        bpy.context.view_layer.objects.active = compare_obj
-        bpy.ops.geometry.color_attribute_add(name="Color", color=(1, 0.319, 0.133, 1))
-        bpy.data.objects['CastingCompare'].data.materials.clear()
-        bpy.data.objects['CastingCompare'].data.materials.append(bpy.data.materials['Yellow'])
+    if(not is_casting_submit):
+        is_casting_submit = True
+        cur_obj = bpy.data.objects.get("右耳")
+        compare_obj = bpy.data.objects.get("CastingCompare")
+        if (compare_obj != None and cur_obj != None):
+            #将对比物材质由红色改为黄色
+            cur_obj.select_set(False)
+            compare_obj.select_set(True)
+            bpy.context.view_layer.objects.active = compare_obj
+            yellow_material = bpy.data.materials.new(name="yellowcompare")
+            yellow_material.diffuse_color = (1, 0.319, 0.133, 1.0)
+            # bpy.ops.geometry.color_attribute_add(name="Color", color=(1, 0.319, 0.133, 1))
+            bpy.data.objects['CastingCompare'].data.materials.clear()
+            # bpy.data.objects['CastingCompare'].data.materials.append(bpy.data.materials['Yellow'])
+            bpy.data.objects['CastingCompare'].data.materials.append(yellow_material)
+            compare_obj.select_set(False)
+            cur_obj.select_set(True)
+            bpy.context.view_layer.objects.active = cur_obj
 
+            #将CastingCompare复制一份CastingCompareLast,可能用于之后的软耳膜支撑,排气孔中内层CastingCompare的还原
+            compare_last_obj = bpy.data.objects.get("右耳CastingCompareLast")
+            if (compare_last_obj != None):
+                bpy.data.objects.remove(compare_last_obj, do_unlink=True)
+            duplicate_obj1 = compare_obj.copy()
+            duplicate_obj1.data = compare_obj.data.copy()
+            duplicate_obj1.animation_data_clear()
+            duplicate_obj1.name = "右耳CastingCompareLast"
+            bpy.context.collection.objects.link(duplicate_obj1)
+            moveToRight(duplicate_obj1)
+            duplicate_obj1.hide_set(True)
 
+            #将实体化修改器提交
+            modifier_name = "CastingModifier"
+            target_modifier = None
+            for modifier in cur_obj.modifiers:
+                if modifier.name == modifier_name:
+                    target_modifier = modifier
+            if (target_modifier != None):
+                bpy.ops.object.modifier_apply(modifier="CastingModifier",single_user=True)
 
+            #删除实体化后模型的内侧模型(即删除原本的模型,只保存实体化后的外壳)
+            casting_compare_index = []
+            casting_index = []
+
+            cur_obj.select_set(False)
+            compare_obj.select_set(True)
+            bpy.context.view_layer.objects.active = compare_obj
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.vertex_group_set_active(group='CastingVertexGroup')
+            bpy.ops.object.vertex_group_select()
+            bpy.ops.object.mode_set(mode='OBJECT')
+            if compare_obj.type == 'MESH':
+                compare_me = compare_obj.data
+                compare_bm = bmesh.new()
+                compare_bm.from_mesh(compare_me)
+                compare_bm.verts.ensure_lookup_table()
+                for vert in compare_bm.verts:
+                    if (vert.select == True):
+                        casting_compare_index.append(vert.index)
+                compare_bm.free()
+            compare_obj.select_set(False)
+            cur_obj.select_set(True)
+            bpy.context.view_layer.objects.active = cur_obj
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.vertex_group_set_active(group='CastingVertexGroup')
+            bpy.ops.object.vertex_group_select()
+            bpy.ops.object.mode_set(mode='OBJECT')
+            if cur_obj.type == 'MESH':
+                cur_me = cur_obj.data
+                cur_bm = bmesh.new()
+                cur_bm.from_mesh(cur_me)
+                cur_bm.verts.ensure_lookup_table()
+                for vert in cur_bm.verts:
+                    if (vert.select == True):
+                        casting_index.append(vert.index)
+                cur_bm.free()
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.mode_set(mode='OBJECT')
+            if cur_obj.type == 'MESH' and compare_obj.type == 'MESH':
+                me = cur_obj.data
+                bm = bmesh.new()
+                bm.from_mesh(me)
+                bm.verts.ensure_lookup_table()
+                compare_me = compare_obj.data
+                compare_bm = bmesh.new()
+                compare_bm.from_mesh(compare_me)
+                compare_bm.verts.ensure_lookup_table()
+                for vert_index in casting_index:
+                    vert = bm.verts[vert_index]
+                    min_distance = math.inf
+                    for compare_vert_index in casting_compare_index:
+                        vert_compare = compare_bm.verts[compare_vert_index]
+                        distance = math.sqrt(
+                            (vert.co[0] - vert_compare.co[0]) ** 2 + (
+                                    vert.co[1] - vert_compare.co[1]) ** 2 + (
+                                    vert.co[2] - vert_compare.co[2]) ** 2)
+                        if (distance < min_distance):
+                            min_distance = distance
+                    if (min_distance < 0.1):
+                        vert.select_set(True)
+                bm.to_mesh(me)
+                bm.free()
+                compare_bm.free()
+
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_linked(delimit=set())
+            bpy.ops.mesh.delete(type='VERT')
+            bpy.ops.object.mode_set(mode='OBJECT')
 
 class CastingReset(bpy.types.Operator):
     bl_idname = "object.castingreset"
@@ -354,6 +488,8 @@ class CastingReset(bpy.types.Operator):
         global prev_casting_thickness
         prev_casting_thickness = 0.2
         bpy.context.scene.ruanErMoHouDu = 0.2
+        frontFromCasting()
+        frontToCasting()
         return {'FINISHED'}
 
 
@@ -449,15 +585,15 @@ _classes = [
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
-    # bpy.utils.register_tool(MyTool_Casting1, separator=True, group=False)
-    # bpy.utils.register_tool(MyTool_Casting2, separator=True, group=False, after={MyTool_Casting1.bl_idname})
-    # bpy.utils.register_tool(MyTool_Casting3, separator=True, group=False, after={MyTool_Casting2.bl_idname})
+    bpy.utils.register_tool(MyTool_Casting1, separator=True, group=False)
+    bpy.utils.register_tool(MyTool_Casting2, separator=True, group=False, after={MyTool_Casting1.bl_idname})
+    bpy.utils.register_tool(MyTool_Casting3, separator=True, group=False, after={MyTool_Casting2.bl_idname})
 
 
 def unregister():
     for cls in _classes:
         bpy.utils.unregister_class(cls)
-    # bpy.utils.unregister_tool(MyTool_Casting1)
-    # bpy.utils.unregister_tool(MyTool_Casting2)
-    # bpy.utils.unregister_tool(MyTool_Casting3)
+    bpy.utils.unregister_tool(MyTool_Casting1)
+    bpy.utils.unregister_tool(MyTool_Casting2)
+    bpy.utils.unregister_tool(MyTool_Casting3)
 

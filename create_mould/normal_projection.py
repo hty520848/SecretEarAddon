@@ -1,7 +1,8 @@
 import bpy
 import bmesh
 import math
-from ..tool import moveToRight, newColor
+import mathutils
+from ..tool import moveToRight, newColor, subdivide, convert_to_mesh
 
 
 def calculate_angle(x, y):
@@ -32,7 +33,7 @@ def get_highest_vert(name):
         vert_order_by_z.append(vert)
     # 按z坐标倒序排列
     vert_order_by_z.sort(key=lambda vert: vert.co[2], reverse=True)
-    return vert_order_by_z[0].co
+    return (round(vert_order_by_z[0].co[0], 4), round(vert_order_by_z[0].co[1], 4), round(vert_order_by_z[0].co[2], 4))
 
 
 def get_change_parameters(origin_highest_vert):
@@ -106,6 +107,7 @@ def normal_ray_cast(template_vert, rotate_angle, height_difference, target_bm):
                 min_distance = distance
 
         return closest_vert, closest_normal
+    return None, None
 
 
 def frame_style_normal_ray_cast(template_vert, rotate_angle, height_difference, target_bm):
@@ -150,9 +152,9 @@ def frame_style_normal_ray_cast(template_vert, rotate_angle, height_difference, 
 
     elif out_hit and in_hit:  # 内外都命中
         out_distance = ((origin_co[0] - out_loc[0]) ** 2 + (origin_co[1] - out_loc[1]) ** 2 + (
-                    origin_co[2] - out_loc[2]) ** 2) ** 0.5
+                origin_co[2] - out_loc[2]) ** 2) ** 0.5
         in_distance = ((origin_co[0] - in_loc[0]) ** 2 + (origin_co[1] - in_loc[1]) ** 2 + (
-                    origin_co[2] - in_loc[2]) ** 2) ** 0.5
+                origin_co[2] - in_loc[2]) ** 2) ** 0.5
 
         if out_distance < in_distance:
             hit = out_hit
@@ -166,22 +168,8 @@ def frame_style_normal_ray_cast(template_vert, rotate_angle, height_difference, 
             index = in_index
 
     if hit:
-        # 进入这里就说明向外或向内命中了
-        target_mesh = target_obj.data
-        hit_face = target_mesh.polygons[index]
-        # 获取这个面的顶点索引
-        face_verts_index = hit_face.vertices
-
-        min_distance = math.inf
-        for vert_index in face_verts_index:
-            vert = target_bm.verts[vert_index]
-            distance = (loc[0] - vert.co[0]) ** 2 + (loc[1] - vert.co[1]) ** 2 + (loc[2] - vert.co[2]) ** 2
-            if distance < min_distance:
-                closest_vert = vert
-                closest_normal = normal
-                min_distance = distance
-
-        return closest_vert, closest_normal
+        return loc, normal
+    return None, None
 
 
 # 对顶点进行排序用于画圈
@@ -317,6 +305,7 @@ def normal_projection_to_darw_cut_plane(origin_highest_vert, border_vert_co_and_
     border_vert = list()
     border_vert_co = list()
     plane_border_co = list()
+    plane_inner_border_co = list()
     rotate_angle, height_difference = get_change_parameters(origin_highest_vert)
 
     for vert in border_vert_co_and_normal:
@@ -324,17 +313,108 @@ def normal_projection_to_darw_cut_plane(origin_highest_vert, border_vert_co_and_
         if cast_vert is not None and cast_vert not in border_vert:
             border_vert.append(cast_vert)
             border_vert_co.append(cast_vert.co)
-            step = 0.2
-            plane_co = (cast_vert.co[0] + cast_normal[0] * step, cast_vert.co[1] + cast_normal[1] * step,
-                        cast_vert.co[2] + cast_normal[2] * step)
-            plane_border_co.append(plane_co)
+            # step = 0.2
+            # plane_co = (cast_vert.co[0] + cast_normal[0] * step, cast_vert.co[1] + cast_normal[1] * step,
+            #             cast_vert.co[2] + cast_normal[2] * step)
+            # plane_border_co.append(plane_co)
+            # plane_inner_border_co.append((cast_vert.co[0] - cast_normal[0] * step,
+            #                               cast_vert.co[1] - cast_normal[1] * step,
+            #                               cast_vert.co[2] - cast_normal[2] * step))
 
-    order_border_vert = get_order_border_vert(plane_border_co)
-    draw_border_curve(get_order_border_vert(border_vert_co), "BottomRingBorderR", 0.18)
-    draw_border_curve(order_border_vert, "CutPlane", 0)
+    order_border_vert = get_order_border_vert(border_vert_co)
+    draw_border_curve(order_border_vert, "BottomRingBorderR", 0.18)
+    smooth_all_curve("BottomRingBorderR", 200)
+    # draw_border_curve(get_order_border_vert(plane_inner_border_co), "Inner", 0)
+    # draw_border_curve(order_border_vert, "Center", 0)
+    # draw_border_curve(order_border_vert, "CutPlane", 0)
+
+    # smooth_all_curve("Inner")
+    # smooth_all_curve("Center")
+    # smooth_all_curve("CutPlane")
+
+    snaptoobject("BottomRingBorderR", 1, 0.2)
+    # snaptoobject("Inner", -0.2)
+    # snaptoobject("Center", 0)
+    # snaptoobject("CutPlane", 1)
 
     moveToRight(bpy.data.objects["BottomRingBorderR"])
-    moveToRight(bpy.data.objects["CutPlane"])
+    # moveToRight(bpy.data.objects["Inner"])
+    # moveToRight(bpy.data.objects["Center"])
+    # moveToRight(bpy.data.objects["CutPlane"])
+
+
+def smooth_all_curve(curve_name, smooth_number):
+    curve_obj = bpy.data.objects[curve_name]
+    bpy.context.view_layer.objects.active = curve_obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.curve.select_all(action='SELECT')
+    bpy.ops.curve.subdivide(number_cuts=1)  # 细分
+    for i in range(0, smooth_number, 1):
+        bpy.ops.curve.smooth()  # 平滑曲线
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def snaptoobject(curve_name, step_number_out, step_number_in):
+    ''' 将指定的曲线对象吸附到最近的顶点上 '''
+    # 获取曲线对象
+    curve_object = bpy.data.objects[curve_name]
+    duplicate_obj = curve_object.copy()
+    duplicate_obj.data = curve_object.data.copy()
+    duplicate_obj.name = "Center"
+    duplicate_obj.animation_data_clear()
+    duplicate_obj.data.bevel_depth = 0
+    # 将复制的物体加入到场景集合中
+    bpy.context.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
+
+    duplicate_obj = curve_object.copy()
+    duplicate_obj.data = curve_object.data.copy()
+    duplicate_obj.name = "CutPlane"
+    duplicate_obj.animation_data_clear()
+    duplicate_obj.data.bevel_depth = 0
+    # 将复制的物体加入到场景集合中
+    bpy.context.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
+
+    duplicate_obj = curve_object.copy()
+    duplicate_obj.data = curve_object.data.copy()
+    duplicate_obj.name = "Inner"
+    duplicate_obj.animation_data_clear()
+    duplicate_obj.data.bevel_depth = 0
+    # 将复制的物体加入到场景集合中
+    bpy.context.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
+
+    # 获取目标物体
+    target_object = bpy.data.objects["右耳MouldReset"]
+    # 获取曲线对象
+    curve_object = bpy.data.objects['Center']
+    curve_object2 = bpy.data.objects['CutPlane']
+    curve_object3 = bpy.data.objects['Inner']
+    source_object = bpy.data.objects[curve_name]
+    # 获取数据
+    curve_data = curve_object.data
+    curve_data2 = curve_object2.data
+    curve_data3 = curve_object3.data
+    source_data = source_object.data
+    # 将曲线的每个顶点沿法向移动
+    length = len(curve_data.splines[0].points)
+    for i in range(0, length):
+        # 获取顶点原位置
+        vertex_co = curve_object.matrix_world @ mathutils.Vector(source_data.splines[0].points[i].co[0:3])
+        _, co, normal, _ = target_object.closest_point_on_mesh(vertex_co)
+        source_data.splines[0].points[i].co[0:3] = co
+        source_data.splines[0].points[i].co[3] = 1
+        curve_data.splines[0].points[i].co[0:3] = co
+        curve_data.splines[0].points[i].co[3] = 1
+        out_point = curve_data2.splines[0].points[i]
+        step_out = step_number_out
+        out_point.co = (co[0] + normal[0] * step_out, co[1] + normal[1] * step_out,
+                        co[2] + normal[2] * step_out, 1)
+        inner_point = curve_data3.splines[0].points[i]
+        step_in = step_number_in
+        inner_point.co = (co[0] - normal[0] * step_in, co[1] - normal[1] * step_in,
+                          co[2] - normal[2] * step_in, 1)
 
 
 def frame_normal_projection_to_darw_cut_plane(origin_highest_vert, border_vert_co_and_normal):
@@ -354,6 +434,7 @@ def frame_normal_projection_to_darw_cut_plane(origin_highest_vert, border_vert_c
     border_vert = list()
     border_vert_co = list()
     plane_border_co = list()
+    plane_inner_border_co = list()
     rotate_angle, height_difference = get_change_parameters(origin_highest_vert)
 
     for vert in border_vert_co_and_normal:
@@ -362,14 +443,176 @@ def frame_normal_projection_to_darw_cut_plane(origin_highest_vert, border_vert_c
         if cast_vert is not None and cast_vert not in border_vert:
             border_vert.append(cast_vert)
             border_vert_co.append(cast_vert.co)
-            step = 0.2
-            plane_co = (cast_vert.co[0] + cast_normal[0] * step, cast_vert.co[1] + cast_normal[1] * step,
-                        cast_vert.co[2] + cast_normal[2] * step)
-            plane_border_co.append(plane_co)
+            # step = 0.2
+            # plane_co = (cast_vert.co[0] + cast_normal[0] * step, cast_vert.co[1] + cast_normal[1] * step,
+            #             cast_vert.co[2] + cast_normal[2] * step)
+            # plane_border_co.append(plane_co)
+            # plane_inner_border_co.append((cast_vert.co[0] - cast_normal[0] * step,
+            #                               cast_vert.co[1] - cast_normal[1] * step,
+            #                               cast_vert.co[2] - cast_normal[2] * step))
 
-    order_border_vert = get_order_border_vert(plane_border_co)
-    draw_border_curve(get_order_border_vert(border_vert_co), "BottomRingBorderR", 0.18)
-    draw_border_curve(order_border_vert, "CutPlane", 0)
+    order_border_vert = get_order_border_vert(border_vert_co)
+    draw_border_curve(order_border_vert, "BottomRingBorderR", 0.18)
+    smooth_all_curve("BottomRingBorderR", 200)
+    # draw_border_curve(get_order_border_vert(plane_inner_border_co), "Inner", 0)
+    # draw_border_curve(order_border_vert, "Center", 0)
+    # draw_border_curve(order_border_vert, "CutPlane", 0)
+
+    # smooth_all_curve("Inner")
+    # smooth_all_curve("Center")
+    # smooth_all_curve("CutPlane")
+
+    snaptoobject("BottomRingBorderR", 1, 0.2)
+    # snaptoobject("Inner", -0.2)
+    # snaptoobject("Center", 0)
+    # snaptoobject("CutPlane", 1)
 
     moveToRight(bpy.data.objects["BottomRingBorderR"])
-    moveToRight(bpy.data.objects["CutPlane"])
+    # moveToRight(bpy.data.objects["Inner"])
+    # moveToRight(bpy.data.objects["Center"])
+    # moveToRight(bpy.data.objects["CutPlane"])
+
+
+# 平滑蓝线版本
+# def hard_normal_projection_to_darw_cut_plane(origin_highest_vert, border_vert_co_and_normal):
+#     # 存储模板耳道口边界的坐标与法向以及最高点坐标
+#
+#     # 为了解决节点dead的问题，把bmesh信息获取拿出来，作为传参进去
+#     target_obj = bpy.data.objects["右耳"]
+#     # 获取网格数据
+#     target_me = target_obj.data
+#
+#     # 创建bmesh对象
+#     target_bm = bmesh.new()
+#     # 将网格数据复制到bmesh对象
+#     target_bm.from_mesh(target_me)
+#     target_bm.verts.ensure_lookup_table()
+#
+#     border_vert = list()
+#     border_vert_co = list()
+#     plane_border_co = list()
+#     plane_inner_border_co = list()
+#     rotate_angle, height_difference = get_change_parameters(origin_highest_vert)
+#
+#     for vert in border_vert_co_and_normal:
+#         # cast_vert,cast_normal = normal_ray_cast(vert, rotate_angle, height_difference, target_bm)
+#         cast_vert, cast_normal = frame_style_normal_ray_cast(vert, rotate_angle, height_difference, target_bm)
+#         if cast_vert is not None and cast_vert not in border_vert:
+#             border_vert.append(cast_vert)
+#             border_vert_co.append(cast_vert.co)
+#             # step = 0.2
+#             # plane_co = (cast_vert.co[0] + cast_normal[0] * step, cast_vert.co[1] + cast_normal[1] * step,
+#             #             cast_vert.co[2] + cast_normal[2] * step)
+#             # plane_border_co.append(plane_co)
+#             # plane_inner_border_co.append((cast_vert.co[0] - cast_normal[0] * step,
+#             #                               cast_vert.co[1] - cast_normal[1] * step,
+#             #                               cast_vert.co[2] - cast_normal[2] * step))
+#
+#     order_border_vert = get_order_border_vert(border_vert_co)
+#     draw_border_curve(order_border_vert, "BottomRingBorderR", 0.18)
+#     smooth_all_curve("BottomRingBorderR", 200)
+#
+#     # draw_border_curve(get_order_border_vert(plane_inner_border_co), "Inner", 0)
+#     # draw_border_curve(order_border_vert, "Center", 0)
+#     # draw_border_curve(order_border_vert, "CutPlane", 0)
+#
+#     # smooth_all_curve("Inner")
+#     # smooth_all_curve("Center")
+#     # smooth_all_curve("CutPlane")
+#
+#     snaptoobject("BottomRingBorderR", 1, 0.2)
+#     convert_to_mesh('BottomRingBorderR', 'meshBottomRingBorderR', 0.18)
+#     # snaptoobject("Inner", -0.2)
+#     # snaptoobject("Center", 0)
+#     # snaptoobject("CutPlane", 1)
+#
+#     moveToRight(bpy.data.objects["BottomRingBorderR"])
+#     # moveToRight(bpy.data.objects["Inner"])
+#     # moveToRight(bpy.data.objects["Center"])
+#     # moveToRight(bpy.data.objects["CutPlane"])
+
+
+# 不平滑版本（速度会快些，但用了平滑后的模板投射后蓝线还是不够平整）
+def hard_normal_projection_to_darw_cut_plane(origin_highest_vert, border_vert_co_and_normal):
+    # 存储模板耳道口边界的坐标与法向以及最高点坐标
+
+    # 为了解决节点dead的问题，把bmesh信息获取拿出来，作为传参进去
+    target_obj = bpy.data.objects["右耳"]
+    # 获取网格数据
+    target_me = target_obj.data
+
+    # 创建bmesh对象
+    target_bm = bmesh.new()
+    # 将网格数据复制到bmesh对象
+    target_bm.from_mesh(target_me)
+    target_bm.verts.ensure_lookup_table()
+
+    border_vert = list()
+    border_vert_co = list()
+    plane_border_co = list()
+    plane_inner_border_co = list()
+    rotate_angle, height_difference = get_change_parameters(origin_highest_vert)
+
+    for vert in border_vert_co_and_normal:
+        # cast_vert,cast_normal = normal_ray_cast(vert, rotate_angle, height_difference, target_bm)
+        cast_vert, cast_normal = frame_style_normal_ray_cast(vert, rotate_angle, height_difference, target_bm)
+        if cast_vert is not None and cast_vert not in border_vert:
+            border_vert.append(cast_vert)
+            border_vert_co.append(cast_vert)
+            step = 0.2
+            plane_co = (cast_vert[0] + cast_normal[0] * 1, cast_vert[1] + cast_normal[1] * 1,
+                        cast_vert[2] + cast_normal[2] * 1)
+            plane_border_co.append(plane_co)
+            plane_inner_border_co.append((cast_vert[0] - cast_normal[0] * step,
+                                          cast_vert[1] - cast_normal[1] * step,
+                                          cast_vert[2] - cast_normal[2] * step))
+
+    # order_border_vert = get_order_border_vert(border_vert_co)
+    # 因为模板中是有序的，不需要进行排序
+    draw_border_curve(border_vert_co, "BottomRingBorderR", 0.18)
+    # 生成切割平面所用到的曲线
+    draw_border_curve(plane_inner_border_co, "Inner", 0)
+    draw_border_curve(border_vert_co, "Center", 0)
+    draw_border_curve(plane_border_co, "CutPlane", 0)
+
+    # 细分一次，避免来回切换时丢失顶点
+    subdivide("BottomRingBorderR", 1)
+    # 生成用于判断鼠标位置的网格
+    convert_to_mesh('BottomRingBorderR', 'meshBottomRingBorderR', 0.18)
+
+    # 移动到右集合 todo:后续调整
+    moveToRight(bpy.data.objects["BottomRingBorderR"])
+
+
+def generate_cutplane(step_number):
+    active_obj = bpy.data.objects['BottomRingBorderR']
+    duplicate_obj = active_obj.copy()
+    duplicate_obj.data = active_obj.data.copy()
+    duplicate_obj.name = "CutPlane"
+    duplicate_obj.animation_data_clear()
+    # 将复制的物体加入到场景集合中
+    bpy.context.collection.objects.link(duplicate_obj)
+    moveToRight(duplicate_obj)
+
+    # 获取目标物体
+    target_object = bpy.data.objects["右耳MouldReset"]
+    # 获取曲线对象
+    curve_object = bpy.data.objects['CutPlane']
+
+    # 获取数据
+    curve_data = curve_object.data
+    # subdivide('CutPlane', 3)
+    # 将曲线的每个顶点沿法向移动
+    for spline in curve_data.splines:
+        for point in spline.points:
+            # 获取顶点原位置
+            vertex_co = curve_object.matrix_world @ mathutils.Vector(point.co[0:3])
+            _, _, normal, _ = target_object.closest_point_on_mesh(vertex_co)
+            step = step_number
+            point.co = (point.co[0] + normal[0] * step, point.co[1] + normal[1] * step,
+                        point.co[2] + normal[2] * step, 1)
+
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = bpy.data.objects['CutPlane']
+    bpy.context.object.data.bevel_depth = 0
+

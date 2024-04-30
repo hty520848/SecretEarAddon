@@ -1,19 +1,22 @@
 import bpy
 import bmesh
+import re
 
 from ..dig_hole import dig_hole
 from ..border_fill import fill_frame_style_inner_face
-from ..normal_projection import frame_normal_projection_to_darw_cut_plane
-from ...tool import moveToRight, convert_to_mesh
+from ..normal_projection import frame_normal_projection_to_darw_cut_plane, get_highest_vert
+from ...tool import moveToRight, convert_to_mesh, extrude_border_by_vertex_groups
 from ...utils.utils import *
+from .frame_fill_inner_face import update_vert_group, fill_closest_point
 
+is_timer_modifier_start = False
 border_vert_co_and_normal = [
-        ((-3.6916444301605225, 8.6956148147583, -3.810093641281128),
-         (-0.7966533303260803, -0.10662736743688583, -0.5949571132659912)),
-        ((-3.3809030055999756, 8.374272346496582, -4.0954766273498535),
-         (-0.6736541390419006, -0.185792937874794, -0.7153118848800659)),
-        ((13.306536674499512, -5.8895697593688965, -5.714186668395996),
-         (-0.0031149201095104218, -0.22585536539554596, -0.974155843257904)), (
+    ((-3.6916444301605225, 8.6956148147583, -3.810093641281128),
+     (-0.7966533303260803, -0.10662736743688583, -0.5949571132659912)),
+    ((-3.3809030055999756, 8.374272346496582, -4.0954766273498535),
+     (-0.6736541390419006, -0.185792937874794, -0.7153118848800659)),
+    ((13.306536674499512, -5.8895697593688965, -5.714186668395996),
+     (-0.0031149201095104218, -0.22585536539554596, -0.974155843257904)), (
         (13.09268856048584, -6.323978424072266, -5.603431224822998),
         (0.007304081227630377, -0.268837571144104, -0.9631578326225281)), (
         (-6.935081481933594, -13.520472526550293, -4.506632328033447),
@@ -424,12 +427,95 @@ border_vert_co_and_normal = [
         (-0.11657946556806564, -0.29084768891334534, -0.9496403932571411)), (
         (12.351286888122559, -7.207352161407471, -5.312367916107178),
         (-0.07718303054571152, -0.30992624163627625, -0.947622537612915))
-    ]
+]
+
+origin_highest_vert = (-10.5040, 2.6564, 11.9506)
+
+class TimerFrameStyleEardrumDrumAddModifierAfterQmesh(bpy.types.Operator):
+    bl_idname = "object.timer_framestyleeardrum_add_modifier_after_qmesh"
+    bl_label = "在重拓扑完成后为重拓扑后的物体添加平滑修改器"
+
+    __timer = None
+
+    def execute(self, context):
+        op_cls = TimerFrameStyleEardrumDrumAddModifierAfterQmesh
+        op_cls.__timer = context.window_manager.event_timer_add(
+            1, window=context.window)
+
+        for obj in bpy.data.objects:
+            obj.select_set(False)
+
+        cur_obj_name = "Retopo_右耳"
+        compare_obj_name = "右耳"
+        cur_obj = bpy.data.objects.get(cur_obj_name)
+        compare_obj = bpy.data.objects.get(compare_obj_name)
+        compare_obj.select_set(True)
+        bpy.context.view_layer.objects.active = compare_obj
+
+        # 将当前激活的物体重拓扑
+        bpy.context.scene.qremesher.autodetect_hard_edges = False
+        bpy.context.scene.qremesher.use_normals = False
+        bpy.context.scene.qremesher.use_materials = False
+        bpy.context.scene.qremesher.use_vertex_color = False
+        bpy.context.scene.qremesher.adapt_quad_count = False
+        bpy.context.scene.qremesher.adaptive_size = 100
+        bpy.context.scene.qremesher.target_count = 2000
+        bpy.context.scene.qremesher.use_materials = True
+        bpy.ops.qremesher.remesh()
+        bpy.context.scene.zongHouDuUpdateCompleled = False
+
+        global is_timer_modifier_start  # 防止添加多余的定时器
+        is_timer_modifier_start = True
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+        op_cls = TimerFrameStyleEardrumDrumAddModifierAfterQmesh
+        global is_timer_modifier_start
+        mould_type = bpy.context.scene.muJuTypeEnum
+        cur_obj = bpy.data.objects["右耳"]
+        cur_obj_name = cur_obj.name
+        if context.area:
+            context.area.tag_redraw()
+        if (mould_type == "OP4"):  # 判断创建模具模块中选项是否为软耳膜
+            if event.type == 'TIMER':
+                obj = bpy.data.objects.get("Retopo_" + cur_obj.name)
+                if (bpy.data.objects.get("Retopo_" + cur_obj.name) != None):  # 判断重拓扑是否完成
+                    print("重拓扑完成")
+                    bpy.context.scene.zongHouDuUpdateCompleled = True
+                    cur_obj_name = "Retopo_右耳"
+                    compare_obj_name = "右耳"
+                    cur_obj = bpy.data.objects.get(cur_obj_name)
+                    compare_obj = bpy.data.objects.get(compare_obj_name)
+                    compare_obj.select_set(True)
+                    compare_obj.hide_set(False)
+                    bpy.context.view_layer.objects.active = compare_obj
+
+                    if (cur_obj != None and compare_obj != None):
+                        compare_obj.name = "右耳Previous"  # 重拓扑前的右耳
+                        cur_obj.name = "右耳"  # 重拓扑后的右耳
+
+                    bpy.data.objects.remove(compare_obj, do_unlink=True)
+                    bpy.context.view_layer.objects.active = cur_obj
+                    cur_obj.select_set(True)
+                    moveToRight(cur_obj)
+
+                    bpy.ops.geometry.color_attribute_add(name="Color", color=(1, 0.319, 0.133, 1))
+                    bpy.data.objects['右耳'].data.materials.clear()
+                    bpy.data.objects['右耳'].data.materials.append(bpy.data.materials['Yellow'])
+                    is_timer_modifier_start = False  # 重拓扑完成且添加修改器后,退出该定时器
+                    return {'FINISHED'}
+            return {'PASS_THROUGH'}
+        else:
+            is_timer_modifier_start = False
+            return {'FINISHED'}
+        return {'PASS_THROUGH'}
+
 
 def recover_and_remind_border():
     '''
-    恢复到进入切割模式并且保留边界线，用于挖孔，切割报错时恢复
-    '''
+   恢复到进入切割模式并且保留边界线，用于挖孔，切割报错时恢复
+   '''
     recover_flag = False
     for obj in bpy.context.view_layer.objects:
         if obj.name == "右耳OriginForCreateMouldR":
@@ -626,11 +712,51 @@ def recover_and_remind_border():
 #         recover_and_remind_border()
 #         utils_re_color("右耳", (1, 1, 0))
 
+
+def recover_and_refill():
+    '''
+   为了调整厚度后重新桥接
+   '''
+    # 恢复到桥接前
+    bpy.data.objects.remove(bpy.data.objects["右耳"], do_unlink=True)
+
+    cur_obj = bpy.data.objects["右耳OriginForFill"]
+    cur_obj.hide_set(False)
+    cur_obj.name = "右耳"
+    bpy.context.view_layer.objects.active = cur_obj
+
+    number = 0
+    for obj in bpy.data.objects:
+        if re.match('HoleBorderCurve', obj.name) != None:
+            number += 1
+
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='UpInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+
+    bpy.ops.mesh.delete(type='VERT')
+
+    extrude_border_by_vertex_groups("BottomOuterBorderVertex", "BottomInnerBorderVertex")
+
+    for i in range(1, number + 1):
+        inside_border_index = extrude_border_by_vertex_groups("HoleBorderVertex" + str(i), "UpInnerBorderVertex")
+        # 单个孔的内外边界也留一下
+        set_vert_group("HoleInnerBorderVertex" + str(i), inside_border_index)
+
+    update_vert_group()
+    fill_closest_point()
+
+    utils_re_color("右耳", (1, 0.319, 0.133))
+
+
 # 2024/2/23 新方案
 def apply_frame_style_eardrum_template():
     global border_vert_co_and_normal
-    origin_highest_vert = (-10.5040, 2.6564, 11.9506)
-    
+    global origin_highest_vert
+
     # 复制一份模型
     cur_obj = bpy.context.active_object
     duplicate_obj = cur_obj.copy()
@@ -645,12 +771,17 @@ def apply_frame_style_eardrum_template():
         # high_percent = 0.25
         # bottom_cut(high_percent)
 
-        frame_normal_projection_to_darw_cut_plane(origin_highest_vert,border_vert_co_and_normal)
-        plane_cut()
-
+        frame_normal_projection_to_darw_cut_plane(origin_highest_vert, border_vert_co_and_normal)
+        utils_plane_cut()
+        # 代码复用的逻辑问题，挤出底部边界现在只能放在这里，后续需要优化
+        extrude_border_by_vertex_groups("BottomOuterBorderVertex", "BottomInnerBorderVertex")
         dig_hole()
+        # 调整顶点组
+        update_vert_group()
+        # 桥接内壁
+        fill_closest_point()
 
-        fill_frame_style_inner_face()
+        bpy.ops.object.timer_framestyleeardrum_add_modifier_after_qmesh()
 
         convert_to_mesh("BottomRingBorderR", "meshBottomRingBorderR", 0.18)
         utils_re_color("右耳", (1, 0.319, 0.133))
@@ -659,10 +790,31 @@ def apply_frame_style_eardrum_template():
         recover_and_remind_border()
         utils_re_color("右耳", (1, 1, 0))
 
+
 def frame_clear_co_and_normal():
     global border_vert_co_and_normal
-    border_vert_co_and_normal = [ ]
+    border_vert_co_and_normal = []
+
 
 def frame_set_co_and_normal(co, normal):
     global border_vert_co_and_normal
     border_vert_co_and_normal.append((co, normal))
+
+def frame_set_highest_vert():
+    global origin_highest_vert
+    origin_highest_vert = get_highest_vert("右耳OriginForFitPlace")
+
+_classes = [
+    TimerFrameStyleEardrumDrumAddModifierAfterQmesh,
+
+]
+
+
+def register():
+    for cls in _classes:
+        bpy.utils.register_class(cls)
+
+
+def unregister():
+    for cls in _classes:
+        bpy.utils.unregister_class(cls)

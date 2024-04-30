@@ -13,6 +13,7 @@ prev_on_object = False
 
 prev_on_object_stepcut = 5
 
+
 # 厚度显示
 class MyHandleClass:
     _handler = None
@@ -310,7 +311,12 @@ class selectArea(object):
         curve_data = bpy.data.curves.new(name="BorderCurve", type='CURVE')
         curve_data.dimensions = '3D'
 
-        obj = bpy.data.objects.new("BorderCurveObject", curve_data)
+        active_obj_name = bpy.context.active_object.name
+        obj = None
+        if (active_obj_name == "右耳"):
+            obj = bpy.data.objects.new("右耳BorderCurveObject", curve_data)
+        if (active_obj_name == "左耳"):
+            obj = bpy.data.objects.new("左耳BorderCurveObject", curve_data)
         bpy.context.collection.objects.link(obj)
         if active_obj.name == '左耳':
             moveToLeft(obj)
@@ -339,11 +345,18 @@ class selectArea(object):
 
 # 将选中的顶点组根据连通性划分,每个区域再划分为内外顶点组并保存再对象中
 def get_continuous_area(select_vert, color_lay, borderWidth):
+    active_obj_name = bpy.context.active_object.name
     for obj in bpy.data.objects:
-        pattern = r'BorderCurveObject'
-        if re.match(pattern, obj.name):
-            # 删除以BorderCurveObject开头的物体
-            bpy.data.objects.remove(obj, do_unlink=True)
+        if(active_obj_name == "右耳"):
+            pattern = r'右耳BorderCurveObject'
+            if re.match(pattern, obj.name):
+                # 删除以BorderCurveObject开头的物体
+                bpy.data.objects.remove(obj, do_unlink=True)
+        if (active_obj_name == "左耳"):
+            pattern = r'左耳BorderCurveObject'
+            if re.match(pattern, obj.name):
+                # 删除以BorderCurveObject开头的物体
+                bpy.data.objects.remove(obj, do_unlink=True)
     continuous_area = []  # 用于存放连续区域的class
     unprocessed_vertex = select_vert  # 用于存放未处理的节点
     visited_vert = []  # 存放被访问过的节点防止重复访问
@@ -426,14 +439,6 @@ def is_mouse_on_object(context, event):
     region1 = override1['region']
     region2 = override2['region']
     area = override2['area']
-    # if context.window.workspace.name == '布局':
-    #     region1 = bpy.data.workspaces['布局'].screens[0].areas[3].regions[0]
-    #     region2 = bpy.data.workspaces['布局'].screens[0].areas[4].regions[0]
-    # else:
-    #     region1 = bpy.data.workspaces['布局.001'].screens[0].areas[3].regions[0]
-    #     region2 = bpy.data.workspaces['布局.001'].screens[0].areas[4].regions[0]
-    #     area = bpy.data.workspaces['布局.001'].screens[0].areas[4]
-    
     if event.mouse_region_x > region1.width:
         new_x = event.mouse_region_x - region1.width
         mv = mathutils.Vector((new_x, event.mouse_region_y))
@@ -576,8 +581,9 @@ def is_mouse_on_which_object(obj_name,context, event):
     area = override2['area']
     # 鼠标位于右边窗口
     if event.mouse_region_x > region1.width:
+        area_prop = [area for area in bpy.context.screen.areas if area.type == 'PROPERTIES']
         new_x = event.mouse_region_x - region1.width
-        mv = mathutils.Vector((new_x, event.mouse_region_y))
+        mv = mathutils.Vector((new_x, event.mouse_region_y-area_prop[0].height))
     else:
         mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
 
@@ -714,6 +720,7 @@ def convert_to_mesh(curve_name, mesh_name, depth):
     bpy.ops.object.select_all(action='DESELECT')
     last_active_obj.select_set(state=True)
 
+
 def recover_and_remind_border():
     '''
     恢复到进入切割模式并且保留边界线，用于挖孔，切割报错时恢复
@@ -729,11 +736,7 @@ def recover_and_remind_border():
         need_to_delete_model_name_list = ["右耳", "cutPlane", "右耳OriginForCutR",
                                           "右耳OriginForFill", "FillPlane", "右耳ForGetFillPlane", "右耳huanqiecompare",
                                           "dragcurve", "selectcurve"]
-        for selected_obj in bpy.data.objects:
-            if (selected_obj.name in need_to_delete_model_name_list):
-                bpy.data.objects.remove(selected_obj, do_unlink=True)
-            bpy.ops.outliner.orphans_purge(
-                do_local_ids=True, do_linked_ids=True, do_recursive=False)
+        delete_useless_object(need_to_delete_model_name_list)
         # 将最开始复制出来的OriginForCreateMould名称改为模型名称
         obj.hide_set(False)
         obj.name = "右耳"
@@ -794,6 +797,9 @@ def recover_to_dig():
         duplicate_obj.hide_set(True)
         # todo 先加到右耳集合，后续调整左右耳适配
         moveToRight(duplicate_obj)
+        # 2024/3/28 这里的OriginForFill不需要吧 应该是删除掉的
+        # bpy.data.objects.remove(bpy.data.objects[cur_obj.name + "OriginForDigHole"])
+
 
 
 def utils_re_color(target_object_name, color):
@@ -827,6 +833,13 @@ def delete_useless_object(need_to_delete_model_name_list):
         bpy.ops.outliner.orphans_purge(
             do_local_ids=True, do_linked_ids=True, do_recursive=False)
 
+def delete_hole_border():
+    for obj in bpy.data.objects:
+        if re.match('HoleBorderCurve', obj.name) is not None:
+            bpy.data.objects.remove(obj, do_unlink=True)
+    for obj in bpy.data.objects:
+        if re.match('meshHoleBorderCurve', obj.name) is not None:
+            bpy.data.objects.remove(obj, do_unlink=True)
 
 def subdivide(curve_name, subdivide_number):
     last_active_obj = bpy.context.active_object
@@ -941,12 +954,55 @@ def normal_ray_cast(index, rotate_angle, height_difference):
     target_bm.to_mesh(target_obj.data)
     target_obj.data.update()
 
-    hit, loc, normal, index = target_obj.ray_cast(actual_co, actual_normal)
-    # 没有命中，那就反向向内尝试一下
-    if not hit:
-        print('反向投射')
-        reverse_normal = (-xx_normal, -yy_normal, -origin_normal[2])
-        hit, loc, normal, index = target_obj.ray_cast(actual_co, reverse_normal)
+    # hit, loc, normal, index = target_obj.ray_cast(actual_co, actual_normal)
+    # # 没有命中，那就反向向内尝试一下
+    # if not hit:
+    #     # print('反向投射')
+    #     reverse_normal = (-xx_normal, -yy_normal, -origin_normal[2])
+    #     hit, loc, normal, index = target_obj.ray_cast(actual_co, reverse_normal)
+
+    # if hit:
+    #     target_bm.transform(target_obj.matrix_world.inverted())
+    #     target_bm.to_mesh(target_obj.data)
+    #     target_obj.data.update()
+    #     # 返回命中面索引
+    #     return index
+    
+    hit = False
+    out_hit, out_loc, out_normal, out_index = target_obj.ray_cast(actual_co, actual_normal)
+
+    # 反向向内
+    reverse_normal = (-xx_normal, -yy_normal, -origin_normal[2])
+    in_hit, in_loc, in_normal, in_index = target_obj.ray_cast(actual_co, reverse_normal)
+
+    if out_hit and not in_hit:  # 向外命中，向内没命中
+        hit = out_hit
+        loc = out_loc
+        normal = out_normal
+        index = out_index
+
+    elif not out_hit and in_hit:  # 向内命中，向外没命中
+        hit = in_hit
+        loc = in_loc
+        normal = in_normal
+        index = in_index
+
+    elif out_hit and in_hit:  # 内外都命中
+        out_distance = ((origin_co[0] - out_loc[0]) ** 2 + (origin_co[1] - out_loc[1]) ** 2 + (
+                    origin_co[2] - out_loc[2]) ** 2) ** 0.5
+        in_distance = ((origin_co[0] - in_loc[0]) ** 2 + (origin_co[1] - in_loc[1]) ** 2 + (
+                    origin_co[2] - in_loc[2]) ** 2) ** 0.5
+
+        if out_distance < in_distance:
+            hit = out_hit
+            loc = out_loc
+            normal = out_normal
+            index = out_index
+        else:
+            hit = in_hit
+            loc = in_loc
+            normal = in_normal
+            index = in_index
 
     if hit:
         target_bm.transform(target_obj.matrix_world.inverted())
@@ -1010,6 +1066,7 @@ def get_cast_index(tar_obj,ori_index):
 
     return cast_vertex_index
 
+
 def extrude_border_by_vertex_groups(ori_group_name, target_group_name):
     ori_obj = bpy.data.objects["右耳"]
     bpy.ops.object.mode_set(mode='EDIT')
@@ -1060,6 +1117,7 @@ def extrude_border_by_vertex_groups(ori_group_name, target_group_name):
 
         bpy.ops.object.mode_set(mode='OBJECT')
         set_vert_group(target_group_name, inside_border_index)
+    return inside_border_index
 
 
 def set_vert_group(group_name, vert_index_list):
@@ -1079,3 +1137,66 @@ def delete_vert_group(group_name):
     if (vert_group != None):
         bpy.ops.object.vertex_group_set_active(group=group_name)
         bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
+
+
+def is_on_object(name, context, event):
+    """ 当前鼠标位置是否在指定的物体上 """
+    active_obj = bpy.data.objects[name]
+    is_on_object = False  # 初始化变量
+
+    if context.area:
+        context.area.tag_redraw()
+
+    # 获取鼠标光标的区域坐标
+    override1 = getOverride()
+    override2 = getOverride2()
+    region1 = override1['region']
+    region2 = override2['region']
+    area = override2['area']
+    if event.mouse_region_x > region1.width:
+        new_x = event.mouse_region_x - region1.width
+        mv = mathutils.Vector((new_x, event.mouse_region_y))
+    else:
+        mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
+
+    # 获取信息和空间信息
+    region, space = get_region_and_space(
+        context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
+    )
+
+    if event.mouse_region_x > region1.width:
+        region = region2
+        space = area.spaces.active
+
+    ray_dir = view3d_utils.region_2d_to_vector_3d(
+        region,
+        space.region_3d,
+        mv
+    )
+    ray_orig = view3d_utils.region_2d_to_origin_3d(
+        region,
+        space.region_3d,
+        mv
+    )
+
+    start = ray_orig
+    end = ray_orig + ray_dir
+
+    # 确定光线和对象的相交
+    mwi = active_obj.matrix_world.inverted()
+    mwi_start = mwi @ start
+    mwi_end = mwi @ end
+    mwi_dir = mwi_end - mwi_start
+
+    if active_obj.type == 'MESH':
+        if (active_obj.mode == 'OBJECT' or active_obj.mode == "SCULPT"):
+            mesh = active_obj.data
+            bm = bmesh.new()
+            bm.from_mesh(mesh)
+            tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
+
+            _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
+
+            if fidx is not None:
+                is_on_object = True  # 如果发生交叉，将变量设为True
+    return is_on_object

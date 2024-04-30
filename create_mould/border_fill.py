@@ -153,10 +153,21 @@ def recover_and_refill():
     cur_obj.name = "右耳"
     bpy.context.view_layer.objects.active = cur_obj
 
-    # 重新挤出
-    # get_up_inner_border_and_fill()
-    # 重新挖洞
-    # dig_hole()
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='UpInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.delete(type='VERT')
+
+    number = 0
+    for obj in bpy.data.objects:
+        if re.match('HoleBorderCurve', obj.name) != None:
+            number += 1
+
+    for i in range(1,number+1):
+        extrude_border_by_vertex_groups("HoleBorderVertex"+ str(i),"UpInnerBorderVertex")
+
+    fill_frame_style_inner_face()
 
 
     utils_re_color("右耳", (1, 0.319, 0.133))
@@ -981,6 +992,10 @@ def fill_frame_style_inner_face():
     bpy.ops.object.vertex_group_set_active(group='UpInnerBorderVertex')
     bpy.ops.object.vertex_group_select()
 
+    # fill前先平滑一轮，减少穿模的问题
+    for _ in range(0,10):
+        bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='25', regular=True)
+
     bpy.ops.mesh.fill()
     bpy.ops.mesh.subdivide(number_cuts=4)
 
@@ -993,6 +1008,8 @@ def fill_frame_style_inner_face():
     # 添加一个修饰器
     modifier = obj.modifiers.new(name="Smooth", type='LAPLACIANSMOOTH')
     bpy.context.object.modifiers["Smooth"].vertex_group = "InnerFaceVertex"
-    bpy.context.object.modifiers["Smooth"].iterations = 20
-    bpy.context.object.modifiers["Smooth"].lambda_factor = 20
+    bpy.context.object.modifiers["Smooth"].iterations = 10
+    bpy.context.object.modifiers["Smooth"].lambda_factor = 10
     bpy.ops.object.modifier_apply(modifier="Smooth", single_user=True)
+
+    bpy.ops.object.shade_smooth(use_auto_smooth=True)

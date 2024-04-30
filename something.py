@@ -3,7 +3,47 @@ import bmesh
 import blf
 import math
 import os
+import mathutils
 from tool import newColor
+from utils.utils import utils_get_order_border_vert, utils_draw_curve
+from .create_mould.soft_eardrum.thickness_and_fill import get_cut_plane, plane_cut, delete_useless_part
+
+import datetime
+import io
+from contextlib import redirect_stdout
+
+datetime.datetime.now()
+stdout = io.StringIO()
+with redirect_stdout(stdout):
+    pass
+del stdout
+
+# 记录左右窗口不同的切换逻辑
+# prev_properties_context_right = "RENDER"  # 保存Properties窗口切换时上次Properties窗口中的上下文,记录由哪个模式切换而来
+# prev_properties_context_left = "RENDER"
+
+# is_right_changed = (prev_properties_context_right != current_tab) and context.scene.leftWindowObj == "右耳"
+# is_left_changed = (prev_properties_context_left != current_tab) and context.scene.leftWindowObj == "左耳"
+# if (is_right_changed or is_left_changed):
+
+# if is_right_changed:
+#     print(f'Previous RTab: {prev_properties_context_right}')
+#     print(f'Current Tab: {current_tab}')
+# elif is_left_changed:
+#     print(f'Previous LTab: {prev_properties_context_left}')
+#     print(f'Current Tab: {current_tab}')
+
+# if context.scene.leftWindowObj == "右耳":
+#     prev_properties_context_right = current_tab
+# else:
+#     prev_properties_context_left = current_tab
+
+# if (workspace != prev_workspace):
+#     if context.scene.leftWindowObj == "右耳":
+#         bpy.context.screen.areas[1].spaces.active.context = prev_properties_context_right
+#     else:
+#         bpy.context.screen.areas[1].spaces.active.context = prev_properties_context_left
+
 
 bool_modifier2 = object.modifiers.new(
     name="shendu", type="SOLIDIFY")
@@ -656,3 +696,156 @@ class HUIER_OT_addarea(bpy.types.Operator):
            bpy.context.area.ui_type = 'PROPERTIES'
 
         return {'FINISHED'}
+    
+
+# 在不同模式间切换时选择不同的材质
+def change_mat_mould(type):
+    #  type=0 RGB模式， type=1 顶点颜色模式
+    mat = bpy.data.materials.get('Yellow')
+    if mat:
+        if type == 0:
+            is_initial = False
+            nodes = mat.node_tree.nodes
+            links = mat.node_tree.links
+            for node in nodes:
+                if node.name == 'RGB':
+                    is_initial = True
+            if not is_initial:
+               new_node = nodes.new(type="ShaderNodeRGB")
+               new_node.outputs[0].default_value = (1.0, 0.319, 0.133, 1)
+            for link in links:
+                links.remove(link)
+            links.new(nodes["RGB"].outputs[0], nodes["Principled BSDF"].inputs[0])
+            links.new(nodes["Principled BSDF"].outputs[0], nodes["Material Output"].inputs[0])
+
+        elif type == 1:
+            nodes = mat.node_tree.nodes
+            links = mat.node_tree.links
+            for link in links:
+                links.remove(link)
+            links.new(nodes["Color Attribute"].outputs[0], nodes["Principled BSDF"].inputs[0])
+            links.new(nodes["Principled BSDF"].outputs[0], nodes["Material Output"].inputs[0])
+            
+if __name__ == "__main__":
+    change_mat_mould(0)
+
+def subdivide_after_boolean():
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bm_compare = bmesh.from_edit_mesh(bpy.data.objects['右耳'].data)
+    bm_compare_vert = [v for v in bm_compare.verts if v.select]
+
+
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    # bpy.ops.mesh.duplicate_move(MESH_OT_duplicate={"mode":1}, TRANSFORM_OT_translate={"value":(0, 0, 0)})
+    # bpy.ops.transform.edge_slide(value=-0.5)
+    
+    bm = bmesh.from_edit_mesh(bpy.data.objects['右耳'].data)
+    bm_vert = [v for v in bm.verts if v.select]
+    edges = bm_vert[0].link_edges
+    for edge in edges:
+        if edge.other_vert(bm_vert[0]) in bm_compare_vert:
+            bm.edges.ensure_lookup_table()
+            print(edge.index)
+            index = edge.index
+   
+    bpy.ops.mesh.loopcut_slide(MESH_OT_loopcut={"number_cuts":8, "smoothness":0, "falloff":'INVERSE_SQUARE', "object_index":0, "edge_index":index, "mesh_select_mode_init":(True, False, False)}, 
+                               TRANSFORM_OT_edge_slide={"value":0, "single_side":False, "use_even":False, "flipped":False, "use_clamp":True, "mirror":True, "snap":False, "snap_elements":{'FACE'}, 
+                                                        "use_snap_project":False, "snap_target":'CENTER', "use_snap_self":True, "use_snap_edit":True, "use_snap_nonedit":True, "use_snap_selectable":False, 
+                                                        "snap_point":(0, 0, 0), "correct_uv":True, "release_confirm":False, "use_accurate":False})
+    
+def extrude_retopo(name, border_vert_group_name, width):
+    obj = bpy.data.objects[name]
+    # 复制一份物体用于投射到物体上
+    duplicate_obj = obj.copy()
+    duplicate_obj.data = obj.data.copy()
+    duplicate_obj.name = name + 'compare'
+    duplicate_obj.animation_data_clear()
+    # 将复制的物体加入到场景集合中
+    bpy.context.collection.objects.link(duplicate_obj)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group=border_vert_group_name)
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.remove_doubles(threshold=0.2)
+
+    bm = bmesh.from_edit_mesh(obj.data)
+
+    bottom_border_co = [v.co for v in bm.verts if v.select]
+    bottom_border_co = utils_get_order_border_vert(bottom_border_co)
+
+    # 先根据偏移值进行法向挤出并切割
+    bpy.ops.mesh.extrude_region_move(TRANSFORM_OT_translate={"value":(0, 0, 2), "orient_type":'NORMAL'})
+
+    temp_co = [v.co for v in bm.verts if v.select]
+    temp_co = utils_get_order_border_vert(temp_co)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    
+    ceil_border_co = list()
+    ceil_border_normal = list()
+    for co in temp_co:
+        _, closest_co, closest_normal, _ = duplicate_obj.closest_point_on_mesh(mathutils.Vector(co))
+        ceil_border_co.append(closest_co[0:3])
+        ceil_border_normal.append(closest_normal[0:3])
+
+    plane_center_border_co = list()
+    plane_inner_border_co = list()
+    plane_outer_border_co = list()
+    for index, co in enumerate(ceil_border_co):
+        plane_center_border_co.append(co)
+        plane_inner_border_co.append((co[0] - ceil_border_normal[index][0]* 0.5, co[1] - ceil_border_normal[index][1]* 0.5,
+                                      co[2] - ceil_border_normal[index][2]* 0.5))
+        plane_outer_border_co.append((co[0] + ceil_border_normal[index][0]* 0.6, co[1] + ceil_border_normal[index][1]* 0.6,
+                                      co[2] + ceil_border_normal[index][2]* 0.6))
+
+    utils_draw_curve(plane_center_border_co, "Center", 0)
+    utils_draw_curve(plane_inner_border_co, "Inner", 0)
+    utils_draw_curve(plane_outer_border_co, "CutPlane", 0)
+
+    # 与软耳膜相同，切掉要重拓扑的部分
+    get_cut_plane()
+    plane_cut(border_vert_group_name)
+    delete_useless_part(border_vert_group_name)
+
+    # 挤出
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_non_manifold(extend=False, use_wire=False, use_boundary=True, use_multi_face=False, use_non_contiguous=False, use_verts=False)
+    bpy.ops.mesh.remove_doubles(threshold=0.2)
+    for i in range(1, 4):
+        bm = bmesh.from_edit_mesh(obj.data)  
+        bpy.ops.mesh.extrude_region_move(TRANSFORM_OT_translate={"value":(0, 0, -0.5), "orient_type":'NORMAL'})
+        temp_vertex = [v for v in bm.verts if v.select]
+        for v in temp_vertex:
+            _, closest_co, _, _ = duplicate_obj.closest_point_on_mesh(mathutils.Vector(v.co))
+            v.co = closest_co
+
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+    retopo_border_co = list()
+    # 圆滑
+    for border_co in retopo_border_co:
+        iterations = 20
+        while iterations:
+            iterations -= 1
+            for idx, _ in enumerate(border_co):
+                if idx == 0:
+                    border_co[idx] = average_locations(border_co[-1], border_co[1])
+                elif idx == len(border_co) - 1:
+                    border_co[idx] = average_locations(border_co[-2], border_co[0])
+                else:
+                    border_co[idx] = average_locations(border_co[idx - 1], border_co[idx + 1])
+
+def average_locations(list1, list2):
+    return [(list1[0]+list2[0])/2, (list1[1]+list2[1])/2, (list1[2]+list2[2])/2]

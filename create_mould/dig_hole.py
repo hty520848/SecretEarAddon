@@ -1,8 +1,12 @@
 import bpy
 import bmesh
 import math
+import re
 
-from ..tool import moveToRight, convert_to_mesh, subdivide, newColor,set_vert_group,delete_vert_group,extrude_border_by_vertex_groups
+from ..tool import moveToRight, convert_to_mesh, subdivide, newColor, set_vert_group, delete_vert_group, \
+    extrude_border_by_vertex_groups
+
+from .normal_projection import get_highest_vert
 
 template_hole_border_list = [
         [(2.8853964805603027, 0.4101182222366333, -2.189441442489624),
@@ -208,7 +212,7 @@ template_hole_border_list = [
 
     ]
 
-is_subdivide = False  # 判断曲线是否已经细分，防止曲线的点太少移动时穿模
+template_highest_point = (-10.3681, 2.2440, 12.1771)
 
 # 获取VIEW_3D区域的上下文
 def getOverride():
@@ -287,6 +291,7 @@ def draw_border_curve(order_border_co, name, depth):
     spline.points.add(len(new_node_list) - 1)
     spline.use_cyclic_u = True
 
+
     # 设置每个点的坐标
     for i, point in enumerate(new_node_list):
         spline.points[i].co = (point[0], point[1], point[2], 1)
@@ -304,7 +309,6 @@ def draw_border_curve(order_border_co, name, depth):
         bpy.context.active_object.data.materials.append(bpy.data.materials['blue'])
         bpy.context.view_layer.update()
         bpy.context.view_layer.objects.active = active_obj
-
 
 
 def darw_cylinder(outer_dig_border, inner_dig_border):
@@ -600,6 +604,7 @@ def get_hole_border(template_highest_point, template_hole_border, number):
 
 
 def dig_hole():
+    global template_hole_border_list
     # 复制切割补面完成后的物体
     cur_obj = bpy.data.objects["右耳"]
     duplicate_obj = cur_obj.copy()
@@ -610,11 +615,8 @@ def dig_hole():
     duplicate_obj.hide_set(True)
     moveToRight(duplicate_obj)
 
-    # todo 将来调整模板圆环位置后，要记录调整后的以下两个参数，若有记录，读取记录， 没有则读取套用的模板本身的参数
-    template_highest_point = (-10.3681, 2.2440, 12.1771)
-    
-    global template_hole_border_list
-    global is_subdivide
+    global template_highest_point
+
     number = len(template_hole_border_list)
     for template_hole_border in template_hole_border_list:
         get_hole_border(template_highest_point, template_hole_border, number)
@@ -623,10 +625,7 @@ def dig_hole():
         boolean_cut()
         local_curve_name = 'HoleBorderCurve' + str(number)
         local_mesh_name = 'mesh' + local_curve_name
-        if not is_subdivide:
-            if number == 1:
-                is_subdivide = True
-            subdivide(local_curve_name, 1)
+        subdivide(local_curve_name, 1)  # 细分曲线，防止曲线的点太少移动时穿模
         convert_to_mesh(local_curve_name, local_mesh_name, 0.18)  # 重新生成网格
         number -= 1
 
@@ -635,7 +634,7 @@ def dig_hole():
     #         obj.name = 'HoleBorderCurve1'
     #         subdivide('HoleBorderCurve1', 3)
     #         convert_to_mesh('HoleBorderCurve1', 'meshHoleBorderCurve1', 0.18)
-
+    #
     #     if obj.name == 'HoleBorderCurve.001':
     #         obj.name = 'HoleBorderCurve2'
     #         subdivide('HoleBorderCurve2', 3)
@@ -704,8 +703,14 @@ def boolean_cut():
     bpy.ops.object.mode_set(mode='OBJECT')
     # 用于平滑的顶点组，包含所有孔边界顶点
     set_vert_group("UpOuterBorderVertex", up_outer_border_index)
+
+    number = 0
+    for obj in bpy.data.objects:
+        if re.match('HoleBorderCurve', obj.name) != None:
+            number += 1
+
     # 用于上下桥接的顶点组，只包含当前孔边界
-    set_vert_group("HoleBorderVertex", up_outer_border_index)
+    set_vert_group("HoleBorderVertex" + str(number), up_outer_border_index)
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.delete(type='FACE')
 
@@ -713,21 +718,29 @@ def boolean_cut():
     bpy.data.objects.remove(bpy.data.objects["HoleCutCylinderBottom"], do_unlink=True)
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    extrude_border_by_vertex_groups("HoleBorderVertex", "UpInnerBorderVertex")
-    delete_vert_group("HoleBorderVertex")
+    inside_border_index = extrude_border_by_vertex_groups("HoleBorderVertex" + str(number), "UpInnerBorderVertex")
+    # 单个孔的内外边界也留一下
+    set_vert_group("HoleInnerBorderVertex" + str(number), inside_border_index)
+
 
 def frame_clear_border_list():
     global template_hole_border_list
     template_hole_border_list = [ ]
 
+
 def frame_set_border_list(border_list):
     global template_hole_border_list
     template_hole_border_list.append(border_list)
+
 
 def frame_get_border_list():
     global template_hole_border_list
     return template_hole_border_list
 
+def frame_set_highest_vert_for_dig():
+    global template_highest_point
+    template_highest_point = get_highest_vert("右耳OriginForFitPlace")
+    return template_highest_point
 
 
 '''
