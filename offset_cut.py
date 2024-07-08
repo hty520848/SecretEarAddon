@@ -6,6 +6,7 @@ import gpu
 from gpu_extras.batch import batch_for_shader
 from math import degrees, radians, sin, cos, pi
 
+
 class OffsetCut(bpy.types.Operator):
     bl_idname = "huier.offset_cut"
     bl_label = "HUIER: Offset Cut"
@@ -13,11 +14,11 @@ class OffsetCut(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     boolean_solver_items = [("FAST", "Fast", ""),
-                        ("EXACT", "Exact", "")]
+                            ("EXACT", "Exact", "")]
 
-    width: FloatProperty(name="Width", default=0.1, min=0.001, step=0.1)
+    width: FloatProperty(name="Width", default=0.1, min=0, step=10)
     resample: BoolProperty(name="Resample", default=True)
-    factor: FloatProperty(name="Factor", default=1, min=0.5)
+    factor: FloatProperty(name="Factor", default=0.5, min=0.5)
     smooth: BoolProperty(name="Smooth", default=False)
     iterations: IntProperty(name="Iterations", default=1, min=1)
     optimize: BoolProperty(name="Optimize", default=True)
@@ -27,11 +28,12 @@ class OffsetCut(bpy.types.Operator):
     rails: IntProperty(name="Precision", default=18, min=7)
     tilt: FloatProperty(name="Wiggle", default=1)
     shift: BoolProperty(name="Shift", default=True)
-    solver: EnumProperty(name="Solver", items=boolean_solver_items, default='EXACT')
+    solver: EnumProperty(name="Solver", items=boolean_solver_items)
 
     shade_smooth: BoolProperty(default=False)
     mark_sharp: BoolProperty(default=False)
     all_cyclic: BoolProperty(default=False)
+
     def draw(self, context):
         layout = self.layout
 
@@ -84,7 +86,7 @@ class OffsetCut(bpy.types.Operator):
         bm.verts.ensure_lookup_table()
 
         edge_layer, face_layer = self.get_data_layers(bm, force_new=True)
-        
+
         verts = [v for v in bm.verts if v.select]
 
         sequences = get_selected_vert_sequences(verts, debug=False)
@@ -95,22 +97,26 @@ class OffsetCut(bpy.types.Operator):
         self.shade_smooth = face.smooth
         self.all_cyclic = all(cyclic for _, cyclic in sequences)
 
-        circle_coords, circle_normals = create_circle_coords(self.width, self.rails, self.tilt, calc_normals=True, debug=False)
+        circle_coords, circle_normals = create_circle_coords(self.width, self.rails, self.tilt, calc_normals=True,
+                                                             debug=False)
 
         pipes = []
         all_pipe_faces = []
         face_maps = []
 
         for idx, (seq, cyclic) in enumerate(sequences):
-            coords = create_pipe_coords(seq, cyclic, self.resample, self.factor, self.smooth, self.iterations, self.optimize, self.angle, mxw, debug=False)
+            coords = create_pipe_coords(seq, cyclic, self.resample, self.factor, self.smooth, self.iterations,
+                                        self.optimize, self.angle, mxw, debug=False)
 
             ext_coords = self.extend_coords(coords, cyclic, self.extend)
 
-            ring_coords = create_pipe_ring_coords(ext_coords, cyclic, circle_coords, circle_normals, mx=mxw, debug=False)
-            
+            ring_coords = create_pipe_ring_coords(ext_coords, cyclic, circle_coords, circle_normals, mx=mxw,
+                                                  debug=False)
+
             vert_rings = self.create_pipe_verts(bm, ring_coords, cyclic, mx=mxw, debug=False)
 
-            pipe_faces = self.create_pipe_faces(bm, vert_rings, cyclic, edge_layer, face_layer, idx, self.shift, self.shade_smooth)
+            pipe_faces = self.create_pipe_faces(bm, vert_rings, cyclic, edge_layer, face_layer, idx, self.shift,
+                                                self.shade_smooth)
             all_pipe_faces.extend(pipe_faces)
 
             pipes.append((coords, cyclic))
@@ -138,11 +144,11 @@ class OffsetCut(bpy.types.Operator):
 
             sweeps, non_sweep_edges, has_caps = self.get_sorted_sweep_edges(len(coords), edges, edge_layer, pipe_idx)
 
-            end_rail_edges = self.set_end_sweeps(sweeps, border_verts, border_edges) if not cyclic and len(sweeps) > 2 else set()
+            end_rail_edges = self.set_end_sweeps(sweeps, border_verts, border_edges) if not cyclic and len(
+                sweeps) > 2 else set()
 
             junk = self.collect_junk_edges(non_sweep_edges, border_edges, border_verts, end_rail_edges)
             junk_edges.extend(junk)
-
             merge = self.recreate_hard_edges(sweeps, cyclic, coords, border_verts, self.override)
             merge_verts.extend(merge)
 
@@ -277,7 +283,7 @@ class OffsetCut(bpy.types.Operator):
 
                     d = {pipe_idx: ridx}
                     e[edge_layer] = str(d).encode()
-                
+
                 f[face_layer] = pipe_idx + 1
 
                 pipe_faces.append(f)
@@ -285,7 +291,7 @@ class OffsetCut(bpy.types.Operator):
         return pipe_faces
 
     def boolean_pipe(self, bm, face_layer, pipe_idx):
-        
+
         bpy.ops.mesh.select_all(action='DESELECT')
 
         for f in bm.faces:
@@ -520,7 +526,8 @@ def get_builtin_shader_name(name, prefix='3D'):
         return f"{prefix}_{name}"
 
 
-def draw_line(coords, indices=None, mx=Matrix(), color=(1, 1, 1), alpha=1, width=1, xray=True, modal=True, screen=False):
+def draw_line(coords, indices=None, mx=Matrix(), color=(1, 1, 1), alpha=1, width=1, xray=True, modal=True,
+              screen=False):
     def draw():
         nonlocal indices
 
@@ -549,7 +556,8 @@ def draw_line(coords, indices=None, mx=Matrix(), color=(1, 1, 1), alpha=1, width
         bpy.types.SpaceView3D.draw_handler_add(draw, (), 'WINDOW', 'POST_VIEW')
 
 
-def draw_points(coords, indices=None, mx=Matrix(), color=(1, 1, 1), size=6, alpha=1, xray=True, modal=True, screen=False):
+def draw_points(coords, indices=None, mx=Matrix(), color=(1, 1, 1), size=6, alpha=1, xray=True, modal=True,
+                screen=False):
     def draw():
         shader = gpu.shader.from_builtin(get_builtin_shader_name('UNIFORM_COLOR'))
         shader.bind()
@@ -606,7 +614,8 @@ def draw_point(co, mx=Matrix(), color=(1, 1, 1), size=6, alpha=1, xray=True, mod
         bpy.types.SpaceView3D.draw_handler_add(draw, (), 'WINDOW', 'POST_VIEW')
 
 
-def draw_vectors(vectors, origins, mx=Matrix(), color=(1, 1, 1), width=1, alpha=1, fade=False, normal=False, xray=True, modal=True, screen=False):
+def draw_vectors(vectors, origins, mx=Matrix(), color=(1, 1, 1), width=1, alpha=1, fade=False, normal=False, xray=True,
+                 modal=True, screen=False):
     def draw():
         coords = []
         colors = []
@@ -644,7 +653,8 @@ def draw_vectors(vectors, origins, mx=Matrix(), color=(1, 1, 1), width=1, alpha=
         bpy.types.SpaceView3D.draw_handler_add(draw, (), 'WINDOW', 'POST_VIEW')
 
 
-def draw_vector(vector, origin=Vector((0, 0, 0)), mx=Matrix(), color=(1, 1, 1), width=1, alpha=1, fade=False, normal=False, xray=True, modal=True, screen=False):
+def draw_vector(vector, origin=Vector((0, 0, 0)), mx=Matrix(), color=(1, 1, 1), width=1, alpha=1, fade=False,
+                normal=False, xray=True, modal=True, screen=False):
     def draw():
         if normal:
             coords = [mx @ origin, mx @ origin + get_world_space_normal(vector, mx)]
@@ -789,7 +799,7 @@ def create_pipe_ring_coords(coords, cyclic, circle_coords, circle_normals=None, 
     for idx, co in enumerate(coords):
         ring = []
 
-        prevco = coords[-1] if idx == 0 else coords[idx -1]
+        prevco = coords[-1] if idx == 0 else coords[idx - 1]
         nextco = coords[0] if idx == len(coords) - 1 else coords[idx + 1]
 
         if cyclic or idx not in [0, len(coords) - 1]:
@@ -890,7 +900,7 @@ def resample_coords(coords, cyclic, segments=None, shift=0, mx=None, debug=False
             if cumulative_lengths[j] > desired_length:
                 break
 
-        extra = desired_length - cumulative_lengths[j- 1]
+        extra = desired_length - cumulative_lengths[j - 1]
 
         if j == len(coords):
             new_coords[i + 1 + cyclic * -1] = coords[j - 1] + extra * (coords[0] - coords[j - 1]).normalized()
@@ -909,8 +919,10 @@ def resample_coords(coords, cyclic, segments=None, shift=0, mx=None, debug=False
 
     return new_coords
 
+
 def register():
     bpy.utils.register_class(OffsetCut)
+
 
 def unregister():
     bpy.utils.unregister_class(OffsetCut)

@@ -1,7 +1,7 @@
 import bpy
 import bmesh
 import math
-from ..tool import set_vert_group,moveToRight
+from ..tool import set_vert_group, moveToRight, moveToLeft, delete_vert_group,newColor
 
 
 # 获取VIEW_3D区域的上下文
@@ -57,6 +57,7 @@ def utils_draw_curve(order_border_co, name, depth):
     '''
         根据order_border_co绘制曲线，名称为name，粗细为depth
     '''
+    ori_name = bpy.context.scene.leftWindowObj
     active_obj = bpy.context.active_object
     # 创建一个新的曲线对象
     curve_data = bpy.data.curves.new(name=name, type='CURVE')
@@ -64,6 +65,10 @@ def utils_draw_curve(order_border_co, name, depth):
 
     obj = bpy.data.objects.new(name, curve_data)
     bpy.context.collection.objects.link(obj)
+    if ori_name == '右耳':
+        moveToRight(obj)
+    elif ori_name == '左耳':
+        moveToLeft(obj)
     bpy.context.view_layer.objects.active = obj
 
     # 添加一个曲线样条
@@ -99,18 +104,37 @@ def utils_re_color(target_object_name, color):
         bm = bmesh.new()
         # 将网格数据复制到bmesh对象
         bm.from_mesh(me)
-        color_lay = bm.verts.layers.float_color["Color"]
-        for vert in bm.verts:
-            colvert = vert[color_lay]
-            colvert.x = color[0]
-            colvert.y = color[1]
-            colvert.z = color[2]
-        bm.to_mesh(me)
-        bm.free()
+        if len(bm.verts.layers.float_color) > 0:
+            color_lay = bm.verts.layers.float_color["Color"]
+            for vert in bm.verts:
+                colvert = vert[color_lay]
+                colvert.x = color[0]
+                colvert.y = color[1]
+                colvert.z = color[2]
+            bm.to_mesh(me)
+            bm.free()
+        else:
+            # 目标物体没有颜色属性
+            bpy.ops.object.select_all(action='DESELECT')
+            bpy.context.view_layer.objects.active = bpy.data.objects[target_object_name]
+            bpy.data.objects[target_object_name].select_set(True)
+            bpy.ops.geometry.color_attribute_add(name="Color", color=(1, 0.319, 0.133, 1))
+            bm.free()
+            bm2 = bmesh.new()
+            bm2.from_mesh(me)
+            color_lay = bm2.verts.layers.float_color["Color"]
+            for vert in bm2.verts:
+                colvert = vert[color_lay]
+                colvert.x = color[0]
+                colvert.y = color[1]
+                colvert.z = color[2]
+            bm2.to_mesh(me)
+            bm2.free()
 
 
 def utils_copy_object(origin_name, copy_name):
     copy_flag = False
+    name = bpy.context.scene.leftWindowObj
     for obj in bpy.context.view_layer.objects:
         if obj.name == origin_name:
             copy_flag = True
@@ -124,11 +148,16 @@ def utils_copy_object(origin_name, copy_name):
         duplicate_obj.name = copy_name
         bpy.context.collection.objects.link(duplicate_obj)
         duplicate_obj.hide_set(True)
-        moveToRight(duplicate_obj)
+        if name == '右耳':
+            moveToRight(duplicate_obj)
+        elif name == '左耳':
+            moveToLeft(duplicate_obj)
     return copy_flag
 
+
 def judge_normals():
-    cut_plane = bpy.data.objects["CutPlane"]
+    name = bpy.context.scene.leftWindowObj
+    cut_plane = bpy.data.objects[name + "CutPlane"]
     cut_plane_mesh = bmesh.from_edit_mesh(cut_plane.data)
     sum = 0
     for v in cut_plane_mesh.verts:
@@ -138,8 +167,9 @@ def judge_normals():
 
 def get_cut_plane():
     # 外边界顶点组
-    bpy.data.objects["右耳"].select_set(False)
-    cut_plane_outer = bpy.data.objects["CutPlane"]
+    name = bpy.context.scene.leftWindowObj
+    bpy.data.objects[name].select_set(False)
+    cut_plane_outer = bpy.data.objects[name + "CutPlane"]
     bpy.context.view_layer.objects.active = cut_plane_outer
     cut_plane_outer.select_set(True)
     bpy.ops.object.convert(target='MESH')
@@ -151,8 +181,8 @@ def get_cut_plane():
     set_vert_group("Outer", vert_index)
 
     # 中间边界顶点组
-    bpy.data.objects["CutPlane"].select_set(False)
-    cut_plane_center = bpy.data.objects["Center"]
+    bpy.data.objects[name + "CutPlane"].select_set(False)
+    cut_plane_center = bpy.data.objects[name + "Center"]
     bpy.context.view_layer.objects.active = cut_plane_center
     cut_plane_center.select_set(True)
     bpy.ops.object.convert(target='MESH')
@@ -164,8 +194,8 @@ def get_cut_plane():
     set_vert_group("Center", vert_index)
 
     # 内边界顶点组
-    bpy.data.objects["Center"].select_set(False)
-    cut_plane_inner = bpy.data.objects["Inner"]
+    bpy.data.objects[name + "Center"].select_set(False)
+    cut_plane_inner = bpy.data.objects[name + "Inner"]
     bpy.context.view_layer.objects.active = cut_plane_inner
     cut_plane_inner.select_set(True)
     bpy.ops.object.convert(target='MESH')
@@ -185,11 +215,15 @@ def get_cut_plane():
 
     # 拼接成面
     bpy.ops.object.mode_set(mode='EDIT')
-    # 最内补面
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='Inner')
-    bpy.ops.object.vertex_group_select()
-    bpy.ops.mesh.edge_face_add()
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
+
+    # # 最内补面
+    # bpy.ops.mesh.select_all(action='DESELECT')
+    # bpy.ops.object.vertex_group_set_active(group='Inner')
+    # bpy.ops.object.vertex_group_select()
+    # bpy.ops.mesh.edge_face_add()
+
     # 桥接内中边界
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.vertex_group_set_active(group='Inner')
@@ -206,49 +240,72 @@ def get_cut_plane():
     bpy.ops.mesh.bridge_edge_loops()
 
     bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='25', regular=True)
+    bpy.ops.mesh.normals_make_consistent(inside=False)
     if judge_normals():
         bpy.ops.mesh.flip_normals()
 
-    bpy.ops.mesh.remove_doubles(threshold=0.18)
+    # bpy.ops.mesh.remove_doubles(threshold=0.25)
+
 
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    bpy.data.objects["CutPlane"].select_set(False)
-    main_obj = bpy.data.objects["右耳"]
+    bpy.data.objects[name + "CutPlane"].select_set(False)
+    main_obj = bpy.data.objects[name]
     bpy.context.view_layer.objects.active = main_obj
     main_obj.select_set(True)
 
 
 def plane_boolean_cut():
+    name = bpy.context.scene.leftWindowObj
     for obj in bpy.data.objects:
         obj.select_set(False)
-        if obj.name == "右耳":
+        if obj.name == name:
             obj.select_set(True)
             bpy.context.view_layer.objects.active = obj
     # 获取活动对象
     obj = bpy.context.active_object
 
-    utils_bool_difference(obj.name,"CutPlane")
+    # 存一下原先的顶点
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bm = bmesh.from_edit_mesh(obj.data)
+    ori_border_index = [v.index for v in bm.verts if v.select]
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    set_vert_group("all", ori_border_index)
+
+    utils_bool_difference(obj.name, name + "CutPlane")
 
     # 获取下边界顶点用于挤出
     bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.object.vertex_group_set_active(group='all')
+    # 有时候切成功了，会直接把切面的新点选上，但all会乱掉，所以把切完后自动选上的点从all里移出
+    bpy.ops.object.vertex_group_remove_from()
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.select_all(action='INVERT')
+
     # 创建bmesh对象
-    bm = bmesh.from_edit_mesh(bpy.data.objects["右耳"].data)
+    bm = bmesh.from_edit_mesh(bpy.data.objects[name].data)
     bottom_outer_border_index = [v.index for v in bm.verts if v.select]
     # bpy.ops.mesh.delete(type='FACE')
 
-    ori_obj = bpy.data.objects["右耳"]
+    ori_obj = bpy.data.objects[name]
     bpy.ops.object.mode_set(mode='OBJECT')
+
     # 将下边界加入顶点组
     bottom_outer_border_vertex = ori_obj.vertex_groups.get("BottomOuterBorderVertex")
     if (bottom_outer_border_vertex == None):
         bottom_outer_border_vertex = ori_obj.vertex_groups.new(name="BottomOuterBorderVertex")
     for vert_index in bottom_outer_border_index:
         bottom_outer_border_vertex.add([vert_index], 1, 'ADD')
+    delete_vert_group("all")
 
 
 def judge_if_need_invert():
-    obj = bpy.data.objects["右耳"]
+    name = bpy.context.scene.leftWindowObj
+    obj = bpy.data.objects[name]
     bm = bmesh.from_edit_mesh(obj.data)
 
     # 获取最低点
@@ -261,13 +318,20 @@ def judge_if_need_invert():
 
 
 def delete_useless_part():
+    name = bpy.context.scene.leftWindowObj
     bpy.ops.object.mode_set(mode='EDIT')
+    obj = bpy.data.objects[name]
+    bm = bmesh.from_edit_mesh(obj.data)
+
+    # 先删一下多余的面
+    bpy.ops.mesh.delete(type='FACE')
+
+    bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
+    bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.loop_to_region(select_bigger=True)
 
-    obj = bpy.data.objects["右耳"]
-    bm = bmesh.from_edit_mesh(obj.data)
     select_vert = [v.index for v in bm.verts if v.select]
-    if not len(select_vert) == len(bm.verts): # 如果相等，说明切割成功了，不需要删除多余部分
+    if not len(select_vert) == len(bm.verts):  # 如果相等，说明切割成功了，不需要删除多余部分
         # 判断最低点是否被选择
         invert_flag = judge_if_need_invert()
 
@@ -281,7 +345,7 @@ def delete_useless_part():
 
     # 最后，删一下边界的直接的面
     bpy.ops.mesh.select_all(action='DESELECT')
-    bottom_outer_border_vertex = bpy.data.objects["右耳"].vertex_groups.get("BottomOuterBorderVertex")
+    bottom_outer_border_vertex = bpy.data.objects[name].vertex_groups.get("BottomOuterBorderVertex")
     bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
     if (bottom_outer_border_vertex != None):
         bpy.ops.object.vertex_group_select()
@@ -291,8 +355,18 @@ def delete_useless_part():
     bmesh.update_edit_mesh(obj.data)
     bpy.ops.object.mode_set(mode='OBJECT')
 
+    # 判断切割是否把整个切掉了
+    target_me = obj.data
+    # 创建bmesh对象
+    target_bm = bmesh.new()
+    # 将网格数据复制到bmesh对象
+    target_bm.from_mesh(target_me)
+    if len(target_bm.verts) < 100:
+        print("切割出错，完全切掉了")
+        raise ValueError("切割出错，完全切掉了")
+
     # 最后删掉没用的CutPlane
-    bpy.data.objects.remove(bpy.data.objects["CutPlane"], do_unlink=True)
+    bpy.data.objects.remove(bpy.data.objects[name + "CutPlane"], do_unlink=True)
 
 
 def utils_plane_cut():
@@ -300,7 +374,9 @@ def utils_plane_cut():
     plane_boolean_cut()
     delete_useless_part()
 
-def utils_bool_difference(main_obj_name,cut_obj_name):
+
+def utils_bool_difference(main_obj_name, cut_obj_name):
+    name = bpy.context.scene.leftWindowObj
     bpy.ops.object.select_all(action='DESELECT')
     bpy.data.objects[main_obj_name].select_set(True)
     cut_obj = bpy.data.objects[cut_obj_name]
@@ -309,6 +385,52 @@ def utils_bool_difference(main_obj_name,cut_obj_name):
     duplicate_obj.data = cut_obj.data.copy()
     duplicate_obj.animation_data_clear()
     bpy.context.collection.objects.link(duplicate_obj)
+    if name == '右耳':
+        moveToRight(duplicate_obj)
+    elif name == '左耳':
+        moveToLeft(duplicate_obj)
     duplicate_obj.select_set(True)
     # 使用布尔插件
     bpy.ops.object.booltool_auto_difference()
+
+
+# 利用几何节点重采样上下边界使其顶点数量一致
+def resample_curve(point_num, curve_name):
+    name = bpy.context.scene.leftWindowObj
+    curve_obj = bpy.data.objects[curve_name]
+    main_obj = bpy.data.objects[name]
+
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = curve_obj
+    curve_obj.select_set(True)
+    bpy.context.object.data.bevel_depth = 0
+
+    # 添加几何节点修改器
+    modifier = curve_obj.modifiers.new(name="Resample", type='NODES')
+    bpy.ops.node.new_geometry_node_group_assign()
+
+    node_tree = bpy.data.node_groups[0]
+    node_links = node_tree.links
+
+    input_node = node_tree.nodes[0]
+    output_node = node_tree.nodes[1]
+
+    resample_node = node_tree.nodes.new("GeometryNodeResampleCurve")
+    resample_node.inputs[2].default_value = point_num
+
+    node_links.new(input_node.outputs[0], resample_node.inputs[0])
+    node_links.new(resample_node.outputs[0], output_node.inputs[0])
+
+    bpy.ops.object.convert(target='MESH')
+    bpy.ops.object.convert(target='CURVE')
+    bpy.context.object.data.bevel_depth = 0.18
+    bpy.ops.object.shade_smooth(use_auto_smooth=True)
+    blue_mat = bpy.data.materials.get('blue')
+    newColor('blue', 0, 0, 1, 1, 1)
+    bpy.data.objects[curve_name].data.materials.append(bpy.data.materials['blue'])
+
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = main_obj
+    main_obj.select_set(True)
+    # 2024/05/30 几何节点用完之后，删除掉，避免无限堆积
+    bpy.data.node_groups.remove(node_tree)

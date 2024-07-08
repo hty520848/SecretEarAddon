@@ -41,6 +41,7 @@ def update_vert_group():
 def get_closest_point(source_index, target_index_list):
     obj = bpy.context.active_object
     bm = bmesh.from_edit_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
     source_co = bm.verts[source_index].co[0:3]
     closest_index = None
     closest_distance = 10000000000
@@ -167,6 +168,7 @@ def fill_closest_point():
     bpy.context.view_layer.objects.active = bpy.data.objects["右耳"]
     obj = bpy.context.active_object
     bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
     bm = bmesh.from_edit_mesh(obj.data)
 
     # 获取底部边界顶点index
@@ -195,16 +197,16 @@ def fill_closest_point():
         all_index_group_by_hole.append(hole_index)
         bpy.ops.mesh.select_all(action='DESELECT')
 
-
     # 只用于处理连接跳跃点之间的顶点
-    unprocessed_up_route_index = list()
-    unprocessed_up_route_index.extend(target_index)
+    unprocessed_up_route_index = set()
+    unprocessed_up_route_index.update(target_index)
 
     # 存放未处理的点，用于后续洞之间的桥接
     processed_up_index = set()
     cross_group = list()
 
     first_index = source_index[0]
+    up_first_index = get_closest_point(first_index, target_index)
     now_index = source_index[0]
 
     # 底边和空洞边界进行桥接
@@ -229,6 +231,9 @@ def fill_closest_point():
                 unprocessed_up_route_index, processed_route_index = select_between_point(now_point_closest_index,
                                                                                          linked_point_closest_index,
                                                                                          unprocessed_up_route_index)
+
+                target_index = [x for x in target_index if
+                                x not in processed_route_index or x == linked_point_closest_index]
                 processed_up_index.update(processed_route_index)
                 link_set = set()
                 for edge in bm.verts[now_point_closest_index].link_edges:
@@ -244,97 +249,153 @@ def fill_closest_point():
             now_index = link_index
 
     # 最后要处理头尾相连的问题
+    bpy.ops.mesh.select_all(action='DESELECT')
     bm.verts[now_index].select_set(True)
     bm.verts[first_index].select_set(True)
-    bm.verts[get_closest_point(first_index, target_index)].select_set(True)
+    bm.verts[up_first_index].select_set(True)
     bm.verts[get_closest_point(now_index, target_index)].select_set(True)
     bpy.ops.mesh.edge_face_add()
 
     bpy.ops.mesh.select_all(action='DESELECT')
 
-    # 区分未处理的顶点分属于哪个孔
-    # n 为孔洞的数量
-    unprocessed_index_group_by_hole = [[] for _ in range(n)]
-    # 分类未处理的顶点
-    for i in target_index:
-        if i not in processed_up_index:
-            unprocessed_index_group_by_hole[get_index_group(i, all_index_group_by_hole)].append(i)
+    if n > 1:
+        # 区分未处理的顶点分属于哪个孔
+        # n 为孔洞的数量
+        unprocessed_index_group_by_hole = [[] for _ in range(n)]
+        # 分类未处理的顶点
+        for i in target_index:
+            if i not in processed_up_index:
+                unprocessed_index_group_by_hole[get_index_group(i, all_index_group_by_hole)].append(i)
 
-    move_end_point = list()
-    # 处理跨越区域
-    for cross_area in cross_group:
+        move_end_point = list()
+        # 处理跨越区域
+        for cross_area in cross_group:
 
-        bm.verts[cross_area[0]].select_set(True)
-        bm.verts[cross_area[1]].select_set(True)
-        bm.verts[cross_area[2]].select_set(True)
-        bm.verts[cross_area[3]].select_set(True)
-        # t = [v for v in bm.verts if v.select]
+            bm.verts[cross_area[0]].select_set(True)
+            bm.verts[cross_area[1]].select_set(True)
+            bm.verts[cross_area[2]].select_set(True)
+            bm.verts[cross_area[3]].select_set(True)
+            # t = [v for v in bm.verts if v.select]
 
-        now_move_path = move_vertex_forward(cross_area[1], unprocessed_index_group_by_hole, all_index_group_by_hole)
-        link_move_path = move_vertex_forward(cross_area[3], unprocessed_index_group_by_hole, all_index_group_by_hole)
+            now_move_path = move_vertex_forward(cross_area[1], unprocessed_index_group_by_hole, all_index_group_by_hole)
+            link_move_path = move_vertex_forward(cross_area[3], unprocessed_index_group_by_hole, all_index_group_by_hole)
 
-        move_end_point.append(now_move_path[-1])
-        move_end_point.append(link_move_path[-1])
+            move_end_point.append(now_move_path[-1])
+            move_end_point.append(link_move_path[-1])
 
+            bpy.ops.mesh.select_all(action='DESELECT')
+            for index in now_move_path:
+                bm.verts[index].select_set(True)
+            bm.verts[cross_area[0]].select_set(True)
+            bpy.ops.mesh.edge_face_add()
+            processed_up_index.update(now_move_path)
+
+            bpy.ops.mesh.select_all(action='DESELECT')
+            for index in link_move_path:
+                bm.verts[index].select_set(True)
+            bm.verts[cross_area[2]].select_set(True)
+            bpy.ops.mesh.edge_face_add()
+            processed_up_index.update(link_move_path)
+
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bm.verts[cross_area[0]].select_set(True)
+            bm.verts[cross_area[2]].select_set(True)
+            bm.verts[now_move_path[-1]].select_set(True)
+            bm.verts[link_move_path[-1]].select_set(True)
+            bpy.ops.mesh.edge_face_add()
+
+        # 填充未连上的顶点
         bpy.ops.mesh.select_all(action='DESELECT')
-        for index in now_move_path:
+        for index in target_index:
+            if index not in processed_up_index:
+                bm.verts[index].select_set(True)
+        for index in move_end_point:
             bm.verts[index].select_set(True)
-        bm.verts[cross_area[0]].select_set(True)
-        bpy.ops.mesh.edge_face_add()
-        processed_up_index.update(now_move_path)
 
-        bpy.ops.mesh.select_all(action='DESELECT')
-        for index in link_move_path:
-            bm.verts[index].select_set(True)
-        bm.verts[cross_area[2]].select_set(True)
-        bpy.ops.mesh.edge_face_add()
-        processed_up_index.update(link_move_path)
+        for edge in bm.edges:
+            if edge.verts[0].select and edge.verts[1].select:
+                edge.select_set(True)
+        bpy.ops.mesh.fill()
 
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bm.verts[cross_area[0]].select_set(True)
-        bm.verts[cross_area[2]].select_set(True)
-        bm.verts[now_move_path[-1]].select_set(True)
-        bm.verts[link_move_path[-1]].select_set(True)
-        bpy.ops.mesh.edge_face_add()
-
-    # 填充未连上的顶点
+    # 分离出内壁
     bpy.ops.mesh.select_all(action='DESELECT')
-    for index in target_index:
-        if index not in processed_up_index:
-            bm.verts[index].select_set(True)
-    for index in move_end_point:
-        bm.verts[index].select_set(True)
-
-    for edge in bm.edges:
-        if edge.verts[0].select and edge.verts[1].select:
-            edge.select_set(True)
-    bpy.ops.mesh.fill()
-
-    # 开始细分平滑重拓扑
-    for i in range(1, n+1):
-        bpy.ops.object.vertex_group_set_active(group='HoleInnerBorderVertex' + str(i))
-        bpy.ops.object.vertex_group_select()
     bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
     bpy.ops.object.vertex_group_select()
-
-    bpy.ops.mesh.subdivide()
-    bpy.ops.mesh.subdivide()
-    bpy.ops.mesh.subdivide()
-
-    bpy.ops.mesh.remove_doubles(threshold=0.2)
-    inner_face = [v.index for v in bm.verts if v.select]
+    bpy.ops.object.vertex_group_set_active(group='UpInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.separate(type='SELECTED')
 
     bpy.ops.object.mode_set(mode='OBJECT')
-    set_vert_group("inner", inner_face)
+    for o in bpy.data.objects:
+        if o.select_get():
+            if o.name != obj.name:
+                inner_obj = o
+    inner_obj.name = "右耳" + "Inner"
+    # 重新设置内外壁顶点组
+    bpy.ops.object.select_all(action='DESELECT')
+    inner_obj.select_set(True)
+    bpy.context.view_layer.objects.active = inner_obj
+
+    # 面三角化，使得大面能够被细分
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
+    # 切到边选择模式细分内部边
+    bpy.ops.mesh.select_mode(type='EDGE')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.region_to_loop()
+    bpy.ops.mesh.select_all(action='INVERT')
+    bpy.ops.mesh.subdivide(number_cuts=10, ngon=False, quadcorner='INNERVERT')
+    # 回到顶点选择模式
+    bpy.ops.mesh.select_mode(type='VERT')
+    # 重新设置上下边界顶点组
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.region_to_loop()
+    bpy.ops.mesh.select_all(action='INVERT')
+    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    bpy.ops.object.vertex_group_remove_from()
+    bpy.ops.object.vertex_group_set_active(group='UpInnerBorderVertex')
+    bpy.ops.object.vertex_group_remove_from()
+
+    # 设置平滑顶点组
+    bpy.ops.mesh.select_all(action='SELECT')
+    inner_obj.vertex_groups.new(name="SmoothVertex")
+    bpy.ops.object.vertex_group_assign()
+    bpy.ops.object.mode_set(mode='OBJECT')
+    # 合并回主物体
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    inner_obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.join()
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.remove_doubles(threshold=0.0001)
+
+    # 更新平滑顶点组，把上下边界加入
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.object.vertex_group_set_active(group='UpInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.object.vertex_group_set_active(group='SmoothVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.object.vertex_group_assign()
+
+    bpy.ops.object.mode_set(mode='OBJECT')
 
     # 添加平滑修改器
     modifier = obj.modifiers.new(name="Smooth", type='SMOOTH')
     bpy.context.object.modifiers["Smooth"].iterations = 30
-    bpy.context.object.modifiers["Smooth"].vertex_group = "inner"
+    bpy.context.object.modifiers["Smooth"].vertex_group = "SmoothVertex"
     bpy.ops.object.modifier_apply(modifier="Smooth", single_user=True)
 
-    # bpy.context.scene.qremesher.autodetect_hard_edges = False
-    # bpy.ops.qremesher.remesh()
 
-    # # bpy.data.objects.remove(obj, do_unlink=True)
-    # obj = bpy.context.active_object
+
+
+
+
+
+
+
+

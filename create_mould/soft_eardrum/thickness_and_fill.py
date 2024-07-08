@@ -29,7 +29,7 @@ on_obj = True
 last_loc = None
 last_radius = None
 last_ratation = None
-finish = False
+finish = None
 # 模型进入切割模式的原始网格
 oridata = None
 
@@ -272,7 +272,7 @@ def draw_cut_plane(obj_name):
         print('正常初始化')
         # 大圆环
         bpy.ops.mesh.primitive_circle_add(
-            vertices=32, radius=12, fill_type='NGON', calc_uvs=True, enter_editmode=False, align='WORLD',
+            vertices=32, radius=25, fill_type='NGON', calc_uvs=True, enter_editmode=False, align='WORLD',
             # location=((-10.4251, 2.3513, 6.7393))
             location=(initX, initY, initZ)
 
@@ -297,7 +297,7 @@ def draw_cut_plane(obj_name):
     else:
         print('切割后初始化')
         bpy.ops.mesh.primitive_circle_add(
-            vertices=32, radius=12, fill_type='NGON', calc_uvs=True, enter_editmode=False, align='WORLD',
+            vertices=32, radius=25, fill_type='NGON', calc_uvs=True, enter_editmode=False, align='WORLD',
             location=last_loc, rotation=(
                 last_ratation[0], last_ratation[1], last_ratation[2]), scale=(
                 1.0, 1.0, 1.0))
@@ -452,13 +452,13 @@ def judge_fill_plane_normals():
         sum += v.normal[2]
     return sum > 0
 
+
 def fill():
+    name = bpy.context.scene.leftWindowObj
     obj = bpy.data.objects["右耳"]
     bpy.context.view_layer.objects.active = obj
     # 局部重拓扑
-    if not bpy.data.objects.get("RetopoPlane"):
-        bpy.data.objects["CutPlane"].name = "RetopoPlane"
-        retopo(obj.name,"BottomOuterBorderVertex",0.5)
+    # retopo(obj.name, "BottomOuterBorderVertex", 0.5)
 
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='DESELECT')
@@ -480,113 +480,95 @@ def fill():
     modifier = obj.modifiers.new(name="Thickness", type='SOLIDIFY')
     bpy.context.object.modifiers["Thickness"].solidify_mode = 'NON_MANIFOLD'
     bpy.context.object.modifiers["Thickness"].thickness = bpy.context.scene.zongHouDu
+    bpy.context.object.modifiers["Thickness"].use_rim = False
+    bpy.context.object.modifiers["Thickness"].nonmanifold_thickness_mode = 'EVEN'
+
     bpy.ops.object.modifier_apply(modifier="Thickness", single_user=True)
 
     bpy.ops.object.mode_set(mode='EDIT')
     bm = bmesh.from_edit_mesh(mesh)
     bpy.ops.mesh.select_all(action='DESELECT')
 
-    # 由于实体化后顶点index会变，所以用坐标存外边界，但也会有些许误差，所以这里舍入两位小数
-    bottom_outer_border_index = []
+    # 分离出内外壁
+    top_vert = None
+    top_z = -math.inf
     for v in bm.verts:
-        if (round(v.co[0], ndigits), round(v.co[1], ndigits), round(v.co[2], ndigits)) in bottom_outer_border_co:
-            bottom_outer_border_index.append(v.index)
-
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
-    bpy.ops.object.vertex_group_select()
-
-    all_border = [v.index for v in bm.verts if v.select]
-
-    bottom_inner_border_index = [i for i in all_border if i not in bottom_outer_border_index]
-
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bm.verts.ensure_lookup_table()
-    for i in bottom_inner_border_index:
-        bm.verts[i].select_set(True)
-
-    # 处理实体化后外边界顶点组多出的顶点
-    bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
-    bpy.ops.object.vertex_group_remove_from()
-    bpy.ops.mesh.select_all(action='DESELECT')
-
-    bpy.ops.object.mode_set(mode='OBJECT')
-    set_vert_group("BottomInnerBorderVertex", bottom_inner_border_index)
-
-    # 分离出内外壁，用于布尔切割
-    main_obj = bpy.data.objects["右耳"]
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='DESELECT')
-
-    bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
-    bpy.ops.object.vertex_group_select()
-    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
-    bpy.ops.object.vertex_group_select()
-    bpy.ops.mesh.delete(type='FACE')
-
-    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
-    bpy.ops.object.vertex_group_select()
+        if v.co[2] > top_z:
+            top_z = v.co[2]
+            top_vert = v
+    top_vert.select_set(True)
     bpy.ops.mesh.select_linked(delimit=set())
-
-    mesh = main_obj.data
-    bm = bmesh.from_edit_mesh(mesh)
-    inner_index = [v.index for v in bm.verts if v.select]
-
-    bpy.ops.object.mode_set(mode='OBJECT')
-    set_vert_group("Inner", inner_index)
-    bpy.ops.object.mode_set(mode='EDIT')
-
+    bpy.ops.mesh.select_all(action='INVERT')
     bpy.ops.mesh.separate(type='SELECTED')
     bpy.ops.object.mode_set(mode='OBJECT')
     for o in bpy.data.objects:
         if o.select_get():
-            if o.name != "右耳":
+            if o.name != name:
                 inner_obj = o
-                bpy.context.view_layer.objects.active = inner_obj
-            else:
-                o.select_set(False)
+    inner_obj.name = "右耳" + "Inner"
+    # 重新设置内外壁顶点组
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    delete_vert_group('BottomOuterBorderVertex')
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bm = bmesh.from_edit_mesh(obj.data)
+    for v in bm.verts:
+        if v.is_boundary:
+            v.select_set(True)
+    obj.vertex_groups.new(name="BottomOuterBorderVertex")
+    bpy.ops.object.vertex_group_assign()
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
 
-                # 然后使用布尔修改器切割内壁
-    utils_bool_difference(inner_obj.name, "FillPlane")
+    bpy.ops.object.select_all(action='DESELECT')
+    inner_obj.select_set(True)
+    bpy.context.view_layer.objects.active = inner_obj
+    delete_vert_group('BottomOuterBorderVertex')
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bm = bmesh.from_edit_mesh(inner_obj.data)
+    for v in bm.verts:
+        if v.is_boundary:
+            v.select_set(True)
+    inner_obj.vertex_groups.new(name="BottomInnerBorderVertex")
+    bpy.ops.object.vertex_group_assign()
+    # 这个顶点组用于寻找内壁切割边界
+    bpy.ops.mesh.select_all(action='SELECT')
+    inner_obj.vertex_groups.new(name="Inner")
+    bpy.ops.object.vertex_group_assign()
+
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    # 使用平滑修改器平滑内壁
+    modifier = inner_obj.modifiers.new(name="Smooth", type='SMOOTH')
+    bpy.context.object.modifiers["Smooth"].factor = 0.5
+    bpy.context.object.modifiers["Smooth"].iterations = 30
+    bpy.ops.object.modifier_apply(modifier="Smooth", single_user=True)
+
+    # 重拓扑内外壁
+    outer_offset = bpy.context.scene.waiBianYuanSheRuPianYi
+    inner_offset = bpy.context.scene.neiBianYuanSheRuPianYi
+    if outer_offset != 0:
+        soft_retopo_offset_cut(name, "BottomOuterBorderVertex", outer_offset)
+    if inner_offset != 0:
+        soft_retopo_offset_cut(inner_obj.name, "BottomInnerBorderVertex", inner_offset)
+
+    utils_bool_difference(inner_obj.name, name + "Circle")
 
     # 切割完成后，设置切割边界顶点组
     bpy.ops.object.mode_set(mode='EDIT')
     mesh = inner_obj.data
     bm = bmesh.from_edit_mesh(mesh)
-    bpy.ops.object.vertex_group_set_active(group='Inner')
-    bpy.ops.object.vertex_group_select()
-    bpy.ops.mesh.select_all(action='INVERT')
-
     cut_border_index = [v.index for v in bm.verts if v.select]
     bpy.ops.object.mode_set(mode='OBJECT')
     set_vert_group("CutBorderVertex", cut_border_index)
-    bpy.ops.object.mode_set(mode='EDIT')
-
-    bpy.ops.mesh.loop_to_region(select_bigger=True)
-    # 删除上部分不要的顶点
-    delete_top_part(inner_obj)
-
-    # 对空洞进行填充
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='CutBorderVertex')
-    bpy.ops.object.vertex_group_select()
-
-    # bpy.ops.mesh.remove_doubles(threshold=0.5)
-    bpy.ops.mesh.edge_face_add()
-
-    bpy.ops.mesh.select_all(action='DESELECT')
-
-    # 删除不在需要的物体
-    bpy.data.objects.remove(bpy.data.objects["FillPlane"], do_unlink=True)
-
-    bmesh.update_edit_mesh(mesh)
-    bpy.ops.object.mode_set(mode='OBJECT')
-
-    smooth_inner_plane(inner_obj)
 
     # 最后，合并内外壁并桥接底边
-    bpy.context.view_layer.objects.active = main_obj
-    main_obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
     inner_obj.select_set(True)
     bpy.ops.object.join()
     bpy.ops.object.mode_set(mode='EDIT')
@@ -596,11 +578,80 @@ def fill():
     bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
     bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.bridge_edge_loops()
+
+    # 分离出内外壁桥接部分，细分以便倒角
+    bpy.ops.mesh.separate(type='SELECTED')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    for o in bpy.data.objects:
+        if o.select_get():
+            if o.name != name:
+                link_obj = o
+    bpy.ops.object.select_all(action='DESELECT')
+    link_obj.select_set(True)
+    bpy.context.view_layer.objects.active = link_obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_mode(type='EDGE')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.region_to_loop()
+    bpy.ops.mesh.select_all(action='INVERT')
+    bpy.ops.mesh.subdivide(number_cuts=2)
+    bpy.ops.mesh.select_mode(type='VERT')
+
+    # 选出中线调整顶点组
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.region_to_loop()
+    bpy.ops.mesh.select_all(action='INVERT')
+    bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
+    bpy.ops.object.vertex_group_remove_from()
+    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    bpy.ops.object.vertex_group_remove_from()
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    bpy.data.objects["RetopoPlane"].hide_set(True)
+    # 合并回去
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    link_obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.join()
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.remove_doubles()
+    bpy.ops.mesh.normals_make_consistent(inside=False)
 
-    # bpy.data.objects.remove(bpy.data.objects["RetopoPlane"], do_unlink=True)
+    # 分别对内外倒角
+    if outer_offset != 0:
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
+        bpy.ops.object.vertex_group_select()
+        bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0, offset_pct=95, segments=16, affect='EDGES')
+    if inner_offset != 0:
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+        bpy.ops.object.vertex_group_select()
+        bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0, offset_pct=95, segments=16, affect='EDGES')
+    bpy.ops.mesh.select_all(action='DESELECT')
+
+    bpy.ops.object.mode_set(mode='OBJECT')
+    # 平滑着色
+    bpy.ops.object.shade_smooth(use_auto_smooth=True, auto_smooth_angle=3.14159)
+
+
+def soft_retopo_offset_cut(obj_name, border_vert_group_name, width):
+    main_obj = bpy.data.objects[obj_name]
+
+    bpy.ops.object.select_all(action='DESELECT')
+    main_obj.select_set(True)
+    bpy.context.view_layer.objects.active = main_obj
+
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    main_obj.vertex_groups.new(name="all")
+    bpy.ops.object.vertex_group_assign()
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group=border_vert_group_name)
+    bpy.ops.object.vertex_group_select()
+
+    bpy.ops.softeardrum.smooth(width=width, center_border_group_name=border_vert_group_name)
 
 
 # 计算点到平面的距离
@@ -685,8 +736,9 @@ def delete_top_part(obj):
 
 def soft_eardrum():
     draw_cut_plane("右耳")
-    bpy.ops.object.softeardrumcirclecut('INVOKE_DEFAULT')
-    get_fill_plane()
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        bpy.ops.object.softeardrumcirclecut('INVOKE_DEFAULT')
     fill()
 
 
@@ -743,7 +795,7 @@ def getModelZ(obj_name):
 
 # 重置回到底部切割完成
 def reset_to_after_cut():
-    need_to_delete_model_name_list = ["右耳", "FillPlane", "右耳ForGetFillPlane"]
+    need_to_delete_model_name_list = ["右耳", "FillPlane", "右耳ForGetFillPlane", "右耳Inner", "RetopoPart"]
     for obj in bpy.context.view_layer.objects:
         if obj.name in need_to_delete_model_name_list:
             bpy.data.objects.remove(obj, do_unlink=True)
@@ -759,7 +811,6 @@ def reset_and_refill():
     try:
         # 首先reset到切割完成
         reset_to_after_cut()
-        get_fill_plane()
         fill()
         utils_re_color("右耳", (1, 0.319, 0.133))
         utils_re_color("右耳huanqiecompare", (1, 0.319, 0.133))
@@ -1171,7 +1222,10 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
         op_cls.__initial_mouse_x = None
         op_cls.__initial_mouse_y = None
 
-        context.window_manager.modal_handler_add(self)
+        global finish
+        if finish is None:
+            context.window_manager.modal_handler_add(self)
+            finish = False
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         return {'RUNNING_MODAL'}
 
@@ -1239,14 +1293,14 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                     if last_loc == None:
                         # 大圆环
                         bpy.ops.mesh.primitive_circle_add(
-                            vertices=32, radius=12, fill_type='NGON', calc_uvs=True, enter_editmode=False,
+                            vertices=32, radius=25, fill_type='NGON', calc_uvs=True, enter_editmode=False,
                             align='WORLD', location=(
                                 0, 0, 0), rotation=(
                                 0.0, 0.0, 0.0), scale=(
                                 1.0, 1.0, 1.0))
                     else:
                         bpy.ops.mesh.primitive_circle_add(
-                            vertices=32, radius=12, fill_type='NGON', calc_uvs=True, enter_editmode=False,
+                            vertices=32, radius=25, fill_type='NGON', calc_uvs=True, enter_editmode=False,
                             align='WORLD',
                             location=last_loc, rotation=(
                                 last_ratation[0], last_ratation[1], last_ratation[2]), scale=(

@@ -3,6 +3,7 @@ import bmesh
 import math
 import os
 
+
 # 导入模版文件
 def import_template():
     files_dir = os.path.join(os.path.dirname(__file__))
@@ -10,6 +11,7 @@ def import_template():
     path_EarL = os.path.join(files_dir, "TemplateEarL.stl")
     bpy.ops.wm.stl_import(filepath=path_EarR)
     bpy.ops.wm.stl_import(filepath=path_EarL)
+
 
 # 获取旋转角度
 def get_change_parameters():
@@ -36,6 +38,7 @@ def get_change_parameters():
     rotate_angle_L = angle_target - angle_origin_L
 
     return rotate_angle_R, rotate_angle_L
+
 
 # 获取模型的z坐标范围
 def getModelz(name):
@@ -104,6 +107,7 @@ def copy_object(name):
     normal = generate_curve(duplicate_obj.name)
     return normal
 
+
 # 旋转对象
 def rotate():
     # 获取场景中的选中对象
@@ -130,6 +134,7 @@ def rotate():
         obj_L.select_set(True)
         bpy.ops.object.transform_apply(
             location=False, rotation=True, scale=False, isolate_users=True)
+
 
 # 在一定高度上分离出曲线用于判断
 def generate_curve(name):
@@ -176,6 +181,7 @@ def generate_curve(name):
             bpy.data.objects.remove(bpy.data.objects[name], do_unlink=True)
             bpy.data.objects.remove(obj, do_unlink=True)
             return normal
+
 
 # 返回离中心位置最近顶点的下标
 def find_nearset_point(name):
@@ -232,12 +238,16 @@ def cal_cosine(normal1, normal2):
     correlation = normal1.normalized().dot(normal2.normalized())
     return correlation
 
+
 # 左右耳识别
 def judge():
     import_template()
     rotate()
-    normalT = copy_object('右耳')
-    normalR = generate_curve('TemplateEarR')
+    if bpy.data.objects.get('右耳'):
+        normalT = copy_object('右耳')
+    elif bpy.data.objects.get('左耳'):
+        normalT = copy_object('左耳')
+    normalR = ('TemplateEarR')
     normalL = generate_curve('TemplateEarL')
     # 判断法向方向的相似性
     cosineR = cal_cosine(normalT, normalR)

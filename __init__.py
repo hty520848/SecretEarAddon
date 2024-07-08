@@ -36,8 +36,6 @@ bl_info = {
     "category" : "Generic"
 }
 
-import bpy
-
 if "bpy" in locals():
     import importlib
     reloadable_modules = [
@@ -64,26 +62,30 @@ if "bpy" in locals():
 
 #导入同级目录下的.py文件
 from . import  (
-                damo,
-                jiahou,
-                ui,
-                prop,
-                public_operation,
-                qiege,
-                label,
-                handle,
-                support,
-                sound_canal,
-                vent_canal,
-                casting,
-                sprue,
-                offset_cut
-                )
+    damo,
+    jiahou,
+    ui,
+    prop,
+    public_operation,
+    label,
+    handle,
+    support,
+    sound_canal,
+    vent_canal,
+    casting,
+    sprue,
+    last_damo,
+    offset_cut
+    )
+from .create_tip import qiege, qiege_smooth, cut_mould
 from .create_mould.soft_eardrum import thickness_and_fill
 from .create_mould import point
-from .create_mould.hard_eardrum import hard_eardrum
-from .create_mould.soft_eardrum import soft_eardrum
+from .create_mould.hard_eardrum import hard_eardrum, hard_eardrum_offset_cut
+from .create_mould.soft_eardrum import soft_eardrum, soft_eardrum_offset_cut
 from .create_mould.frame_style_eardrum import frame_style_eardrum
+# from .pymesh import pymesh
+# from .tool import output_redirect
+
 def register():
     ui.register()
     damo.register()
@@ -103,8 +105,15 @@ def register():
     soft_eardrum.register()
     frame_style_eardrum.register()
     sprue.register()
+    last_damo.register()
     create_mould.create_mould.register()
+    hard_eardrum_offset_cut.register()
+    # pymesh.register()
+    qiege_smooth.register()
     offset_cut.register()
+    soft_eardrum_offset_cut.register()
+    cut_mould.register()
+
 
 def unregister():
     ui.unregister()
@@ -124,9 +133,17 @@ def unregister():
     soft_eardrum.unregister()
     frame_style_eardrum.unregister()
     sprue.unregister()
+    last_damo.unregister()
     create_mould.create_mould.unregister()
+    hard_eardrum_offset_cut.unregister()
+    # pymesh.unregister()
+    qiege_smooth.unregister()
     offset_cut.unregister()
+    soft_eardrum_offset_cut.unregister()
+    cut_mould.unregister()
+
 
 if __name__ == "__main__":
     register()
+    # output_redirect()
 

@@ -2,6 +2,8 @@ import bpy
 import blf
 import math
 import re
+import sys
+import os
 
 import mathutils
 import bpy_extras
@@ -12,6 +14,21 @@ from mathutils import Vector
 prev_on_object = False
 
 prev_on_object_stepcut = 5
+
+# 控制台输出重定向
+def output_redirect():
+    # 获取 Blender 可执行文件的路径
+    blender_exe_path = bpy.app.binary_path
+
+    # 获取 Blender 可执行文件所在的目录
+    blender_dir_path = os.path.dirname(blender_exe_path)
+    # 重定向输出到文件
+    log_file_path = os.path.join(blender_dir_path, "console_output.log")
+    log_file = open(log_file_path, "w")  
+    sys.stdout = log_file
+    sys.stderr = log_file
+
+    print("输出重定向已启动")
 
 
 # 厚度显示
@@ -126,7 +143,8 @@ def getOverride():
     areas = [area for area in bpy.context.window.screen.areas if area.type == area_type]
 
     if len(areas) <= 0:
-        raise Exception(f"Make sure an Area of type {area_type} is open or visible in your screen!")
+    #     raise Exception(f"Make sure an Area of type {area_type} is open or visible in your screen!")
+        return
 
     override = {
         'window': bpy.context.window,
@@ -210,195 +228,237 @@ def initialTransparency():
     mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
 
 
+
+def get_continuous_area(select_vert_index, borderWidth):
+    '''
+    为模型创建顶点映射,为每个顶点绑定一个属性,保存该点的顶点索引(即使该模型上的部分顶点被删除,该属性绑定的顶点索引也不会发生改变)
+
+    根据选中顶点将其复制并分离得到离散的区域块
+
+    根据得到的离散区域块复制一份物体,选中全部顶点,  选择轮廓线,  反选, 删除选中该顶点, 得到离散的区域边界线     用于绘制红环
+
+    将分离得到的物体取消选中,从未处理的顶点中随机选择一个顶点,将其选中并选中连通项,以此类推获取不同的连通区域
+
+    针对每个连通区域单独处理:
+        根据borderwidth划分该区域的内外边界顶点: 遍历区域中的顶点,获取每个顶点距离 离散的区域边界中的最近顶点 的距离,以此划分内外边界
+        保存记录其在原始左右耳模型上的顶点索引
+
+    绘制红环: 选中全部顶点,  选择轮廓线,  反选, 删除选中该顶点,  选中全部顶点,  将曲线转化未管道,   为管道添加红色材质
+
+    '''
+    name = bpy.context.scene.leftWindowObj
+    cur_obj = bpy.data.objects.get(name)
+
+    #删除原先存在的边界红环
+    for obj in bpy.data.objects:
+        if (name == "右耳"):
+            pattern = r'右耳LocalThickAreaClassificationBorder'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
+        elif (name == "左耳"):
+            pattern = r'左耳LocalThickAreaClassificationBorder'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
+
+
+
+    #存在加厚区域的时候
+    if(len(select_vert_index) > 1):
+
+        # 为模型创建顶点映射
+        if (cur_obj != None and cur_obj.type == 'MESH'):
+            me = cur_obj.data
+            bm = bmesh.new()
+            bm.from_mesh(me)
+            bm.verts.ensure_lookup_table()
+            localthick_index_layer = bm.verts.layers.int.get('LocalThickObjectIndex')
+            if localthick_index_layer:
+                bm.verts.layers.int.remove(localthick_index_layer)
+            localthick_index_layer = bm.verts.layers.int.new('LocalThickObjectIndex')
+            for vert in bm.verts:
+                vert[localthick_index_layer] = vert.index
+            bm.to_mesh(me)
+            bm.free()
+
+        #根据给定的选中顶点索引将顶点选中并复制分离得到离散的区域块
+        bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.ops.object.select_all(action='DESELECT')
+        cur_obj.select_set(True)
+        bpy.context.view_layer.objects.active = cur_obj
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        if (cur_obj != None and cur_obj.type == 'MESH'):     #根据参数中的顶点索引将这些顶点选中
+            me = cur_obj.data
+            bm = bmesh.new()
+            bm.from_mesh(me)
+            bm.verts.ensure_lookup_table()
+            for vert in bm.verts:
+                if(vert.index in select_vert_index):
+                    vert.select_set(True)
+            bm.to_mesh(me)
+            bm.free()
+        bpy.ops.object.mode_set(mode='EDIT')                 #将选中的顶点复制并分离出来
+        bpy.ops.mesh.duplicate()
+        bpy.ops.mesh.separate(type='SELECTED')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        localthick_areaclassification_obj = bpy.data.objects.get(name + ".001")
+        if(localthick_areaclassification_obj != None):
+            localthick_areaclassification_obj.name = name + 'LocalThickAreaClassification'
+
+
+
+        #根据得到的离散区域块复制得到离散区域的边界线
+        localthick_areaclassification_border_obj = localthick_areaclassification_obj.copy()
+        localthick_areaclassification_border_obj.data = localthick_areaclassification_obj.data.copy()
+        localthick_areaclassification_border_obj.animation_data_clear()
+        localthick_areaclassification_border_obj.name = name + 'LocalThickAreaClassificationBorder'
+        bpy.context.collection.objects.link(localthick_areaclassification_border_obj)
+        if name == '右耳':
+            moveToRight(localthick_areaclassification_border_obj)
+        elif name == '左耳':
+            moveToLeft(localthick_areaclassification_border_obj)
+        bpy.ops.object.select_all(action='DESELECT')
+        localthick_areaclassification_border_obj.select_set(True)
+        bpy.context.view_layer.objects.active = localthick_areaclassification_border_obj
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.select_mode(type='EDGE')
+        bpy.ops.mesh.region_to_loop()
+        bpy.ops.mesh.select_all(action='INVERT')
+        bpy.ops.mesh.delete(type='EDGE')
+        bpy.ops.mesh.select_mode(type='VERT')
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+
+
+        #单独处理每个离散区域并根据borderwidth划分其内外区域
+        bpy.ops.object.select_all(action='DESELECT')
+        localthick_areaclassification_obj.select_set(True)
+        bpy.context.view_layer.objects.active = localthick_areaclassification_obj
+
+
+        continuous_area = []                            # 存放连续区域对象信息(左右耳模型的顶点索引)
+        unprocessed_vertex_index = []                   # 存放未处理的顶点索引(离散区域的顶点索引)
+
+        #获取离散区域中的所有顶点作为未处理顶点
+        if (localthick_areaclassification_obj != None and localthick_areaclassification_obj.type == 'MESH'):
+            me = localthick_areaclassification_obj.data
+            bm = bmesh.new()
+            bm.from_mesh(me)
+            bm.verts.ensure_lookup_table()
+            for vert in bm.verts:
+                unprocessed_vertex_index.append(vert.index)
+            bm.to_mesh(me)
+            bm.free()
+
+        # 处理所有选中顶点,一次循环生成一个连通区域
+        while unprocessed_vertex_index:
+            area_index = []                   #存放该区域内的顶点(离散区域的顶点索引)
+            inner_vert_index = []             #存放该连通区域的内边界顶点(左右耳模型的顶点索引)
+            out_vert_index = []               #存放该连通区域的外边界顶点(左右耳模型的顶点索引)
+            distance_dic = {}                 #存放该区域顶点到边界的最近距离(左右耳模型的顶点距离)
+            area_begin_vert_index = unprocessed_vertex_index[0]     #处理的初始顶点
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.mode_set(mode='OBJECT')                    #将初始顶点选中并选中连通项
+            if (localthick_areaclassification_obj != None and localthick_areaclassification_obj.type == 'MESH'):
+                me = localthick_areaclassification_obj.data
+                bm = bmesh.new()
+                bm.from_mesh(me)
+                bm.verts.ensure_lookup_table()
+                vert = bm.verts[area_begin_vert_index]
+                vert.select_set(True)
+                bm.to_mesh(me)
+                bm.free()
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_linked()
+            bpy.ops.object.mode_set(mode='OBJECT')                   #针对所有的选中连通项顶点,划分内外边界顶点并计算距离
+            if (localthick_areaclassification_obj != None and localthick_areaclassification_obj.type == 'MESH' and localthick_areaclassification_border_obj != None and localthick_areaclassification_border_obj.type == 'MESH'):
+                me = localthick_areaclassification_obj.data
+                bm = bmesh.new()
+                bm.from_mesh(me)
+                bm.verts.ensure_lookup_table()
+                border_me = localthick_areaclassification_border_obj.data
+                border_bm = bmesh.new()
+                border_bm.from_mesh(border_me)
+                border_bm.verts.ensure_lookup_table()
+
+                localthick_index_layer = bm.verts.layers.int.get('LocalThickObjectIndex')
+                for vert in bm.verts:
+                    if(vert.select == True):
+                        area_index.append(vert.index)
+                for vert_index in area_index:
+                    min_distance = math.inf
+                    vert = bm.verts[vert_index]
+                    vert_co = vert.co
+                    for border_vert in border_bm.verts:
+                        border_co = border_vert.co
+                        distance = math.sqrt(
+                            (vert_co[0] - border_co[0]) ** 2 + (vert_co[1] - border_co[1]) ** 2 + (
+                                    vert_co[2] - border_co[2]) ** 2)
+                        if(min_distance > distance):
+                            min_distance = distance
+                    if(min_distance > borderWidth):
+                        inner_vert_index.append(vert[localthick_index_layer])
+                        distance_dic[vert[localthick_index_layer]] = min_distance
+                    else:
+                        out_vert_index.append(vert[localthick_index_layer])
+                        distance_dic[vert[localthick_index_layer]] = min_distance
+
+                bm.to_mesh(me)
+                bm.free()
+                border_bm.to_mesh(border_me)
+                border_bm.free()
+
+            #将划分过的顶点从未处理顶点数组中移除
+            unprocessed_vertex_index  = [x for x in unprocessed_vertex_index if x not in area_index]
+
+            #将划分的顶点信息保存
+            area = selectArea(inner_vert_index, out_vert_index, distance_dic)
+            continuous_area.append(area)
+
+
+
+        #将离散区域块边界线转换为红环曲线并添加红色材质
+        bpy.ops.object.select_all(action='DESELECT')
+        localthick_areaclassification_border_obj.select_set(True)
+        bpy.context.view_layer.objects.active = localthick_areaclassification_border_obj
+        bpy.ops.object.convert(target='CURVE')
+        localthick_areaclassification_border_obj.data.bevel_depth = 0.1
+        localthick_areaclassification_border_obj.data.bevel_resolution = 10
+        bpy.ops.object.mode_set(mode='EDIT')
+        for i in range(10):
+            bpy.ops.curve.smooth()
+        bpy.ops.object.mode_set(mode='OBJECT')
+        newColor('localthick_border_red', 1, 0, 0, 0, 1)
+        localthick_areaclassification_border_obj.data.materials.append(bpy.data.materials["localthick_border_red"])
+
+
+
+        #删除离散区域块物体
+        bpy.data.objects.remove(localthick_areaclassification_obj, do_unlink=True)
+
+        #将旋转中心设置未左右耳模型
+        bpy.ops.object.select_all(action='DESELECT')
+        cur_obj.select_set(True)
+        bpy.context.view_layer.objects.active = cur_obj
+
+
+        return continuous_area
+    return []
+
+
 # 根据传入的选中顶点组,将顶点组划分为边界点,内圈,外圈,并保存再对象中
 class selectArea(object):
-    def __init__(self, select_vert, color_lay, borderWidth):
-        self.select_vert = select_vert
-        self.borderWidth = borderWidth
-        self.color_lay = color_lay
-        self.border_out_vert = []  # 外边界顶点
-        self.inner_vert = []
-        self.out_vert = []  # 外圈顶点
-        self.distance_dic = {}  # 每个顶点到边缘的距离
-        self.order_border_co = []  # 顺序排列的边界坐标，用于绘制范围曲线
+    def __init__(self, inner_vert_index, out_vert_index, distance_dic):
+        self.inner_vert_index = inner_vert_index
+        self.out_vert_index = out_vert_index
+        self.distance_dic = distance_dic
 
-        # 分类顶点
-        self.vertex_classification()
-        self.get_order_border_co()
-        self.draw_border_curve()
-
-    # 顶点组划分
-    def vertex_classification(self):
-        # 对于被选择的点，判断边界
-        for vert in self.select_vert:
-            # 遍历这些顶点的相邻节点
-            for edge in vert.link_edges:
-                # 获取边的顶点
-                v1 = edge.verts[0]
-                v2 = edge.verts[1]
-                # 确保获取的顶点不是当前顶点
-                link_vert = v1 if v1 != vert else v2
-                colvert = link_vert[self.color_lay]
-                if round(colvert.x, 3) == 1.000 and round(colvert.y, 3) == 0.319 and round(colvert.z,
-                                                                                           3) == 0.133:  # 相邻点有黑色（0，0，0），表示为边界
-                    if link_vert not in self.border_out_vert:
-                        self.border_out_vert.append(link_vert)  # !!!!!!特别注意这里，边界是获取到的相邻节点而不是被选择的节点本身
-
-        # 计算内圈顶点
-        for vert in self.select_vert:
-            # 计算和外边界顶点的最小距离
-            min_distance = math.inf
-            for out_vert in self.border_out_vert:
-                distance = math.sqrt((vert.co[0] - out_vert.co[0]) ** 2 + (vert.co[1] - out_vert.co[1]) ** 2 + (
-                        vert.co[2] - out_vert.co[2]) ** 2)  # 计算欧几里得距离
-                if distance < min_distance:
-                    min_distance = distance
-
-            # 判断是否正在内边界里
-            if min_distance > self.borderWidth:
-                self.inner_vert.append(vert)
-            # 保存顶点到边界的距离以便后续使用
-            self.distance_dic[vert.index] = min_distance
-
-        self.out_vert = [x for x in self.select_vert if x not in self.inner_vert]
-
-        # 这一段代码用于处理特别尖锐的边缘
-        for vert in self.out_vert:
-            count = 0
-            # 遍历这些顶点的相邻节点
-            for edge in vert.link_edges:
-                # 获取边的顶点
-                v1 = edge.verts[0]
-                v2 = edge.verts[1]
-                # 确保获取的顶点不是当前顶点
-                link_vert = v1 if v1 != vert else v2
-                if link_vert in self.inner_vert:
-                    count = count + 1
-            if count >= 3:  # 如果外围顶点相邻的至少三个顶点是内部顶点，那就把该外围顶点加入内部顶点
-                self.inner_vert.append(vert)
-
-        self.out_vert = [x for x in self.select_vert if x not in self.inner_vert]
-
-    def get_order_border_co(self):
-        # 尝试使用距离最近的点
-        now_vert = self.border_out_vert[0]
-        unprocessed_vertex = self.border_out_vert  # 未处理顶点
-        while len(unprocessed_vertex) > 1:
-            self.order_border_co.append(now_vert.co)
-            unprocessed_vertex.remove(now_vert)
-
-            min_distance = math.inf
-            now_vert_co = now_vert.co
-            # 每次都找离当前顶点最近的顶点
-            for vert in unprocessed_vertex:
-                distance = math.sqrt((vert.co[0] - now_vert_co[0]) ** 2 + (vert.co[1] - now_vert_co[1]) ** 2 + (
-                        vert.co[2] - now_vert_co[2]) ** 2)  # 计算欧几里得距离
-                if distance < min_distance:
-                    min_distance = distance
-                    now_vert = vert
-
-    def draw_border_curve(self):
-        active_obj = bpy.context.active_object
-
-        # print('曲线',active_obj.name)
-
-        new_node_list = list()
-        for i in range(len(self.order_border_co)):
-            if i % 2 == 0:
-                new_node_list.append(self.order_border_co[i])
-        # newnodelist = [node % 2 for node in range(len(order_border_co))]
-        # 创建一个新的曲线对象
-        curve_data = bpy.data.curves.new(name="BorderCurve", type='CURVE')
-        curve_data.dimensions = '3D'
-
-        active_obj_name = bpy.context.active_object.name
-        obj = None
-        if (active_obj_name == "右耳"):
-            obj = bpy.data.objects.new("右耳BorderCurveObject", curve_data)
-        if (active_obj_name == "左耳"):
-            obj = bpy.data.objects.new("左耳BorderCurveObject", curve_data)
-        bpy.context.collection.objects.link(obj)
-        if active_obj.name == '左耳':
-            moveToLeft(obj)
-        elif active_obj.name == '右耳':
-            moveToRight(obj)
-        bpy.context.view_layer.objects.active = obj
-
-        # 添加一个曲线样条
-        spline = curve_data.splines.new('NURBS')
-        spline.points.add(len(new_node_list) - 1)
-        spline.use_cyclic_u = True
-
-        # 设置每个点的坐标
-        for i, point in enumerate(new_node_list):
-            spline.points[i].co = (point.x, point.y, point.z, 1)
-
-        # 更新场景
-        # 这里可以自行调整数值
-        # 解决上下文问题
-        override = getOverride()
-        with bpy.context.temp_override(**override):
-            bpy.context.active_object.data.bevel_depth = 0.18
-            bpy.context.view_layer.update()
-            bpy.context.view_layer.objects.active = active_obj
-
-
-# 将选中的顶点组根据连通性划分,每个区域再划分为内外顶点组并保存再对象中
-def get_continuous_area(select_vert, color_lay, borderWidth):
-    active_obj_name = bpy.context.active_object.name
-    for obj in bpy.data.objects:
-        if(active_obj_name == "右耳"):
-            pattern = r'右耳BorderCurveObject'
-            if re.match(pattern, obj.name):
-                # 删除以BorderCurveObject开头的物体
-                bpy.data.objects.remove(obj, do_unlink=True)
-        if (active_obj_name == "左耳"):
-            pattern = r'左耳BorderCurveObject'
-            if re.match(pattern, obj.name):
-                # 删除以BorderCurveObject开头的物体
-                bpy.data.objects.remove(obj, do_unlink=True)
-    continuous_area = []  # 用于存放连续区域的class
-    unprocessed_vertex = select_vert  # 用于存放未处理的节点
-    visited_vert = []  # 存放被访问过的节点防止重复访问
-
-    # 处理所有选中顶点,一次循环生成一个连通区域
-    while unprocessed_vertex:
-        area_vert = []  # 用于存放当前区域的顶点,即一个连通区域,初始化为空
-        wait_to_find_link_vert = [unprocessed_vertex[0]]  # 初始化,加入第一个顶点
-        visited_vert.append(unprocessed_vertex[0])
-        unprocessed_vertex.remove(unprocessed_vertex[0])
-
-        # 一次循环生成一个连通区域
-        while wait_to_find_link_vert:
-            # 将这wait_to_find_link_vert的顶点全部加入区域顶点area_vert
-            area_vert.extend(wait_to_find_link_vert)
-            temp_vert = []  # 存放下一层将要遍历的顶点，即与 wait_to_find_link_vert中顶点 相邻的点
-            for vert in wait_to_find_link_vert:
-                for edge in vert.link_edges:
-                    # 获取边的顶点
-                    v1 = edge.verts[0]
-                    v2 = edge.verts[1]
-                    # 确保获取的顶点不是当前顶点
-                    link_vert = v1 if v1 != vert else v2
-                    # 若当前顶点被选中，且未被处理
-                    if link_vert in unprocessed_vertex and link_vert not in visited_vert:
-                        temp_vert.append(link_vert)
-                        visited_vert.append(link_vert)
-                        unprocessed_vertex.remove(link_vert)
-
-            wait_to_find_link_vert = temp_vert
-
-        # 一片连通区域,所有顶点存放再area_vert,通过selectArea方法将其顶点分类到各个数组中并生成一个对象保存
-        area = selectArea(area_vert, color_lay, borderWidth)
-
-        continuous_area.append(area)
-
-    return continuous_area
 
 
 # 获取区域和空间，鼠标行为切换相关
-
-
 def get_region_and_space(context, area_type, region_type, space_type):
     region = None
     area = None
@@ -699,6 +759,7 @@ def is_changed_stepcut(obj_name,context, event):
 
 
 def convert_to_mesh(curve_name, mesh_name, depth):
+    name = bpy.context.scene.leftWindowObj
     last_active_obj = bpy.context.active_object
     active_obj = bpy.data.objects[curve_name]
     duplicate_obj = active_obj.copy()
@@ -710,7 +771,10 @@ def convert_to_mesh(curve_name, mesh_name, depth):
     duplicate_obj.animation_data_clear()
     # 将复制的物体加入到场景集合中
     bpy.context.collection.objects.link(duplicate_obj)
-    moveToRight(duplicate_obj)
+    if name == '右耳':
+        moveToRight(duplicate_obj)
+    elif name == '左耳':
+        moveToLeft(duplicate_obj)
     bpy.context.view_layer.objects.active = duplicate_obj
     bpy.ops.object.select_all(action='DESELECT')
     duplicate_obj.select_set(state=True)
@@ -725,21 +789,22 @@ def recover_and_remind_border():
     '''
     恢复到进入切割模式并且保留边界线，用于挖孔，切割报错时恢复
     '''
+    name = bpy.context.scene.leftWindowObj
     recover_flag = False
     for obj in bpy.context.view_layer.objects:
-        if obj.name == "右耳OriginForCreateMouldR":
+        if obj.name == name + "OriginForCreateMouldR":
             recover_flag = True
             break
     # 找到最初创建的  OriginForCreateMould 才能进行恢复
     if recover_flag:
         # 删除不需要的物体
-        need_to_delete_model_name_list = ["右耳", "cutPlane", "右耳OriginForCutR",
-                                          "右耳OriginForFill", "FillPlane", "右耳ForGetFillPlane", "右耳huanqiecompare",
-                                          "dragcurve", "selectcurve"]
+        need_to_delete_model_name_list = [name , name + "cutPlane", name + "OriginForCutR",
+                                          name + "OriginForFill", name + "FillPlane", name + "ForGetFillPlane", name + "huanqiecompare",
+                                          name + "dragcurve", name + "selectcurve", name + "HardEarDrumForSmooth"]
         delete_useless_object(need_to_delete_model_name_list)
         # 将最开始复制出来的OriginForCreateMould名称改为模型名称
         obj.hide_set(False)
-        obj.name = "右耳"
+        obj.name = name
 
         bpy.context.view_layer.objects.active = obj
         # 恢复完后重新复制一份
@@ -750,8 +815,10 @@ def recover_and_remind_border():
         duplicate_obj.name = cur_obj.name + "OriginForCreateMouldR"
         bpy.context.collection.objects.link(duplicate_obj)
         duplicate_obj.hide_set(True)
-        # todo 先加到右耳集合，后续调整左右耳适配
-        moveToRight(duplicate_obj)
+        if name == '右耳':
+            moveToRight(duplicate_obj)
+        elif name == '左耳':
+            moveToLeft(duplicate_obj)
 
         duplicate_obj = cur_obj.copy()
         duplicate_obj.data = cur_obj.data.copy()
@@ -759,7 +826,10 @@ def recover_and_remind_border():
         duplicate_obj.name = cur_obj.name + "OriginForCutR"
         bpy.context.collection.objects.link(duplicate_obj)
         duplicate_obj.hide_set(True)
-        moveToRight(duplicate_obj)
+        if name == '右耳':
+            moveToRight(duplicate_obj)
+        elif name == '左耳':
+            moveToLeft(duplicate_obj)
 
 
 def recover_to_dig():
@@ -767,16 +837,17 @@ def recover_to_dig():
     恢复到挖孔前的状态
     '''
     recover_flag = False
+    name = bpy.context.scene.leftWindowObj
     for obj in bpy.context.view_layer.objects:
-        if obj.name == "右耳OriginForDigHole":
+        if obj.name == name + "OriginForDigHole":
             recover_flag = True
             break
     # 找到最初创建的  OriginForDigHole 才能进行恢复
     if recover_flag:
         # 删除不需要的物体
-        need_to_delete_model_name_list = ["右耳", "cutPlane",
-                                          "右耳OriginForFill", "FillPlane", "右耳ForGetFillPlane", "右耳huanqiecompare",
-                                          "dragcurve", "selectcurve"]
+        need_to_delete_model_name_list = [name, name + "cutPlane",
+                                          name + "OriginForFill", name + "FillPlane", name + "ForGetFillPlane", name + "huanqiecompare",
+                                          name + "dragcurve", name + "selectcurve"]
         for selected_obj in bpy.data.objects:
             if (selected_obj.name in need_to_delete_model_name_list):
                 bpy.data.objects.remove(selected_obj, do_unlink=True)
@@ -784,7 +855,7 @@ def recover_to_dig():
                 do_local_ids=True, do_linked_ids=True, do_recursive=False)
         # 将最开始复制出来的OriginForDigHole名称改为模型名称
         obj.hide_set(False)
-        obj.name = "右耳"
+        obj.name = name
 
         bpy.context.view_layer.objects.active = obj
         # 恢复完后重新复制一份
@@ -795,8 +866,10 @@ def recover_to_dig():
         duplicate_obj.name = cur_obj.name + "OriginForDigHole"
         bpy.context.collection.objects.link(duplicate_obj)
         duplicate_obj.hide_set(True)
-        # todo 先加到右耳集合，后续调整左右耳适配
-        moveToRight(duplicate_obj)
+        if name == '右耳':
+            moveToRight(duplicate_obj)
+        elif name == '左耳':
+            moveToLeft(duplicate_obj)
         # 2024/3/28 这里的OriginForFill不需要吧 应该是删除掉的
         # bpy.data.objects.remove(bpy.data.objects[cur_obj.name + "OriginForDigHole"])
 
@@ -834,12 +907,21 @@ def delete_useless_object(need_to_delete_model_name_list):
             do_local_ids=True, do_linked_ids=True, do_recursive=False)
 
 def delete_hole_border():
-    for obj in bpy.data.objects:
-        if re.match('HoleBorderCurve', obj.name) is not None:
-            bpy.data.objects.remove(obj, do_unlink=True)
-    for obj in bpy.data.objects:
-        if re.match('meshHoleBorderCurve', obj.name) is not None:
-            bpy.data.objects.remove(obj, do_unlink=True)
+    name = bpy.context.scene.leftWindowObj
+    if name == '右耳':
+        for obj in bpy.data.objects:
+            if re.match('右耳HoleBorderCurve', obj.name) is not None:
+                bpy.data.objects.remove(obj, do_unlink=True)
+        for obj in bpy.data.objects:
+            if re.match('右耳meshHoleBorderCurve', obj.name) is not None:
+                bpy.data.objects.remove(obj, do_unlink=True)
+    elif name == '左耳':
+        for obj in bpy.data.objects:
+            if re.match('左耳HoleBorderCurve', obj.name) is not None:
+                bpy.data.objects.remove(obj, do_unlink=True)
+        for obj in bpy.data.objects:
+            if re.match('左耳meshHoleBorderCurve', obj.name) is not None:
+                bpy.data.objects.remove(obj, do_unlink=True)
 
 def subdivide(curve_name, subdivide_number):
     last_active_obj = bpy.context.active_object
@@ -1068,7 +1150,8 @@ def get_cast_index(tar_obj,ori_index):
 
 
 def extrude_border_by_vertex_groups(ori_group_name, target_group_name):
-    ori_obj = bpy.data.objects["右耳"]
+    name = bpy.context.scene.leftWindowObj
+    ori_obj = bpy.data.objects[name]
     bpy.ops.object.mode_set(mode='EDIT')
     bm = bmesh.from_edit_mesh(ori_obj.data)
     bpy.ops.mesh.select_all(action='DESELECT')
@@ -1200,3 +1283,66 @@ def is_on_object(name, context, event):
             if fidx is not None:
                 is_on_object = True  # 如果发生交叉，将变量设为True
     return is_on_object
+
+
+# 在不同模式间切换时选择不同的材质
+def change_mat_mould(type):
+    #  type=0 RGB模式， type=1 顶点颜色模式
+    mat = bpy.data.materials.get('Yellow')
+    if mat:
+        if type == 0:
+            is_initial = False
+            nodes = mat.node_tree.nodes
+            links = mat.node_tree.links
+            for node in nodes:
+                if node.name == 'RGB':
+                    is_initial = True
+            if not is_initial:
+                new_node = nodes.new(type="ShaderNodeRGB")
+                new_node.outputs[0].default_value = (1.0, 0.319, 0.133, 1)
+            for link in links:
+                links.remove(link)
+            links.new(nodes["RGB"].outputs[0], nodes["Principled BSDF"].inputs[0])
+            links.new(nodes["Principled BSDF"].outputs[0], nodes["Material Output"].inputs[0])
+
+        elif type == 1:
+            is_initial = False
+            nodes = mat.node_tree.nodes
+            links = mat.node_tree.links
+            for node in nodes:
+                if node.name == 'Color Attribute':
+                    is_initial = True
+            if not is_initial:
+                nodes.new(type="ShaderNodeVertexColor")
+            for link in links:
+                links.remove(link)
+            links.new(nodes["Color Attribute"].outputs[0], nodes["Principled BSDF"].inputs[0])
+            links.new(nodes["Principled BSDF"].outputs[0], nodes["Material Output"].inputs[0])
+
+
+def laplacian_smooth(smooth_index, factor, iteration):
+    obj = bpy.context.active_object
+    bpy.ops.object.mode_set(mode='OBJECT')
+    me = obj.data
+    bm = bmesh.new()
+    me = obj.data
+    bm.from_mesh(me)
+    bm.verts.ensure_lookup_table()
+    select_vert = list()
+    for index in smooth_index:
+        select_vert.append(bm.verts[index])
+    for i in range(iteration):
+        final_co_dict = dict()
+        for v in select_vert:
+            final_co = v.co * 0
+            for edge in v.link_edges:
+                # 确保获取的顶点不是当前顶点
+                link_vert = edge.other_vert(v)
+                final_co += link_vert.co
+            final_co /= len(v.link_edges)
+            final_co_dict[v.index] = v.co + factor * (final_co - v.co)
+        for v in select_vert:
+            v.co = final_co_dict[v.index]
+
+    bm.to_mesh(obj.data)
+    bm.free()

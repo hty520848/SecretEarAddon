@@ -669,6 +669,7 @@ def judge_normals():
 def get_cut_plane():
     # 外边界顶点组
     bpy.data.objects["右耳"].select_set(False)
+    bpy.ops.object.select_all(action='DESELECT')
     cut_plane_outer = bpy.data.objects["CutPlane"]
     bpy.context.view_layer.objects.active = cut_plane_outer
     cut_plane_outer.select_set(True)

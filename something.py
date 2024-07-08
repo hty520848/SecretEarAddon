@@ -4,7 +4,7 @@ import blf
 import math
 import os
 import mathutils
-from tool import newColor
+from tool import newColor, moveToLeft, moveToRight
 from utils.utils import utils_get_order_border_vert, utils_draw_curve
 from .create_mould.soft_eardrum.thickness_and_fill import get_cut_plane, plane_cut, delete_useless_part
 
@@ -849,3 +849,142 @@ def extrude_retopo(name, border_vert_group_name, width):
 
 def average_locations(list1, list2):
     return [(list1[0]+list2[0])/2, (list1[1]+list2[1])/2, (list1[2]+list2[2])/2]
+
+
+def resample_coords(coords, factor):
+
+    segments = len(coords) * factor
+
+    if len(coords) < 2:
+        return coords
+
+    arch_len = 0
+    cumulative_lengths = [0]  # TODO: make this the right size and dont append
+
+    for i in range(0, len(coords) - 1):
+        v0 = coords[i]
+        v1 = coords[i + 1]
+        V = v1 - v0
+        arch_len += V.length
+        cumulative_lengths.append(arch_len)
+
+    v0 = coords[-1]
+    v1 = coords[0]
+    V = v1 - v0
+    arch_len += V.length
+    cumulative_lengths.append(arch_len)
+    segments += 1
+
+    new_coords = [[None]] * segments
+
+    n = 0
+
+    for i in range(0, segments):
+        desired_length_raw = i  / segments * arch_len
+        if desired_length_raw > arch_len:
+            desired_length = desired_length_raw - arch_len
+        elif desired_length_raw < 0:
+            desired_length = arch_len + desired_length_raw  # this is the end, + a negative number
+        else:
+            desired_length = desired_length_raw
+
+        for j in range(n, len(coords) + 1):
+
+            if cumulative_lengths[j] > desired_length:
+                break
+
+        extra = desired_length - cumulative_lengths[j- 1]
+
+        if j == len(coords):
+            new_coords[i] = coords[j - 1] + extra * (coords[0] - coords[j - 1]).normalized()
+        else:
+            new_coords[i] = coords[j - 1] + extra * (coords[j] - coords[j - 1]).normalized()
+
+    return new_coords
+
+def smooth_stepcut(obj_name):
+    pianyi = bpy.context.scene.qiegewaiBianYuan  # 获取偏移值
+    # 复制一份物体并应用布尔修改器用于平滑
+    obj = bpy.data.objects[obj_name]
+    name = obj.name
+    old_obj = bpy.data.objects[obj_name + 'ceqieCompare']
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = bpy.data.objects[old_obj]
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.mesh.edges_select_sharp()
+    bm = bmesh.from_edit_mesh(old_obj.data)
+    edges_old = [edge for edge in bm.edges if edge.select]
+    bpy.ops.object.mode_set(mode='OBJECT')
+    bm.free()
+
+    if bpy.data.objects.get(name + 'stepcutpinghua') != None:
+        bpy.data.objects.remove(bpy.data.objects[name + 'stepcutpinghua'], do_unlink=True)
+    duplicate_obj = obj.copy()
+    duplicate_obj.data = obj.data.copy()
+    duplicate_obj.name = name + "stepcutpinghua"
+    duplicate_obj.animation_data_clear()
+    bpy.context.scene.collection.objects.link(duplicate_obj)
+    if name == '右耳':
+        moveToRight(duplicate_obj)
+    elif name == '左耳':
+        moveToLeft(duplicate_obj)
+
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = bpy.data.objects[duplicate_obj]
+    bpy.data.objects[duplicate_obj].select_set(True)
+    # 修改器左右耳用同一个名字可能会有问题
+    bpy.ops.object.modifier_apply(modifier="step cut", single_user=True)
+    # 选中需要操作的外圈循环边
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.mesh.edges_select_sharp()
+    bm = bmesh.from_edit_mesh(duplicate_obj.data)
+    edges = [edge for edge in bm.edges if edge.select]
+    bpy.ops.mesh.select_all(action='DESELECT')
+    for edge in edges:
+        if edge not in edges_old:
+            edge.select_set(True)
+    bm.free()
+    
+    # 进行offset cut操作
+    bpy.ops.huier.offset_cut(width=pianyi)
+    bpy.ops.mesh.bevel(offset=pianyi, segments=8)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    if not bpy.data.objects[name].hide_get():
+        bpy.data.objects[name].hide_set(True)
+        bpy.data.objects[name + 'stepcutpinghua'].hide_set(False)
+
+
+# 用于保存顶点坐标更改的字典
+vertex_changes = {}
+
+# 定义处理函数
+def handle_depsgraph_update_post(scene):
+    global vertex_changes
+
+    # 获取活动对象
+    obj = bpy.context.active_object
+
+    # 检查对象是否存在且处于雕刻模式下
+    if obj and obj.mode == 'SCULPT':
+        # 获取对象的网格数据
+        mesh = obj.data
+
+        # 遍历每个顶点
+        for vert in mesh.vertices:
+            # 检查顶点是否在更改字典中
+            if vert.index not in vertex_changes:
+                # 如果不在字典中，则将其添加，并记录初始坐标
+                vertex_changes[vert.index] = vert.co.copy()
+            else:
+                # 如果在字典中，则检查坐标是否发生更改
+                if vert.co != vertex_changes[vert.index]:
+                    # 如果坐标更改了，则打印顶点索引和新坐标
+                    print("Vertex Index:", vert.index)
+                    print("New Coordinates:", vert.co)
+                    # 更新更改字典中的坐标
+                    vertex_changes[vert.index] = vert.co.copy()
+
+# 注册事件处理程序
+bpy.app.handlers.depsgraph_update_post.append(handle_depsgraph_update_post)

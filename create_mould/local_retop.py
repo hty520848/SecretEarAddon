@@ -231,7 +231,8 @@ def retopo(name, border_vert_group_name, width):
 
     now_border_co = utils_get_order_border_vert(border_co)
 
-    move_direction = get_move_direction("RetopoPlane")
+    # move_direction = get_move_direction("RetopoPlane")
+    move_direction = (0, 0, 1)
     step = 0.5
 
     bpy.ops.object.mode_set(mode='OBJECT')
