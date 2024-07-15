@@ -242,7 +242,6 @@ class LastThickening(bpy.types.Operator):
         op_cls.__flag = False
         op_cls.__is_changed = False
         # bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'
-        change_mat_mould(1)
         if not op_cls.__timer:
             op_cls.__timer = context.window_manager.event_timer_add(0.2, window=context.window)
 
@@ -728,7 +727,6 @@ class LastThinning(bpy.types.Operator):
         op_cls.__flag = False
         op_cls.__is_changed = False
         # bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'
-        change_mat_mould(1)
         if not op_cls.__timer:
             op_cls.__timer = context.window_manager.event_timer_add(0.2, window=context.window)
 
@@ -1215,7 +1213,6 @@ class LastSmooth(bpy.types.Operator):
         op_cls.__flag = False
         op_cls.__is_changed = False
         # bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'
-        change_mat_mould(1)
         if not op_cls.__timer:
             op_cls.__timer = context.window_manager.event_timer_add(0.2, window=context.window)
         global smooth_modal_start

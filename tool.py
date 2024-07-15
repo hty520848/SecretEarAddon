@@ -223,9 +223,10 @@ def appendColor(object_name, material_name):
 
 
 def initialTransparency():
-    mat = newShader("Transparency")  # 创建材质
-    mat.blend_method = "BLEND"
-    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
+    newColor("Transparency", 1, 0.319, 0.133, 1, 0.2)  # 创建材质
+    # mat = newShader("Transparency")  # 创建材质
+    # mat.blend_method = "BLEND"
+    # mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.2
 
 
 
@@ -1288,7 +1289,11 @@ def is_on_object(name, context, event):
 # 在不同模式间切换时选择不同的材质
 def change_mat_mould(type):
     #  type=0 RGB模式， type=1 顶点颜色模式
-    mat = bpy.data.materials.get('Yellow')
+    name = bpy.context.scene.leftWindowObj
+    if name == "右耳":
+        mat = bpy.data.materials.get("YellowR")
+    elif name == '左耳':
+        mat = bpy.data.materials.get("YellowL")
     if mat:
         if type == 0:
             is_initial = False
@@ -1346,3 +1351,14 @@ def laplacian_smooth(smooth_index, factor, iteration):
 
     bm.to_mesh(obj.data)
     bm.free()
+
+
+def apply_material():
+    name = bpy.context.scene.leftWindowObj
+    if name == "右耳":
+        mat = bpy.data.materials.get("YellowR")
+    elif name == '左耳':
+        mat = bpy.data.materials.get("YellowL")
+    obj = bpy.data.objects[name]
+    obj.data.materials.clear()
+    obj.data.materials.append(mat)

@@ -20,8 +20,9 @@ from bpy_extras import view3d_utils
 from bpy.types import SpaceView3D
 import math
 import time, functools
-from .public_operation import processing_stage_dict
+from .public_operation import processing_stage_dict, order_processing_list, set_flag, fallback
 from .sound_canal import get_is_on_rotate
+from .create_tip.cut_mould import get_color_mode
 
 # 记录左右窗口视角的数据
 left_last_dis = None
@@ -877,13 +878,25 @@ class TOPBAR_PT_transparency1(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        enum = context.scene.transparent1Enum
-        col = layout.column()
-        col.prop(context.scene, "transparent1Enum", expand=True)
-        if enum == 'OP3':
-            col.label(text='透明比例')
-            row = col.row(align=True)
-            row.prop(context.scene, "transparentper1Enum", expand=True)
+        name = bpy.context.scene.leftWindowObj
+        if name == '右耳':
+            enum = context.scene.transparent1EnumR
+            col = layout.column()
+            col.prop(context.scene, "transparent1EnumR", expand=True)
+            if enum == 'OP3':
+                col.label(text='透明比例')
+                row = col.row(align=True)
+                row.prop(context.scene, "transparentper1EnumR", expand=True)
+
+        elif name == '左耳':
+            enum = context.scene.transparent1EnumL
+            col = layout.column()
+            col.prop(context.scene, "transparent1EnumL", expand=True)
+            if enum == 'OP3':
+                col.label(text='透明比例')
+                row = col.row(align=True)
+                row.prop(context.scene, "transparentper1EnumL", expand=True)
+
 
 # 透明度2
 class TOPBAR_PT_transparency2(bpy.types.Panel):
@@ -893,13 +906,24 @@ class TOPBAR_PT_transparency2(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        enum = context.scene.transparent2Enum
-        col = layout.column()
-        col.prop(context.scene, "transparent2Enum", expand=True)
-        if enum == 'OP3':
-            col.label(text='透明比例')
-            row = col.row(align=True)
-            row.prop(context.scene, "transparentper2Enum", expand=True)
+        name = bpy.context.scene.leftWindowObj
+        if name == '右耳':
+            enum = context.scene.transparent2EnumR
+            col = layout.column()
+            col.prop(context.scene, "transparent2EnumR", expand=True)
+            if enum == 'OP3':
+                col.label(text='透明比例')
+                row = col.row(align=True)
+                row.prop(context.scene, "transparentper2EnumR", expand=True)
+
+        elif name == '左耳':
+            enum = context.scene.transparent2EnumL
+            col = layout.column()
+            col.prop(context.scene, "transparent2EnumL", expand=True)
+            if enum == 'OP3':
+                col.label(text='透明比例')
+                row = col.row(align=True)
+                row.prop(context.scene, "transparentper2EnumL", expand=True)
 
 
 # 透明度3
@@ -910,13 +934,24 @@ class TOPBAR_PT_transparency3(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        enum = context.scene.transparent3Enum
-        col = layout.column()
-        col.prop(context.scene, "transparent3Enum", expand=True)
-        if enum == 'OP3':
-            col.label(text='透明比例')
-            row = col.row(align=True)
-            row.prop(context.scene, "transparentper3Enum", expand=True)
+        name = bpy.context.scene.leftWindowObj
+        if name == '右耳':
+            enum = context.scene.transparent3EnumR
+            col = layout.column()
+            col.prop(context.scene, "transparent3EnumR", expand=True)
+            if enum == 'OP3':
+                col.label(text='透明比例')
+                row = col.row(align=True)
+                row.prop(context.scene, "transparentper3EnumR", expand=True)
+
+        elif name == '左耳':
+            enum = context.scene.transparent3EnumL
+            col = layout.column()
+            col.prop(context.scene, "transparent3EnumL", expand=True)
+            if enum == 'OP3':
+                col.label(text='透明比例')
+                row = col.row(align=True)
+                row.prop(context.scene, "transparentper3EnumL", expand=True)
 
 
 # 第一行的菜单项
@@ -1010,7 +1045,7 @@ class Huier_OT_DaoChuWei(bpy.types.Operator):
 
     def execute(self, context):
         # 将当前正在操作的物体提交
-        current_tab = bpy.context.screen.areas[1].spaces.active.context
+        current_tab = bpy.context.screen.areas[0].spaces.active.context
         submit_process = processing_stage_dict[current_tab]
         print()
         submit(submit_process)
@@ -1231,8 +1266,8 @@ def notify_test(context):
     is_initial = True
     if (context.window.workspace.name == '布局.001'):
         # 切换到之前窗口的模式
-        bpy.context.screen.areas[0].spaces.active.context = 'RENDER'
-        bpy.context.screen.areas[0].spaces.active.context = 'RENDER'
+        bpy.context.screen.areas[0].spaces.active.context = prev_context
+        bpy.context.screen.areas[0].spaces.active.context = prev_context
         workspace = context.window.workspace
         for screen in workspace.screens:
             for area in screen.areas:
@@ -1250,8 +1285,22 @@ def notify_test(context):
             # 初始化，设定活动集合为右耳
             with bpy.context.temp_override(**override[0]):
                 bpy.ops.object.hide_collection(collection_index=1, extend=False)
+                # bpy.context.space_data.show_region_tool_header = False  # 隐藏工具栏
+                # # bpy.context.space_data.overlay.show_overlays = False
+                # bpy.context.space_data.overlay.show_object_origins = False  # 隐藏物体原点
+                # bpy.context.space_data.overlay.show_relationship_lines = False  # 隐藏父子物体间的连线
+                # bpy.context.space_data.overlay.show_outline_selected = False  # 隐藏选中物体的轮廓
+                # bpy.context.space_data.show_object_select_lattice = False  # 隐藏晶格物体
+                # bpy.context.space_data.show_region_hud = False  # 隐藏底部面板
             with bpy.context.temp_override(**override[1]):
                 bpy.ops.object.hide_collection(collection_index=2, extend=False)
+                # bpy.context.space_data.show_region_tool_header = False  # 隐藏工具栏
+                # # bpy.context.space_data.overlay.show_overlays = False
+                # bpy.context.space_data.overlay.show_object_origins = False  # 隐藏物体原点
+                # bpy.context.space_data.overlay.show_relationship_lines = False  # 隐藏父子物体间的连线
+                # bpy.context.space_data.overlay.show_outline_selected = False  # 隐藏选中物体的轮廓
+                # bpy.context.space_data.show_object_select_lattice = False  # 隐藏晶格物体
+                # bpy.context.space_data.show_region_hud = False  # 隐藏底部面板
 
         # 当前活动集合与活动物体不匹配
         if bpy.context.scene.activecollecionMirror != bpy.context.scene.leftWindowObj:
@@ -1265,8 +1314,8 @@ def notify_test(context):
 
     else:
         # 切换到之前窗口的模式
-        bpy.context.screen.areas[0].spaces.active.context = 'RENDER'
-        bpy.context.screen.areas[0].spaces.active.context = 'RENDER'
+        bpy.context.screen.areas[0].spaces.active.context = prev_context
+        bpy.context.screen.areas[0].spaces.active.context = prev_context
         workspace = context.window.workspace
         for screen in workspace.screens:
             for area in screen.areas:
@@ -1287,6 +1336,10 @@ def notify_test(context):
 
     # 切换布局时重绘右上角标识
     draw_font()
+    # 回退操作
+    fallback(processing_stage_dict[prev_context])
+    set_flag(True, prev_context)
+
 
 # 给3d区域添加监听器
 SpaceView3D.my_handler = SpaceView3D.draw_handler_add(test, (), 'WINDOW', 'PRE_VIEW')
@@ -1303,6 +1356,7 @@ class Huier_OT_SwitchWorkspace(bpy.types.Operator):
         leftWindowObj = bpy.data.objects.get("左耳")
         if leftWindowObj != None and rightWindowObj != None:
             global prev_context
+            set_flag(True, prev_context)
 
             # 监听workspace切换到左右耳窗口
             subscribe_to = bpy.types.Window,'workspace'
@@ -1344,6 +1398,7 @@ class VIEW3D_HT_header(bpy.types.Header):
     bl_space_type = 'VIEW_3D'
 
     def draw(self,context):
+        name = bpy.context.scene.leftWindowObj
         layout = self.layout
         icons=load_icons()                                                    #标题栏自制图标
 
@@ -1360,21 +1415,48 @@ class VIEW3D_HT_header(bpy.types.Header):
 
         row = layout.row(align=True)
         icon = icons.get("icon_transparency1")
-        row.prop(context.scene, "transparent1", text="", icon_value=icon.icon_id, icon_only=True)
-        sub = row.row(align=True)
-        sub.popover("TOPBAR_PT_transparency1", text="")
+        if name == '右耳':
+            row.active = (bpy.data.objects.get(name + "OriginForShow") != None)
+            row.prop(context.scene, "transparent1R", text="", icon_value=icon.icon_id, icon_only=True)
+            sub = row.row(align=True)
+            sub.popover("TOPBAR_PT_transparency1", text="")
+        elif name == '左耳':
+            row.active = (bpy.data.objects.get(name + "OriginForShow") != None)
+            row.prop(context.scene, "transparent1L", text="", icon_value=icon.icon_id, icon_only=True)
+            sub = row.row(align=True)
+            sub.popover("TOPBAR_PT_transparency1", text="")
 
         row = layout.row(align=True)
         icon = icons.get("icon_transparency2")
-        row.prop(context.scene, "transparent2", text="", icon_value=icon.icon_id, icon_only=True)
-        sub = row.row(align=True)
-        sub.popover("TOPBAR_PT_transparency2", text="")
+        if name == '右耳':
+            row.active = ((bpy.data.objects.get(name + "WaxForShow") != None) or
+                          (bpy.data.objects.get(name) != None and bpy.context.screen.areas[0].spaces.active.context == 'RENDER') or
+                          ((bpy.data.objects.get(name) != None and bpy.context.screen.areas[0].spaces.active.context == 'MATERIAL') and get_color_mode() == 1))
+            row.prop(context.scene, "transparent2R", text="", icon_value=icon.icon_id, icon_only=True)
+            sub = row.row(align=True)
+            sub.popover("TOPBAR_PT_transparency2", text="")
+        elif name == '左耳':
+            row.active = ((bpy.data.objects.get(name + "WaxForShow") != None) or
+                          (bpy.data.objects.get(name) != None and bpy.context.screen.areas[0].spaces.active.context == 'RENDER') or
+                          ((bpy.data.objects.get(name) != None and bpy.context.screen.areas[0].spaces.active.context == 'MATERIAL') and get_color_mode() == 1))
+            row.prop(context.scene, "transparent2L", text="", icon_value=icon.icon_id, icon_only=True)
+            sub = row.row(align=True)
+            sub.popover("TOPBAR_PT_transparency2", text="")
 
         row = layout.row(align=True)
         icon = icons.get("icon_transparency3")
-        row.prop(context.scene, "transparent3", text="", icon_value=icon.icon_id, icon_only=True)
-        sub = row.row(align=True)
-        sub.popover("TOPBAR_PT_transparency3", text="")
+        if name == '右耳':
+            current_process = processing_stage_dict[bpy.context.screen.areas[0].spaces.active.context]
+            row.active = order_processing_list.index(current_process) > 0
+            row.prop(context.scene, "transparent3R", text="", icon_value=icon.icon_id, icon_only=True)
+            sub = row.row(align=True)
+            sub.popover("TOPBAR_PT_transparency3", text="")
+        elif name == '左耳':
+            current_process = processing_stage_dict[bpy.context.screen.areas[0].spaces.active.context]
+            row.active = order_processing_list.index(current_process) > 0
+            row.prop(context.scene, "transparent3L", text="", icon_value=icon.icon_id, icon_only=True)
+            sub = row.row(align=True)
+            sub.popover("TOPBAR_PT_transparency3", text="")
 
         row = layout.row(align=True)
         row.separator()
@@ -1461,7 +1543,7 @@ def snooper(c,w, initx, inity, x, y, delta):
             return None # out of retries
 
     # 移动边界
-    bpy.ops.screen.area_move(x=x, y=y,delta =delta)
+    bpy.ops.screen.area_move(x=x, y=y, delta=delta)
 
     # 光标移动回按钮点击位置
     w.cursor_warp(initx, inity)
@@ -1510,8 +1592,10 @@ def submit(submit_process):
             casting_compare_obj = bpy.data.objects.get(casting_name)
             if (casting_compare_obj != None):
                 mat.blend_method = 'BLEND'
-                mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 1
-                bpy.context.scene.transparent3Enum = 'OP3'
+                if name == '右耳':
+                    bpy.context.scene.transparent3EnumR = 'OP3'
+                elif name == '左耳':
+                    bpy.context.scene.transparent3EnumL = 'OP3'
     elif (submit_process == '支撑'):
         override = getOverride()
         with bpy.context.temp_override(**override):
@@ -1522,16 +1606,20 @@ def submit(submit_process):
             casting_compare_obj = bpy.data.objects.get(casting_name)
             if (casting_compare_obj != None):
                 mat.blend_method = 'BLEND'
-                mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 1
-                bpy.context.scene.transparent3Enum = 'OP3'
+                if name == '右耳':
+                    bpy.context.scene.transparent3EnumR = 'OP3'
+                elif name == '左耳':
+                    bpy.context.scene.transparent3EnumL = 'OP3'
     elif (submit_process == '排气孔'):
         override = getOverride()
         with bpy.context.temp_override(**override):
             bpy.ops.object.spruesubmit('INVOKE_DEFAULT')
             #为铸造法外壳添加透明材质
             mat.blend_method = 'BLEND'
-            mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 1
-            bpy.context.scene.transparent3Enum = 'OP3'
+            if bpy.context.scene.leftWindowObj == '右耳':
+                bpy.context.scene.transparent3EnumR = 'OP3'
+            elif bpy.context.scene.leftWindowObj == '左耳':
+                bpy.context.scene.transparent3EnumL = 'OP3'
     elif(submit_process == '后期打磨'):
         pass
 

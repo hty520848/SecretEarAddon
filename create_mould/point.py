@@ -29,11 +29,14 @@ prev_on_object = False
 prev_mesh_name = ''
 is_cut_finish = True
 is_fill_finish = True
+add_curve_name = None      # 点加蓝线时新增曲线的名字
+last_co = None            # 点加蓝线时第一个点的坐标
+idx_list = []               # 点加蓝线时新增曲线的点的下标
 
-point_mouse_listener = None           #添加鼠标监听
-right_mouse_press = False           #鼠标右键是否按下
-left_mouse_press = False           #鼠标左键是否按下
-middle_mouse_press = False           #鼠标中键是否按下
+point_mouse_listener = None           # 添加鼠标监听
+right_mouse_press = False           # 鼠标右键是否按下
+left_mouse_press = False           # 鼠标左键是否按下
+middle_mouse_press = False           # 鼠标中键是否按下
 
 
 def on_click(x, y, button, pressed):
@@ -427,7 +430,7 @@ def join_curve(curve_name, depth, index_initial, index_finish):
     :param index_initial: 曲线起始位置下标
     :param index_finish: 曲线结束位置下标
     '''
-    # todo： 如果经过起始点（下标为0）会切反
+    # 经过起始点（下标为0）可能会切反
     name = bpy.context.scene.leftWindowObj
     # 获取两条曲线对象
     curve_obj1 = bpy.data.objects[curve_name]
@@ -557,29 +560,29 @@ def join_curve(curve_name, depth, index_initial, index_finish):
     bpy.context.object.data.materials.append(bpy.data.materials['blue'])
 
     # 平滑
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.curve.select_all(action='DESELECT')
-    for i in range(0, len2, 1):  # 选中原本在第二条曲线上的点
-        new_curve_data.splines[0].points[i].select = True
-    new_curve_data.splines[0].points[-1].select = True
-    new_curve_data.splines[0].points[len2].select = True
-    for _ in range(0, 3):
-        bpy.ops.curve.smooth()
-    bpy.ops.object.mode_set(mode='OBJECT')
-
-    target_object = bpy.data.objects[name + "MouldReset"]
-    # 将曲线的每个顶点吸附到目标物体的表面
-    for i in range(0, len2, 1):  # 选中原本在第二条曲线上的点
-        # 获取顶点原位置
-        point = new_curve_data.splines[0].points[i]
-
-        # 计算顶点在目标物体面上的 closest point
-        _, closest_co, _, _ = target_object.closest_point_on_mesh(
-            Vector(point.co[0:3]))
-
-        # 将顶点位置设置为 closest point
-        point.co[0:3] = closest_co
-        point.co[3] = 1
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.curve.select_all(action='DESELECT')
+    # for i in range(0, len2, 1):  # 选中原本在第二条曲线上的点
+    #     new_curve_data.splines[0].points[i].select = True
+    # new_curve_data.splines[0].points[-1].select = True
+    # new_curve_data.splines[0].points[len2].select = True
+    # for _ in range(0, 3):
+    #     bpy.ops.curve.smooth()
+    # bpy.ops.object.mode_set(mode='OBJECT')
+    #
+    # target_object = bpy.data.objects[name + "MouldReset"]
+    # # 将曲线的每个顶点吸附到目标物体的表面
+    # for i in range(0, len2, 1):  # 选中原本在第二条曲线上的点
+    #     # 获取顶点原位置
+    #     point = new_curve_data.splines[0].points[i]
+    #
+    #     # 计算顶点在目标物体面上的 closest point
+    #     _, closest_co, _, _ = target_object.closest_point_on_mesh(
+    #         Vector(point.co[0:3]))
+    #
+    #     # 将顶点位置设置为 closest point
+    #     point.co[0:3] = closest_co
+    #     point.co[3] = 1
 
     # 细分曲线，添加控制点
     # bpy.ops.object.mode_set(mode='EDIT')
@@ -1466,6 +1469,37 @@ def draw_curve(order_border_co, name, depth):
         bpy.context.view_layer.objects.active = active_obj
 
 
+def start_curve(mode):
+    """ 在点加蓝线只剩一个点时将曲线延长方便查看 """
+    global add_curve_name
+    global last_co
+    curve_obj = bpy.data.objects.get(add_curve_name)
+    # 先在点加位置添加一个新点
+    spline = curve_obj.data.splines[0]
+    spline.points.add(1)
+    first_co = spline.points[0].co
+    direction = get_view_direction()
+    spline.points[-1].co = (first_co[0] - direction[0] * 3, first_co[1] - direction[1] * 3, first_co[2] - direction[2] * 3, 1)
+    if mode == 0:
+        newColor('green', 0, 1, 0, 1, 1)
+        curve_obj.data.materials.clear()
+        curve_obj.data.materials.append(bpy.data.materials['green'])
+    if mode == 1:
+        newColor('red', 1, 0, 0, 1, 1)
+        curve_obj.data.materials.clear()
+        curve_obj.data.materials.append(bpy.data.materials['red'])
+
+
+def get_view_direction():
+    for area in bpy.context.screen.areas:
+        if area.type == 'VIEW_3D':
+            region_3d = area.spaces.active.region_3d
+            view_matrix = region_3d.view_matrix
+            view_direction = view_matrix.to_3x3().inverted() @ mathutils.Vector((0.0, 0.0, -1.0))
+            return view_direction
+    return None
+
+
 class PointCut(bpy.types.Operator):  # 这里切割外型
     bl_idname = "object.pointcut"
     bl_label = "3D Model"
@@ -1553,17 +1587,23 @@ class TEST_OT_addcurve(bpy.types.Operator):
     __depth = None
 
     def excute(self, context, event):
+        global add_curve_name
+        global last_co
+        global idx_list
         mujudict = MuJudict().get_dic_name()
         op_cls = TEST_OT_addcurve
         name = bpy.context.scene.leftWindowObj
         if co_on_object(mujudict, context, event) == -1:  # 双击位置不在曲线上
+            # 框架式耳膜挖洞
             if bpy.context.scene.neiBianJiXian and bpy.context.scene.muJuTypeEnum == 'OP4':
                 if cal_co(name, context, event) != -1:  # 双击位置在耳模上
                     co = cal_co(name, context, event)
-                    if bpy.context.mode == 'OBJECT':
+                    last_co = co
+                    idx_list = [0]
+                    if bpy.data.objects.get(add_curve_name) == None:
                         # 创建一个新的曲线对象
-                        # todo: 切换时modal的名字还未适配
                         new_curve_name = MuJudict().update_dic()
+                        add_curve_name = new_curve_name
                         new_curve_data = bpy.data.curves.new(
                             name=new_curve_name, type='CURVE')
                         new_curve_obj = bpy.data.objects.new(
@@ -1587,26 +1627,17 @@ class TEST_OT_addcurve(bpy.types.Operator):
 
                         new_curve_data.splines[0].points[0].co[0:3] = co
                         new_curve_data.splines[0].points[0].co[3] = 1
-                        # new_curve_data.splines[0].points.add(count = 1)
-                        # new_curve_data.splines[0].points[1].co[0:3] = co
-                        # new_curve_data.splines[0].points[1].co[3] = 1
 
-                        # 开启吸附
-                        bpy.context.scene.tool_settings.use_snap = True
-                        bpy.context.scene.tool_settings.snap_elements = {'FACE'}
-                        bpy.context.scene.tool_settings.snap_target = 'CLOSEST'
-                        bpy.context.scene.tool_settings.use_snap_align_rotation = True
-                        bpy.context.scene.tool_settings.use_snap_backface_culling = True
-                        bpy.context.view_layer.objects.active = new_curve_obj
-                        bpy.ops.object.mode_set(mode='EDIT')
-                        bpy.ops.curve.select_all(action='DESELECT')
-                        new_curve_data.splines[0].points[0].select = True
-                        bpy.ops.wm.tool_set_by_id(name="builtin.extrude_cursor")
+                        start_curve(0)
 
-                    elif bpy.context.mode == 'EDIT_CURVE':
-                        curve_obj = bpy.context.active_object
+                    elif cal_co(add_curve_name, context, event) != -1:
+                        curve_obj = bpy.data.objects[add_curve_name]
                         curve_obj.data.splines[0].use_cyclic_u = True
                         idx = len(curve_obj.data.splines[0].points) - 1
+                        bpy.ops.object.select_all(action='DESELECT')
+                        bpy.context.view_layer.objects.active = curve_obj
+                        curve_obj.select_set(True)
+                        bpy.ops.object.mode_set(mode='EDIT')
                         bpy.ops.curve.select_all(action='DESELECT')
                         curve_obj.data.splines[0].points[idx].select = True
                         bpy.ops.curve.delete(type='VERT')
@@ -1622,14 +1653,17 @@ class TEST_OT_addcurve(bpy.types.Operator):
                         local_mesh_name = name + 'mesh' + local_curve_name1
                         print("添加曲线后名称:", local_mesh_name)
                         update_cut(local_curve_name, local_mesh_name, 0.18)
-                        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                        bpy.ops.wm.tool_set_by_id(name="my_tool.addcurve3")
 
         elif co_on_object(mujudict, context, event) == 0:  # 重置后没有曲线
             if cal_co(name, context, event) != -1:  # 双击位置在耳模上
                 co = cal_co(name, context, event)
-                if bpy.context.mode == 'OBJECT':
+                last_co = co
+                idx_list = [0]
+                if bpy.data.objects.get(add_curve_name) == None:
                     # 创建一个新的曲线对象
                     new_curve_name = name + 'point'
+                    add_curve_name = new_curve_name
                     new_curve_data = bpy.data.curves.new(
                         name=new_curve_name, type='CURVE')
                     new_curve_obj = bpy.data.objects.new(
@@ -1653,26 +1687,17 @@ class TEST_OT_addcurve(bpy.types.Operator):
 
                     new_curve_data.splines[0].points[0].co[0:3] = co
                     new_curve_data.splines[0].points[0].co[3] = 1
-                    # new_curve_data.splines[0].points.add(count = 1)
-                    # new_curve_data.splines[0].points[1].co[0:3] = co
-                    # new_curve_data.splines[0].points[1].co[3] = 1
 
-                    # 开启吸附
-                    bpy.context.scene.tool_settings.use_snap = True
-                    bpy.context.scene.tool_settings.snap_elements = {'FACE'}
-                    bpy.context.scene.tool_settings.snap_target = 'CLOSEST'
-                    bpy.context.scene.tool_settings.use_snap_align_rotation = True
-                    bpy.context.scene.tool_settings.use_snap_backface_culling = True
-                    bpy.context.view_layer.objects.active = new_curve_obj
-                    bpy.ops.object.mode_set(mode='EDIT')
-                    bpy.ops.curve.select_all(action='DESELECT')
-                    new_curve_data.splines[0].points[0].select = True
-                    bpy.ops.wm.tool_set_by_id(name="builtin.extrude_cursor")
+                    start_curve(0)
 
-                elif bpy.context.mode == 'EDIT_CURVE':
-                    curve_obj = bpy.context.active_object
+                elif cal_co(add_curve_name, context, event) != -1:
+                    curve_obj = bpy.data.objects[add_curve_name]
                     curve_obj.data.splines[0].use_cyclic_u = True
                     idx = len(curve_obj.data.splines[0].points) - 1
+                    bpy.ops.object.select_all(action='DESELECT')
+                    bpy.context.view_layer.objects.active = curve_obj
+                    curve_obj.select_set(True)
+                    bpy.ops.object.mode_set(mode='EDIT')
                     bpy.ops.curve.select_all(action='DESELECT')
                     curve_obj.data.splines[0].points[idx].select = True
                     bpy.ops.curve.delete(type='VERT')
@@ -1682,13 +1707,15 @@ class TEST_OT_addcurve(bpy.types.Operator):
                         curve_obj.name = name + 'BottomRingBorderR'
                         mesh_name = name + 'meshBottomRingBorderR'
                     update_cut(curve_obj.name, mesh_name, 0.18)
-                    bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                    bpy.ops.wm.tool_set_by_id(name="my_tool.addcurve3")
 
         else:
-            if bpy.context.mode == 'OBJECT':  # 如果处于物体模式下，蓝线双击开始绘制
+            if bpy.data.objects.get(name + 'point') == None:  # 双击在原有曲线上
                 if bpy.context.scene.muJuTypeEnum == 'OP1':
                     set_finish(True)
                 co, op_cls.__mesh_name, curve_list = co_on_object(mujudict, context, event)
+                last_co = co
+                idx_list = [0]
                 op_cls.__curve_name = curve_list[0]
                 op_cls.__depth = curve_list[1]
                 op_cls.__index_initial = select_nearest_point(op_cls.__curve_name, co)
@@ -1721,6 +1748,7 @@ class TEST_OT_addcurve(bpy.types.Operator):
                     name=name + 'point', type='CURVE')
                 new_curve_obj = bpy.data.objects.new(
                     name=name + 'point', object_data=new_curve_data)
+                add_curve_name = new_curve_obj.name
                 new_curve_data.bevel_depth = op_cls.__depth  # 管道孔径
                 new_curve_data.dimensions = '3D'
                 bpy.context.collection.objects.link(new_curve_obj)
@@ -1736,37 +1764,23 @@ class TEST_OT_addcurve(bpy.types.Operator):
                 new_curve_data.splines[0].points[0].co[0:3] = co
                 new_curve_data.splines[0].points[0].co[3] = 1
 
-                bpy.context.view_layer.objects.active = new_curve_obj
-                bpy.ops.object.select_all(action='DESELECT')
-                new_curve_obj.select_set(state=True)
-                bpy.ops.object.mode_set(mode='EDIT')  # 进入编辑模式进行操作
-                bpy.ops.curve.select_all(action='DESELECT')
-                new_curve_data.splines[0].points[0].select = True
-                # 开启吸附
-                bpy.context.scene.tool_settings.use_snap = True
-                bpy.context.scene.tool_settings.snap_elements = {'FACE'}
-                bpy.context.scene.tool_settings.snap_target = 'CLOSEST'
-                bpy.context.scene.tool_settings.use_snap_align_rotation = True
-                bpy.context.scene.tool_settings.use_snap_backface_culling = True
-                bpy.ops.wm.tool_set_by_id(name="builtin.extrude_cursor")
+                start_curve(0)
 
-            elif bpy.context.mode == 'EDIT_CURVE':  # 如果处于编辑模式下，蓝线双击确认完成
+            else:    # 存在曲线，双击确认完成
                 # print("起始位置的下标是", op_cls.__index_initial)
                 co = cal_co(op_cls.__mesh_name, context, event)
+                if co == -1:
+                    return
                 op_cls.__index_finish = select_nearest_point(op_cls.__curve_name, co)
                 # print("结束的下标是", op_cls.__index_finish)
-                bpy.ops.object.mode_set(mode='OBJECT')  # 返回对象模式
-                bpy.context.scene.tool_settings.use_snap = False  # 取消吸附
                 join_object(op_cls.__curve_name, op_cls.__mesh_name, op_cls.__depth, op_cls.__index_initial,
                             op_cls.__index_finish)  # 合并曲线
-                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                bpy.ops.wm.tool_set_by_id(name="my_tool.addcurve3")
                 if bpy.context.scene.muJuTypeEnum == 'OP1':
                     set_finish(False)
-            else:
-                pass
+
 
     def invoke(self, context, event):
-        op_cls = TEST_OT_addcurve
         newColor('blue', 0, 0, 1, 1, 1)
         self.excute(context, event)
         return {'FINISHED'}
@@ -1777,19 +1791,15 @@ class TEST_OT_qiehuan(bpy.types.Operator):
     bl_label = "pointqiehuan"
     bl_description = "鼠标行为切换"
 
-    __last_co = None
-    __now_co = None
-    __length = 0
     __flag = False
-    __idx_list = None
 
     def invoke(self, context, event):  # 初始化
         op_cls = TEST_OT_qiehuan
-        print('pointqiehuan invoke')
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        if context.scene.var != 19:
+            print('pointqiehuan invoke')
+            context.window_manager.modal_handler_add(self)
         bpy.context.scene.var = 19
-        # todo:防止重复添加
-        context.window_manager.modal_handler_add(self)
 
         # 添加鼠标监听
         global point_mouse_listener
@@ -1800,11 +1810,7 @@ class TEST_OT_qiehuan(bpy.types.Operator):
             # 启动监听器
             point_mouse_listener.start()
 
-        op_cls.__last_co = None
-        op_cls.__now_co = None
-        op_cls.__length = 1
         op_cls.__flag = False
-        op_cls.__idx_list = [0]
 
         return {'RUNNING_MODAL'}
 
@@ -1824,115 +1830,144 @@ class TEST_OT_qiehuan(bpy.types.Operator):
             return {'FINISHED'}
 
         if cal_co(name + 'MouldReset', context, event) != -1:
-            new_curve_obj = bpy.data.objects.get(name + 'point')
-            if op_cls.__last_co == None:
-                if new_curve_obj:
-                    op_cls.__last_co = Vector(new_curve_obj.data.splines[0].points[0].co[0:3])
+            global add_curve_name
 
-            if is_changed(context, event) and not (left_mouse_press or right_mouse_press or middle_mouse_press):
-                # 判断是否存在新增的曲线
-                if not new_curve_obj:
+            if is_changed(context, event):
+                if not (left_mouse_press or right_mouse_press or middle_mouse_press):
                     bpy.ops.wm.tool_set_by_id(name="my_tool.addcurve3")
+                    op_cls.__flag = False
+
                 else:
-                    bpy.ops.object.select_all(action='DESELECT')
-                    bpy.context.view_layer.objects.active = new_curve_obj
-                    new_curve_obj.select_set(True)
-                    bpy.ops.object.mode_set(mode='EDIT')
-                    bpy.ops.wm.tool_set_by_id(name="builtin.extrude_cursor")
-
-            elif bpy.context.mode == 'OBJECT':
-                if not new_curve_obj:
-                    bpy.ops.wm.tool_set_by_id(name="my_tool.addcurve3")
-                else:
-                    bpy.ops.object.select_all(action='DESELECT')
-                    bpy.context.view_layer.objects.active = new_curve_obj
-                    new_curve_obj.select_set(True)
-                    bpy.ops.object.mode_set(mode='EDIT')
-                    bpy.ops.wm.tool_set_by_id(name="builtin.extrude_cursor")
-
-            elif bpy.context.mode == 'EDIT_CURVE' and right_mouse_press:
-                if new_curve_obj:
-                    number = len(op_cls.__idx_list)
-                    if number > 1:
-                        if bpy.context.mode == 'OBJECT':
-                            bpy.ops.object.select_all(action='DESELECT')
-                            bpy.context.view_layer.objects.active = new_curve_obj
-                            new_curve_obj.select_set(True)
-                            bpy.ops.object.mode_set(mode='EDIT')
-                        bpy.ops.curve.select_all(action='DESELECT')
-                        last_point_idx = op_cls.__idx_list[-1]
-                        second_last_point_idx = op_cls.__idx_list[-2]
-                        for i in (second_last_point_idx + 1, last_point_idx):
-                            new_curve_obj.data.splines[0].points[i].select = True
-                        op_cls.__idx_list = op_cls.__idx_list[:-1]
-                        bpy.ops.curve.delete(type='VERT')
-                        bpy.ops.curve.select_all(action='DESELECT')
-                        new_curve_obj.data.splines[0].points[second_last_point_idx].select = True
-                    else:
-                        bpy.ops.object.mode_set(mode='OBJECT')
-                        bpy.data.objects.remove(new_curve_obj, do_unlink=True)
-                        bpy.ops.object.select_all(action='DESELECT')
-                        bpy.context.view_layer.objects.active = bpy.data.objects[name]
-                        bpy.data.objects[name].select_set(True)
-                        bpy.ops.wm.tool_set_by_id(name="my_tool.addcurve3")
-
-            elif bpy.context.mode == 'EDIT_CURVE' and left_mouse_press:
-                if not op_cls.__flag:
-                    op_cls.__now_co = cal_co(name + 'MouldReset', context, event)
                     op_cls.__flag = True
 
-            elif bpy.context.mode == 'EDIT_CURVE' and not left_mouse_press:
-                if op_cls.__flag:
-                    curve_length = len(new_curve_obj.data.splines[0].points)
-                    # 计算两点之间的距离
-                    distance = (op_cls.__last_co - op_cls.__now_co).length
-                    if distance > 5 and curve_length > op_cls.__length:
-                        # print('Subdivide')
-                        idx = curve_length - 1
-                        bpy.ops.curve.select_all(action='DESELECT')
-                        new_curve_obj.data.splines[0].points[idx].select = True
-                        new_curve_obj.data.splines[0].points[idx - 1].select = True
-                        number = int(distance / 5)
-                        bpy.ops.curve.subdivide(number_cuts=number)
-
-                        new_length = len(new_curve_obj.data.splines[0].points)
-                        target_object = bpy.data.objects[name + "MouldReset"]
-                        for i in range(new_length - number - 1, new_length - 1):
-                            point = new_curve_obj.data.splines[0].points[i]
-                            # 计算顶点在目标物体面上的 closest point
-                            _, closest_co, _, _ = target_object.closest_point_on_mesh(
-                                Vector(point.co[0:3]))
-                            point.co[0:3] = closest_co
-                        bpy.ops.curve.select_all(action='DESELECT')
-                        new_curve_obj.data.splines[0].points[new_length - 1].select = True
-                        op_cls.__last_co = op_cls.__now_co
-                        op_cls.__length = new_length
-                        op_cls.__flag = False
-                        op_cls.__idx_list.append(new_length - 1)
-
-                    elif distance <= 5 and curve_length > op_cls.__length:
-                        # print('Not Subdivide')
-                        op_cls.__last_co = op_cls.__now_co
-                        op_cls.__length = curve_length
-                        op_cls.__flag = False
-                        op_cls.__idx_list.append(curve_length - 1)
+            if op_cls.__flag == True:
+                op_cls.__flag = False
+                bpy.ops.wm.tool_set_by_id(name="my_tool.addcurve3")
 
         else:
-            if is_changed(context, event) and not left_mouse_press:
-                bpy.ops.object.mode_set(mode='OBJECT')
-                bpy.ops.object.select_all(action='DESELECT')
-                bpy.context.view_layer.objects.active = bpy.data.objects[name]
-                bpy.data.objects[name].select_set(True)
-                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+            if is_changed(context, event):
+                if not (left_mouse_press or right_mouse_press or middle_mouse_press):
+                    bpy.ops.object.select_all(action='DESELECT')
+                    bpy.context.view_layer.objects.active = bpy.data.objects[name]
+                    bpy.data.objects[name].select_set(True)
+                    bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
-            elif bpy.context.mode == 'EDIT_CURVE' and (left_mouse_press or right_mouse_press or middle_mouse_press):
-                bpy.ops.object.mode_set(mode='OBJECT')
+                else:
+                    op_cls.__flag = True
+
+            if op_cls.__flag == True:
+                op_cls.__flag = False
                 bpy.ops.object.select_all(action='DESELECT')
                 bpy.context.view_layer.objects.active = bpy.data.objects[name]
                 bpy.data.objects[name].select_set(True)
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
         return {'PASS_THROUGH'}
+
+
+class TEST_OT_addpoint(bpy.types.Operator):
+    bl_idname = "object.addpoint"
+    bl_label = "addpoint"
+    bl_description = "单击左键添加控制点"
+
+    def invoke(self, context, event):
+        self.excute(context, event)
+        return {'FINISHED'}
+
+    def excute(self, context, event):
+        global add_curve_name
+        global last_co
+        global idx_list
+        name = context.scene.leftWindowObj + 'MouldReset'
+        if add_curve_name == None or bpy.data.objects.get(add_curve_name) == None:
+            return
+        co = cal_co(name, context, event)
+        if co != 1 and bpy.data.objects.get(add_curve_name) != None:
+            curve_obj = bpy.data.objects.get(add_curve_name)
+            if len(idx_list) == 1:
+                bpy.ops.object.select_all(action='DESELECT')
+                bpy.context.view_layer.objects.active = curve_obj
+                curve_obj.select_set(True)
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.curve.select_all(action='DESELECT')
+                curve_obj.data.splines[0].points[-1].select = True
+                bpy.ops.curve.delete(type='VERT')
+                bpy.ops.object.mode_set(mode='OBJECT')
+                curve_obj.data.materials.clear()
+                curve_obj.data.materials.append(bpy.data.materials['blue'])
+
+            # 先在点加位置添加一个新点
+            spline = curve_obj.data.splines[0]
+            spline.points.add(1)
+            spline.points[-1].co = (co[0], co[1], co[2], 1)
+
+            distance = (co - last_co).length
+            if distance > 1:   # 点击之间的距离大于1就细分
+                bpy.ops.object.select_all(action='DESELECT')
+                bpy.context.view_layer.objects.active = curve_obj
+                curve_obj.select_set(True)
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.curve.select_all(action='DESELECT')
+                curve_obj.data.splines[0].points[-1].select = True
+                curve_obj.data.splines[0].points[-2].select = True
+                number = int(distance)   # 细分次数
+                bpy.ops.curve.subdivide(number_cuts=number)
+
+                # 将新细分出的点吸附到物体表面上
+                new_length = len(curve_obj.data.splines[0].points)
+                target_object = bpy.data.objects[context.scene.leftWindowObj + "MouldReset"]
+                for i in range(new_length - number - 1, new_length - 1):
+                    point = curve_obj.data.splines[0].points[i]
+                    # 计算顶点在目标物体面上的 closest point
+                    _, closest_co, _, _ = target_object.closest_point_on_mesh(
+                        Vector(point.co[0:3]))
+                    point.co[0:3] = closest_co
+                idx_list.append(new_length - 1)
+                last_co = co
+                bpy.ops.object.mode_set(mode='OBJECT')
+
+
+class TEST_OT_deletepoint(bpy.types.Operator):
+    bl_idname = "object.deletepoint"
+    bl_label = "deletepoint"
+    bl_description = "单击右键删除控制点"
+
+    def invoke(self, context, event):
+        self.excute(context, event)
+        return {'FINISHED'}
+
+    def excute(self, context, event):
+        global add_curve_name
+        global last_co
+        global idx_list
+        name = context.scene.leftWindowObj + 'MouldReset'
+        co = cal_co(name, context, event)
+        if co != 1 and bpy.data.objects.get(add_curve_name) != None:
+            list_len = len(idx_list)
+            curve_obj = bpy.data.objects.get(add_curve_name)
+            # 删除最后一个控制点
+            if list_len > 1:
+                bpy.ops.object.select_all(action='DESELECT')
+                bpy.context.view_layer.objects.active = curve_obj
+                curve_obj.select_set(True)
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.curve.select_all(action='DESELECT')
+                last_point_idx = idx_list[-1]
+                second_last_point_idx = idx_list[-2]
+                for i in range(second_last_point_idx + 1, last_point_idx + 1, 1):
+                    curve_obj.data.splines[0].points[i].select = True
+                bpy.ops.curve.delete(type='VERT')
+                bpy.ops.object.mode_set(mode='OBJECT')
+                idx_list = idx_list[:-1]
+                if len(idx_list) == 1:
+                    start_curve(1)
+
+            elif list_len == 1:
+                bpy.ops.object.select_all(action='DESELECT')
+                bpy.context.view_layer.objects.active = bpy.data.objects[add_curve_name]
+                bpy.data.objects[add_curve_name].select_set(True)
+                bpy.data.objects.remove(bpy.data.objects[add_curve_name], do_unlink=True)
+                bpy.ops.wm.tool_set_by_id(name="my_tool.addcurve3")
 
 
 class TEST_OT_dragcurve(bpy.types.Operator):
@@ -1965,11 +2000,8 @@ class TEST_OT_dragcurve(bpy.types.Operator):
     __index = None
 
     def invoke(self, context, event):  # 初始化
-        bpy.context.scene.var = 20
-        print('dragcurve invoke')
         newColor('green', 0, 1, 0, 1, 1)
         newColor('blue', 0, 0, 1, 1, 1)
-        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")  # 切换到公共鼠标行为
         op_cls = TEST_OT_dragcurve
         op_cls.__left_mouse_down = False
         op_cls.__right_mouse_down = False
@@ -1995,7 +2027,11 @@ class TEST_OT_dragcurve(bpy.types.Operator):
         op_cls.__curve_length = None
         op_cls.__index = None
 
-        context.window_manager.modal_handler_add(self)
+        if bpy.context.scene.var != 20:
+            context.window_manager.modal_handler_add(self)
+            print('dragcurve invoke')
+        bpy.context.scene.var = 20
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")  # 切换到公共鼠标行为
 
         return {'RUNNING_MODAL'}
 
@@ -2160,11 +2196,8 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
     __is_changed = None
 
     def invoke(self, context, event):  # 初始化
-        bpy.context.scene.var = 21
-        print('smoothcurve invoke')
         newColor('green', 0, 1, 0, 1, 1)
         newColor('blue', 0, 0, 1, 1, 1)
-        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")  # 切换到公共鼠标行为
         op_cls = TEST_OT_smoothcurve
         op_cls.__left_mouse_down = False
         op_cls.__right_mouse_down = False
@@ -2192,7 +2225,11 @@ class TEST_OT_smoothcurve(bpy.types.Operator):
         op_cls.__index = None
         op_cls.__is_changed = False
 
-        context.window_manager.modal_handler_add(self)
+        if bpy.context.scene.var != 21:
+            context.window_manager.modal_handler_add(self)
+            print('smoothcurve invoke')
+        bpy.context.scene.var = 21
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")  # 切换到公共鼠标行为
 
         return {'RUNNING_MODAL'}
 
@@ -2491,10 +2528,8 @@ class addcurve_MyTool3(bpy.types.WorkSpaceTool):
     bl_widget = None
     bl_keymap = (
         ("object.addcurve", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
-        ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
-        ("view3d.view_roll", {"type": 'LEFTMOUSE', "value": 'PRESS', "ctrl": True}, None)
+        ("object.addpoint", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("object.deletepoint", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
     )
 
     def draw_settings(context, layout, tool):
@@ -2758,6 +2793,8 @@ _classes = [
     PointCut,
     PointFill,
     PrintMoban,
+    TEST_OT_addpoint,
+    TEST_OT_deletepoint
     # Point_Button
 ]
 

@@ -1,12 +1,13 @@
-from asyncio import Handle
-from venv import create
 import bpy
-from bpy.types import WorkSpaceTool
-from bpy_extras import view3d_utils
-import mathutils
 import bmesh
 import re
+import mathutils
 from .tool import *
+from bpy.types import WorkSpaceTool
+from bpy_extras import view3d_utils
+from asyncio import Handle
+from venv import create
+
 
 prev_on_object = False    # 判断鼠标在模型上与否的状态是否改变
 prev_on_objectL = False
@@ -17,27 +18,25 @@ prev_on_sprueL = False
 prev_on_sphere = False    #判断鼠标是否在附件球体上
 prev_on_sphereL = False
 
-is_add_sprue = False      # 是否添加过支撑,只能添加一个支撑
-is_add_sprueL = False
 is_on_rotate = False      #是否处于旋转的鼠标状态,用于 附件三维旋转鼠标行为和附件平面旋转拖动鼠标行为之间的切换
 is_on_rotateL = False
 
-prev_location_x = 0       # 记录通气管位置
-prev_location_y = 0
-prev_location_z = 0
-prev_rotation_x = 0
-prev_rotation_y = 0
-prev_rotation_z = 0
-prev_location_xL = 0
-prev_location_yL = 0
-prev_location_zL = 0
-prev_rotation_xL = 0
-prev_rotation_yL = 0
-prev_rotation_zL = 0
+sprue_info_save = []    #保存已经提交过的sprue信息,用于模块切换时的初始化
+sprue_info_saveL = []
 
 
-sprue_offset = 0  # 支撑偏移量
-sprue_offsetL = 0
+def newColor(id, r, g, b, is_transparency, transparency_degree):
+    mat = newMaterial(id)
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    output = nodes.new(type='ShaderNodeOutputMaterial')
+    shader = nodes.new(type='ShaderNodeBsdfPrincipled')
+    shader.inputs[0].default_value = (r, g, b, 1)
+    links.new(shader.outputs[0], output.inputs[0])
+    if is_transparency:
+        mat.blend_method = "BLEND"
+        shader.inputs[21].default_value = transparency_degree
+    return mat
 
 
 # 判断鼠标是否在物体上,排气孔
@@ -489,9 +488,10 @@ def sprue_fit_rotate(normal,location):
         plane_obj.rotation_euler[2] = empty_rotation_z
 
 def initialSprueTransparency():
-    mat = newShader("SprueTransparency")  # 创建材质
-    mat.blend_method = "BLEND"
-    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.01
+    newColor("SprueTransparency", 1, 0.319, 0.133, 1, 0.01)  # 创建材质
+    # mat = newShader("SprueTransparency")  # 创建材质
+    # mat.blend_method = "BLEND"
+    # mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.01
 
 
 def frontToSprue():
@@ -531,7 +531,7 @@ def frontToSprue():
             moveToLeft(duplicate_obj1)
         duplicate_obj1.hide_set(True)
 
-        sprueInitial()
+        initial()
 
 
 
@@ -539,7 +539,9 @@ def frontFromSprue():
     name = bpy.context.scene.leftWindowObj
     casting_compare_obj = bpy.data.objects.get(name + "CastingCompare")
     if (casting_compare_obj != None):
-        sprueSaveInfo()
+        # 若模型上存在未提交的排气孔,则记录信息并提交该字体
+        sprueSubmit()
+
 
         name = bpy.context.scene.leftWindowObj
         sprue_inner_obj = bpy.data.objects.get(name + "CylinderInner")
@@ -548,7 +550,6 @@ def frontFromSprue():
         sprue_inner_offset_compare_obj = bpy.data.objects.get(name + "CylinderInnerOffsetCompare")
         sprue_outer_offset_compare_obj = bpy.data.objects.get(name + "CylinderOuterOffsetCompare")
         sprue_inside_offset_compare_obj = bpy.data.objects.get(name + "CylinderInsideOffsetCompare")
-        sprue_compare_obj = bpy.data.objects.get(name + "SprueCompare")
         hard_support_compare_obj = bpy.data.objects.get(name + "ConeCompare")
         soft_support_compare_obj = bpy.data.objects.get(name + "SoftSupportCompare")
         planename = name + "Plane"
@@ -568,8 +569,6 @@ def frontFromSprue():
             bpy.data.objects.remove(sprue_outer_offset_compare_obj, do_unlink=True)
         if (sprue_inside_offset_compare_obj != None):
             bpy.data.objects.remove(sprue_inside_offset_compare_obj, do_unlink=True)
-        if (sprue_compare_obj != None):
-            bpy.data.objects.remove(sprue_compare_obj, do_unlink=True)
         if (hard_support_compare_obj != None):
             bpy.data.objects.remove(hard_support_compare_obj, do_unlink=True)
         if (soft_support_compare_obj != None):
@@ -578,6 +577,16 @@ def frontFromSprue():
             bpy.data.objects.remove(plane_obj, do_unlink=True)
         if (sphere_obj != None):
             bpy.data.objects.remove(sphere_obj, do_unlink=True)
+        # 删除排气孔对比物                                                                     #TODO 之前的各个模块都要修改为删除多个排气孔对比物
+        for obj in bpy.data.objects:
+            if (name == "右耳"):
+                pattern = r'右耳SprueCompare'
+                if re.match(pattern, obj.name):
+                    bpy.data.objects.remove(obj, do_unlink=True)
+            elif (name == "左耳"):
+                pattern = r'左耳SprueCompare'
+                if re.match(pattern, obj.name):
+                    bpy.data.objects.remove(obj, do_unlink=True)
 
         name = bpy.context.scene.leftWindowObj
         obj = bpy.data.objects[name]
@@ -632,9 +641,15 @@ def frontFromSprue():
 def backToSprue():
     # 删除可能存在的排气孔对比物
     name = bpy.context.scene.leftWindowObj
-    sprue_compare_obj = bpy.data.objects.get(name + "SprueCompare")
-    if (sprue_compare_obj != None):
-        bpy.data.objects.remove(sprue_compare_obj, do_unlink=True)
+    for obj in bpy.data.objects:
+        if (name == "右耳"):
+            pattern = r'右耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
+        elif (name == "左耳"):
+            pattern = r'左耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
     exist_SprueReset = False
     all_objs = bpy.data.objects
     name = bpy.context.scene.leftWindowObj
@@ -675,7 +690,7 @@ def backToSprue():
             moveToLeft(duplicate_obj1)
         duplicate_obj1.select_set(False)
 
-        sprueInitial()
+        initial()
     else:
         name = bpy.context.scene.leftWindowObj
         obj = bpy.data.objects[name]
@@ -812,11 +827,12 @@ def backToSprue():
             moveToLeft(duplicate_obj1)
         duplicate_obj1.select_set(False)
 
-        sprueInitial()
+        initial()
 
 
 def backFromSprue():
-    sprueSaveInfo()
+
+    # 提交附件并保存附件信息
     sprueSubmit()
 
     all_objs = bpy.data.objects
@@ -853,9 +869,9 @@ def backFromSprue():
 
 def createSprue():
     #创建半径不同的两个圆柱,使用布尔修改器用小圆柱切割大圆柱创建排气孔
-    bpy.ops.mesh.primitive_cylinder_add(vertices=300, radius=1, depth=3.6, enter_editmode=False, align='WORLD',
+    bpy.ops.mesh.primitive_cylinder_add(vertices=80, radius=1, depth=3.6, enter_editmode=False, align='WORLD',
                                         location=(0, 0, 1.8), scale=(1, 1, 1))
-    bpy.ops.mesh.primitive_cylinder_add(vertices=300, radius=0.6, depth=3.8, enter_editmode=False, align='WORLD',
+    bpy.ops.mesh.primitive_cylinder_add(vertices=80, radius=0.6, depth=3.8, enter_editmode=False, align='WORLD',
                                         location=(0, 0, 1.8), scale=(1, 1, 1))
     # 导入排气孔的父物体平面
     bpy.ops.mesh.primitive_plane_add(enter_editmode=False, align='WORLD', scale=(4, 4, 1))
@@ -920,8 +936,7 @@ def createSprue():
     sphere_obj.name = name + "SprueSphere"
 
     #为内外壁和内芯添加红色材质
-    red_material = bpy.data.materials.new(name="Red")
-    red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+    red_material = newColor("Red", 1, 0, 0, 0, 1)
     bpy.context.view_layer.objects.active = obj
     obj.data.materials.clear()
     obj.data.materials.append(red_material)
@@ -1008,110 +1023,116 @@ def createSprue():
         moveToLeft(sphere_obj)
 
 
-
-
-
-def sprueSaveInfo():
-    global prev_location_x
-    global prev_location_y
-    global prev_location_z
-    global prev_rotation_x
-    global prev_rotation_y
-    global prev_rotation_z
-    global sprue_offset
-    global prev_location_xL
-    global prev_location_yL
-    global prev_location_zL
-    global prev_rotation_xL
-    global prev_rotation_yL
-    global prev_rotation_zL
-    global sprue_offsetL
+def saveInfo():
+    '''
+    #在sprue提交前会保存sprue的相关信息
+    '''
+    global sprue_info_save
+    global sprue_info_saveL
 
     name = bpy.context.scene.leftWindowObj
     planename = name + "Plane"
     plane_obj = bpy.data.objects.get(planename)
-    # 记录附件位置信息
+    offset = None
     if name == '右耳':
-        if (plane_obj != None):
-            prev_location_x = plane_obj.location[0]
-            prev_location_y = plane_obj.location[1]
-            prev_location_z = plane_obj.location[2]
-            prev_rotation_x = plane_obj.rotation_euler[0]
-            prev_rotation_y = plane_obj.rotation_euler[1]
-            prev_rotation_z = plane_obj.rotation_euler[2]
-        sprue_offset = bpy.context.scene.paiQiKongOffset
+        offset = bpy.context.scene.paiQiKongOffset
     elif name == '左耳':
-        if (plane_obj != None):
-            prev_location_xL = plane_obj.location[0]
-            prev_location_yL = plane_obj.location[1]
-            prev_location_zL = plane_obj.location[2]
-            prev_rotation_xL = plane_obj.rotation_euler[0]
-            prev_rotation_yL = plane_obj.rotation_euler[1]
-            prev_rotation_zL = plane_obj.rotation_euler[2]
-        sprue_offsetL = bpy.context.scene.paiQiKongOffsetL
+        offset = bpy.context.scene.paiQiKongOffsetL
+    l_x = plane_obj.location[0]
+    l_y = plane_obj.location[1]
+    l_z = plane_obj.location[2]
+    r_x = plane_obj.rotation_euler[0]
+    r_y = plane_obj.rotation_euler[1]
+    r_z = plane_obj.rotation_euler[2]
 
+    sprue_info = SprueInfoSave(offset,l_x,l_y,l_z,r_x,r_y,r_z)
+    if name == '右耳':
+        sprue_info_save.append(sprue_info)
+    elif name == '左耳':
+        sprue_info_saveL.append(sprue_info)
 
-
-def sprueInitial():
-    global prev_location_x
-    global prev_location_y
-    global prev_location_z
-    global prev_rotation_x
-    global prev_rotation_y
-    global prev_rotation_z
-    global sprue_offset
-    global is_add_sprue
-    global is_on_rotate
-    global prev_location_xL
-    global prev_location_yL
-    global prev_location_zL
-    global prev_rotation_xL
-    global prev_rotation_yL
-    global prev_rotation_zL
-    global sprue_offsetL
-    global is_add_sprueL
-    global is_on_rotateL
-
+def initial():
+    ''''
+    切换到排气孔模块的时候,根据之前保存的字体信息进行初始化,恢复之前添加的排气孔状态
+    '''
+    global sprue_info_save
+    global sprue_info_saveL
     name = bpy.context.scene.leftWindowObj
+    # 对于数组中保存的sprue信息,前n-1个先添加后提交,最后一个添加不提交
     if name == '右耳':
-        if (is_add_sprue == True):
-            addSprue()
-            # 将Plane激活并选中
-            name = bpy.context.scene.leftWindowObj
+        if (len(sprue_info_save) > 0):
+            for i in range(len(sprue_info_save) - 1):
+                sprueInfo = sprue_info_save[i]
+                offset = sprueInfo.offset
+                l_x = sprueInfo.l_x
+                l_y = sprueInfo.l_y
+                l_z = sprueInfo.l_z
+                r_x = sprueInfo.r_x
+                r_y = sprueInfo.r_y
+                r_z = sprueInfo.r_z
+                # 添加Sprue并提交
+                sprueInitial(offset, l_x, l_y, l_z, r_x, r_y, r_z)
+            sprueInfo = sprue_info_save[len(sprue_info_save) - 1]
+            offset = sprueInfo.offset
+            l_x = sprueInfo.l_x
+            l_y = sprueInfo.l_y
+            l_z = sprueInfo.l_z
+            r_x = sprueInfo.r_x
+            r_y = sprueInfo.r_y
+            r_z = sprueInfo.r_z
+            # 添加一个sprue,激活鼠标行为
+            bpy.ops.object.sprueadd('INVOKE_DEFAULT')
+            # 新添加的最后一个排气孔并未提交,多余的信息需要删除
+            sprue_info_save.pop()
+            # 获取添加后的Sprue,并根据参数设置调整offset
             planename = name + "Plane"
             plane_obj = bpy.data.objects.get(planename)
-            plane_obj.select_set(True)
-            bpy.context.view_layer.objects.active = plane_obj
-            plane_obj.location[0] = prev_location_x
-            plane_obj.location[1] = prev_location_y
-            plane_obj.location[2] = prev_location_z
-            plane_obj.rotation_euler[0] = prev_rotation_x
-            plane_obj.rotation_euler[1] = prev_rotation_y
-            plane_obj.rotation_euler[2] = prev_rotation_z
-            bpy.context.scene.paiQiKongOffset = sprue_offset
-            bpy.ops.object.sprueadd('INVOKE_DEFAULT')
+            bpy.context.scene.paiQiKongOffset = offset
+            plane_obj.location[0] = l_x
+            plane_obj.location[1] = l_y
+            plane_obj.location[2] = l_z
+            plane_obj.rotation_euler[0] = r_x
+            plane_obj.rotation_euler[1] = r_y
+            plane_obj.rotation_euler[2] = r_z
         else:
-            bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_add")
+            bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_initial")
     elif name == '左耳':
-        if (is_add_sprueL == True):
-            addSprue()
-            # 将Plane激活并选中
-            name = bpy.context.scene.leftWindowObj
+        if (len(sprue_info_saveL) > 0):
+            for i in range(len(sprue_info_saveL) - 1):
+                sprueInfo = sprue_info_saveL[i]
+                offset = sprueInfo.offset
+                l_x = sprueInfo.l_x
+                l_y = sprueInfo.l_y
+                l_z = sprueInfo.l_z
+                r_x = sprueInfo.r_x
+                r_y = sprueInfo.r_y
+                r_z = sprueInfo.r_z
+                # 添加Sprue并提交
+                sprueInitial(offset, l_x, l_y, l_z, r_x, r_y, r_z)
+            sprueInfo = sprue_info_saveL[len(sprue_info_saveL) - 1]
+            offset = sprueInfo.offset
+            l_x = sprueInfo.l_x
+            l_y = sprueInfo.l_y
+            l_z = sprueInfo.l_z
+            r_x = sprueInfo.r_x
+            r_y = sprueInfo.r_y
+            r_z = sprueInfo.r_z
+            # 添加一个sprue,激活鼠标行为
+            bpy.ops.object.sprueadd('INVOKE_DEFAULT')
+            # 新添加的最后一个排气孔并未提交,多余的信息需要删除
+            sprue_info_saveL.pop()
+            # 获取添加后的Sprue,并根据参数设置调整offset
             planename = name + "Plane"
             plane_obj = bpy.data.objects.get(planename)
-            plane_obj.select_set(True)
-            bpy.context.view_layer.objects.active = plane_obj
-            plane_obj.location[0] = prev_location_xL
-            plane_obj.location[1] = prev_location_yL
-            plane_obj.location[2] = prev_location_zL
-            plane_obj.rotation_euler[0] = prev_rotation_xL
-            plane_obj.rotation_euler[1] = prev_rotation_yL
-            plane_obj.rotation_euler[2] = prev_rotation_zL
-            bpy.context.scene.paiQiKongOffsetL = sprue_offsetL
-            bpy.ops.object.sprueadd('INVOKE_DEFAULT')
+            bpy.context.scene.paiQiKongOffsetL = offset
+            plane_obj.location[0] = l_x
+            plane_obj.location[1] = l_y
+            plane_obj.location[2] = l_z
+            plane_obj.rotation_euler[0] = r_x
+            plane_obj.rotation_euler[1] = r_y
+            plane_obj.rotation_euler[2] = r_z
         else:
-            bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_add")
-
+            bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_initial")
 
     #将旋转中心设置为左右耳模型
     cur_obj = bpy.data.objects.get(name)
@@ -1125,6 +1146,171 @@ def sprueInitial():
     cur_obj.select_set(True)
     bpy.context.view_layer.objects.active = cur_obj
 
+
+
+def sprueInitial(offset, l_x, l_y, l_z, r_x, r_y, r_z):
+    '''
+    根据状态数组中保存的信息,生成一个排气孔
+    模块切换时,根据提交时保存的信息,添加sprue进行初始化,先根据信息添加sprue,之后再将sprue提交。与submit函数相比,提交时不必保存sprue信息。
+    '''
+
+    # 添加一个新的Sprue
+    addSprue()
+
+    name = bpy.context.scene.leftWindowObj
+    sprue_inner_obj = bpy.data.objects.get(name + "CylinderInner")
+    sprue_outer_obj = bpy.data.objects.get(name + "CylinderOuter")
+    sprue_inside_obj = bpy.data.objects.get(name + "CylinderInside")
+    sprue_inner_offset_compare_obj = bpy.data.objects.get(name + "CylinderInnerOffsetCompare")
+    sprue_outer_offset_compare_obj = bpy.data.objects.get(name + "CylinderOuterOffsetCompare")
+    sprue_inside_offset_compare_obj = bpy.data.objects.get(name + "CylinderInsideOffsetCompare")
+    planename = name + "Plane"
+    plane_obj = bpy.data.objects.get(planename)
+    spherename = name + "SprueSphere"
+    sphere_obj = bpy.data.objects.get(spherename)
+
+    obj_outer = bpy.data.objects.get(name)
+    obj_inner = bpy.data.objects.get(name + "CastingCompare")
+
+    if name == '右耳':
+        bpy.context.scene.paiQiKongOffset = offset
+    elif name == '左耳':
+        bpy.context.scene.paiQiKongOffsetL = offset
+    plane_obj.location[0] = l_x
+    plane_obj.location[1] = l_y
+    plane_obj.location[2] = l_z
+    plane_obj.rotation_euler[0] = r_x
+    plane_obj.rotation_euler[1] = r_y
+    plane_obj.rotation_euler[2] = r_z
+
+
+    # 将软耳膜支撑的内芯选中与右耳做布尔的差集,内芯插入模型的部分会和右耳合并形成一块内凹的区域,这块顶点处于选中的状态,直接将其删除在右耳上得到一个孔
+    # 将铸造法内部物体顶点取消选中
+    obj_outer.select_set(False)
+    obj_inner.select_set(True)
+    bpy.context.view_layer.objects.active = obj_inner
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    obj_inner.select_set(False)
+    # 将软耳膜支撑内芯尺寸缩小一些并将顶点选中
+    sprue_inside_obj.select_set(True)
+    bpy.context.view_layer.objects.active = sprue_inside_obj
+    sprue_inside_obj.scale[0] = 0.9
+    sprue_inside_obj.scale[1] = 0.9
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    sprue_inside_obj.select_set(False)
+    # 为铸造法内壁添加布尔修改器,与软耳膜支撑内芯做差集
+    obj_inner.select_set(True)
+    bpy.context.view_layer.objects.active = obj_inner
+    modifierSprueDifferenceInside = obj_inner.modifiers.new(name="SprueDifferenceInside", type='BOOLEAN')
+    modifierSprueDifferenceInside.object = sprue_inside_obj
+    modifierSprueDifferenceInside.operation = 'DIFFERENCE'
+    modifierSprueDifferenceInside.solver = 'FAST'
+    bpy.ops.object.modifier_apply(modifier="SprueDifferenceInside")
+    # 将选中的顶点直接删除在模型上得到软耳膜支撑的孔洞
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_less()
+    bpy.ops.mesh.delete(type='VERT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    obj_inner.select_set(False)
+    obj_outer.select_set(True)
+    bpy.context.view_layer.objects.active = obj_outer
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    obj_outer.select_set(False)
+    # 将软耳膜支撑内芯尺寸缩小一些并将顶点选中
+    sprue_inside_obj.select_set(True)
+    bpy.context.view_layer.objects.active = sprue_inside_obj
+    sprue_inside_obj.scale[0] = 1
+    sprue_inside_obj.scale[1] = 1
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    sprue_inside_obj.select_set(False)
+    # 为铸造法内壁添加布尔修改器,与软耳膜支撑内芯做差集
+    obj_outer.select_set(True)
+    bpy.context.view_layer.objects.active = obj_outer
+    modifierSupportDifferenceInside = obj_outer.modifiers.new(name="SupportDifferenceInside", type='BOOLEAN')
+    modifierSupportDifferenceInside.object = sprue_inside_obj
+    modifierSupportDifferenceInside.operation = 'DIFFERENCE'
+    modifierSupportDifferenceInside.solver = 'FAST'
+    bpy.ops.object.modifier_apply(modifier="SupportDifferenceInside")
+    # 将选中的顶点直接删除在模型上得到软耳膜支撑的孔洞
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_less()
+    bpy.ops.mesh.delete(type='VERT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    obj_inner.select_set(True)
+    bpy.context.view_layer.objects.active = obj_inner
+    # 为铸造法内壁添加布尔修改器,与排气孔内壁合并
+    modifierSprueUnionInner = obj_inner.modifiers.new(name="SprueUnionInner", type='BOOLEAN')
+    modifierSprueUnionInner.object = sprue_inner_obj
+    modifierSprueUnionInner.operation = 'UNION'
+    modifierSprueUnionInner.solver = 'FAST'
+    bpy.ops.object.modifier_apply(modifier="SprueUnionInner")
+
+    sprue_outer_obj.select_set(True)
+    bpy.context.view_layer.objects.active = sprue_outer_obj
+    # 先将排气孔外壁选中,使得其与铸造法外壳合并后被选中分离
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    sprue_outer_obj.select_set(False)
+
+    obj_outer.select_set(True)
+    bpy.context.view_layer.objects.active = obj_outer
+    # 由于排气孔之前的模块存在布尔操作,会有其他顶点被选中,因此先将模型上选中顶点给取消选中
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    # 为铸造法外壳添加布尔修改器,与排气孔外壳合并
+    modifierSprueUnionOuter = obj_outer.modifiers.new(name="SprueUnionOuter", type='BOOLEAN')
+    modifierSprueUnionOuter.object = sprue_outer_obj
+    modifierSprueUnionOuter.operation = 'UNION'
+    modifierSprueUnionOuter.solver = 'FAST'
+    bpy.ops.object.modifier_apply(modifier="SprueUnionOuter")
+    # 由于排气孔物体和透明的右耳外壳合并后变为透明,因此需要设置一个不透明的参照物,与合并后的右耳对比,布尔合并后的顶点会被选中,将这些顶点复制一份并分离为独立的物体
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.duplicate()
+    bpy.ops.mesh.separate(type='SELECTED')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    sprue_compare_obj = bpy.data.objects.get(name + ".001")
+    if (sprue_compare_obj != None):
+        sprue_compare_obj.name = name + "SprueCompare"
+        yellow_material = newColor("yellow", 1, 0.319, 0.133, 0, 1)
+        sprue_compare_obj.data.materials.clear()
+        sprue_compare_obj.data.materials.append(yellow_material)
+        if (name == "右耳"):
+            moveToRight(sprue_compare_obj)
+        elif (name == "左耳"):
+            moveToLeft(sprue_compare_obj)
+
+    bpy.data.objects.remove(plane_obj, do_unlink=True)
+    bpy.data.objects.remove(sphere_obj, do_unlink=True)
+    bpy.data.objects.remove(sprue_inner_obj, do_unlink=True)
+    bpy.data.objects.remove(sprue_outer_obj, do_unlink=True)
+    bpy.data.objects.remove(sprue_inside_obj, do_unlink=True)
+    bpy.data.objects.remove(sprue_inner_offset_compare_obj, do_unlink=True)
+    bpy.data.objects.remove(sprue_outer_offset_compare_obj, do_unlink=True)
+    bpy.data.objects.remove(sprue_inside_offset_compare_obj, do_unlink=True)
+
+    bpy.context.view_layer.objects.active = obj_outer
+
+    # 合并后Sprue会被去除材质,因此需要重置一下模型颜色为黄色
+    bpy.ops.object.mode_set(mode='VERTEX_PAINT')
+    bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
+    bpy.data.brushes["Draw"].color = (1, 0.6, 0.4)
+    bpy.ops.paint.vertex_color_set()
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+
 def sprueReset():
     # 存在未提交排气孔时
     name = bpy.context.scene.leftWindowObj
@@ -1134,7 +1320,7 @@ def sprueReset():
     sprue_inner_offset_compare_obj = bpy.data.objects.get(name + "CylinderInnerOffsetCompare")
     sprue_outer_offset_compare_obj = bpy.data.objects.get(name + "CylinderOuterOffsetCompare")
     sprue_inside_offset_compare_obj = bpy.data.objects.get(name + "CylinderInsideOffsetCompare")
-    sprue_compare_obj = bpy.data.objects.get(name + "SprueCompare")
+    # sprue_compare_obj = bpy.data.objects.get(name + "SprueCompare")
     planename = name + "Plane"
     plane_obj = bpy.data.objects.get(planename)
     spherename = name + "SprueSphere"
@@ -1152,12 +1338,22 @@ def sprueReset():
         bpy.data.objects.remove(sprue_outer_offset_compare_obj, do_unlink=True)
     if (sprue_inside_offset_compare_obj != None):
         bpy.data.objects.remove(sprue_inside_offset_compare_obj, do_unlink=True)
-    if (sprue_compare_obj != None):
-        bpy.data.objects.remove(sprue_compare_obj, do_unlink=True)
+    # if (sprue_compare_obj != None):
+    #     bpy.data.objects.remove(sprue_compare_obj, do_unlink=True)
     if (plane_obj != None):
         bpy.data.objects.remove(plane_obj, do_unlink=True)
     if (sphere_obj != None):
         bpy.data.objects.remove(sphere_obj, do_unlink=True)
+    # 删除排气孔对比物
+    for obj in bpy.data.objects:
+        if (name == "右耳"):
+            pattern = r'右耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
+        elif (name == "左耳"):
+            pattern = r'左耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
     # 将SprueReset复制并替代当前操作模型,将CastingCompareSprueReset复制并替代CastingCompare
     oriname = bpy.context.scene.leftWindowObj
     ori_obj = bpy.data.objects.get(oriname)                   #右耳
@@ -1218,6 +1414,9 @@ def sprueSubmit():
     if (sprue_inner_obj != None and sprue_outer_obj != None and  sprue_inside_obj != None and plane_obj != None
             and  sprue_inner_offset_compare_obj != None and sprue_outer_offset_compare_obj != None
             and sprue_inside_offset_compare_obj != None and  obj_outer != None and obj_inner != None):
+
+        # 先将该Sprue的相关信息保存下来,用于模块切换时的初始化。
+        saveInfo()
 
         # 将软耳膜支撑的内芯选中与右耳做布尔的差集,内芯插入模型的部分会和右耳合并形成一块内凹的区域,这块顶点处于选中的状态,直接将其删除在右耳上得到一个孔
         # 将铸造法内部物体顶点取消选中
@@ -1319,8 +1518,7 @@ def sprueSubmit():
         sprue_compare_obj = bpy.data.objects.get(name + ".001")
         if (sprue_compare_obj != None):
             sprue_compare_obj.name = name + "SprueCompare"
-            yellow_material = bpy.data.materials.new(name="Yellow")
-            yellow_material.diffuse_color = (1.0, 0.319, 0.133, 1.0)
+            yellow_material = newColor("yellow", 1, 0.319, 0.133, 0, 1)
             sprue_compare_obj.data.materials.clear()
             sprue_compare_obj.data.materials.append(yellow_material)
             if (name == "右耳"):
@@ -1376,15 +1574,18 @@ def addSprue():
     plane_obj.location[2] = 10
 
 
-class SprueTest(bpy.types.Operator):
-    bl_idname = "object.spruetestfunc"
-    bl_label = "功能测试"
-
-    def invoke(self, context, event):
-
-        return {'FINISHED'}
-
-
+class SprueInfoSave(object):
+    '''
+    保存提交前的每个Sprue信息
+    '''
+    def __init__(self,offset,l_x,l_y,l_z,r_x,r_y,r_z):
+        self.offset = offset
+        self.l_x = l_x
+        self.l_y = l_y
+        self.l_z = l_z
+        self.r_x = r_x
+        self.r_y = r_y
+        self.r_z = r_z
 
 
 class SprueReset(bpy.types.Operator):
@@ -1394,26 +1595,30 @@ class SprueReset(bpy.types.Operator):
     def invoke(self, context, event):
         bpy.context.scene.var = 16
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
-        global is_add_sprue
-        global is_add_sprueL
+        # global is_add_sprue
+        # global is_add_sprueL
         global is_on_rotate
         global is_on_rotateL
+        global sprue_info_save
+        global sprue_info_saveL
         name = bpy.context.scene.leftWindowObj
         if name == '右耳':
-            is_add_sprue = False
+            # is_add_sprue = False
             is_on_rotate = False
+            sprue_info_save = []
         elif name == '左耳':
-            is_add_sprueL = False
+            # is_add_sprueL = False
             is_on_rotateL = False
+            sprue_info_saveL = []
 
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         self.execute(context)
         return {'FINISHED'}
 
     def execute(self, context):
-        sprueSaveInfo()
+        # sprueSaveInfo()
         sprueReset()
-        bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_add")
+        bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_initial")
         return {'FINISHED'}
 
 
@@ -1424,54 +1629,53 @@ class SprueAdd(bpy.types.Operator):
     def invoke(self, context, event):
 
         bpy.context.scene.var = 17
-        global is_add_sprue
-        global sprue_offset
-        global is_add_sprueL
-        global sprue_offsetL
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
+        global sprue_info_save
+        global sprue_info_saveL
         name = bpy.context.scene.leftWindowObj
+        sprue_info_save_cur = None
         if name == '右耳':
-            if (not is_add_sprue):
-                is_add_sprue = True
-                addSprue()
-                bpy.context.scene.paiQiKongOffset = sprue_offset
-                # 将Plane激活并选中
-                name = bpy.context.scene.leftWindowObj
-                planename = name + "Plane"
-                plane_obj = bpy.data.objects.get(planename)
-                cur_obj = bpy.data.objects.get(name)
-                bpy.ops.object.select_all(action='DESELECT')
-                plane_obj.select_set(True)
-                bpy.context.view_layer.objects.active = plane_obj
-                co, normal = cal_co(context, event)
-                if (co != -1):
-                    sprue_fit_rotate(normal, co)
-                    # plane_obj.location = co
-                bpy.ops.object.select_all(action='DESELECT')
-                cur_obj.select_set(True)
-                bpy.context.view_layer.objects.active = cur_obj
+            sprue_info_save_cur = sprue_info_save
         elif name == '左耳':
-            if (not is_add_sprueL):
-                is_add_sprueL = True
-                addSprue()
-                bpy.context.scene.paiQiKongOffsetL = sprue_offsetL
-                # 将Plane激活并选中
-                name = bpy.context.scene.leftWindowObj
-                planename = name + "Plane"
-                plane_obj = bpy.data.objects.get(planename)
-                cur_obj = bpy.data.objects.get(name)
-                bpy.ops.object.select_all(action='DESELECT')
-                plane_obj.select_set(True)
-                bpy.context.view_layer.objects.active = plane_obj
-                co, normal = cal_co(context, event)
-                if (co != -1):
-                    sprue_fit_rotate(normal,co)
-                    # plane_obj.location = co
-                bpy.ops.object.select_all(action='DESELECT')
-                cur_obj.select_set(True)
-                bpy.context.view_layer.objects.active = cur_obj
+            sprue_info_save_cur = sprue_info_saveL
+
+
+        #将可能存在的排气孔先提交
+        sprueSubmit()
+        # 双击添加过一个排气孔之后,才能够继续添加排气孔
+        if (len(sprue_info_save_cur) == 0):
+            bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_initial")
+            return {'FINISHED'}
+        #添加排气孔
+        addSprue()
+        # 将Plane激活并选中
+        name = bpy.context.scene.leftWindowObj
+        planename = name + "Plane"
+        plane_obj = bpy.data.objects.get(planename)
+        cur_obj = bpy.data.objects.get(name)
+        bpy.ops.object.select_all(action='DESELECT')
+        plane_obj.select_set(True)
+        bpy.context.view_layer.objects.active = plane_obj
+        #将排气孔位置设置为上一个排气孔的位置
+        sprueInfo = sprue_info_save_cur[len(sprue_info_save_cur) - 1]
+        l_x = sprueInfo.l_x
+        l_y = sprueInfo.l_y
+        l_z = sprueInfo.l_z
+        r_x = sprueInfo.r_x
+        r_y = sprueInfo.r_y
+        r_z = sprueInfo.r_z
+        plane_obj.location[0] = l_x
+        plane_obj.location[1] = l_y
+        plane_obj.location[2] = l_z
+        plane_obj.rotation_euler[0] = r_x
+        plane_obj.rotation_euler[1] = r_y
+        plane_obj.rotation_euler[2] = r_z
+        #设置旋转中心
+        bpy.ops.object.select_all(action='DESELECT')
+        cur_obj.select_set(True)
+        bpy.context.view_layer.objects.active = cur_obj
 
 
         context.window_manager.modal_handler_add(self)
@@ -1501,8 +1705,7 @@ class SprueAdd(bpy.types.Operator):
                 if(sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
                     if (is_mouse_on_object(context, event) and not is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
                         # 公共鼠标行为加双击移动附件位置
-                        red_material = bpy.data.materials.new(name="Red")
-                        red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
                         # sprue_inner_obj.select_set(True)
                         # bpy.context.view_layer.objects.active = sprue_inner_obj
                         sprue_inner_obj.data.materials.clear()
@@ -1521,8 +1724,7 @@ class SprueAdd(bpy.types.Operator):
                         plane_obj.select_set(False)
                     elif (is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
                         # 调用sprue的鼠标行为
-                        yellow_material = bpy.data.materials.new(name="Yellow")
-                        yellow_material.diffuse_color = (1.0, 1.0, 0.0, 1.0)
+                        yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
                         # sprue_inner_obj.select_set(True)
                         # bpy.context.view_layer.objects.active = sprue_inner_obj
                         sprue_inner_obj.data.materials.clear()
@@ -1544,8 +1746,7 @@ class SprueAdd(bpy.types.Operator):
                         sprue_inside_obj.select_set(False)
                     elif ((not is_mouse_on_object(context, event)) and (is_changed_sprue(context, event) or is_changed(context, event))):
                         # 调用公共鼠标行为
-                        red_material = bpy.data.materials.new(name="Red")
-                        red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
                         # sprue_inner_obj.select_set(True)
                         # bpy.context.view_layer.objects.active = sprue_inner_obj
                         sprue_inner_obj.data.materials.clear()
@@ -1570,8 +1771,7 @@ class SprueAdd(bpy.types.Operator):
                     if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
                             is_changed_sphere(context, event) or is_changed(context, event))):
                         # 公共鼠标行为加双击移动附件位置
-                        red_material = bpy.data.materials.new(name="Red")
-                        red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
                         # sprue_inner_obj.select_set(True)
                         # bpy.context.view_layer.objects.active = sprue_inner_obj
                         sprue_inner_obj.data.materials.clear()
@@ -1590,8 +1790,7 @@ class SprueAdd(bpy.types.Operator):
                         plane_obj.select_set(False)
                     elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
                         # 调用sprue的三维旋转鼠标行为
-                        yellow_material = bpy.data.materials.new(name="Yellow")
-                        yellow_material.diffuse_color = (1.0, 1.0, 0.0, 1.0)
+                        yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
                         # sprue_inner_obj.select_set(True)
                         # bpy.context.view_layer.objects.active = sprue_inner_obj
                         sprue_inner_obj.data.materials.clear()
@@ -1613,8 +1812,7 @@ class SprueAdd(bpy.types.Operator):
                         sprue_inside_obj.select_set(False)
                     elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
                         # 调用公共鼠标行为
-                        red_material = bpy.data.materials.new(name="Red")
-                        red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
                         # sprue_inner_obj.select_set(True)
                         # bpy.context.view_layer.objects.active = sprue_inner_obj
                         sprue_inner_obj.data.materials.clear()
@@ -1639,19 +1837,208 @@ class SprueAdd(bpy.types.Operator):
             return {'FINISHED'}
 
 
+class SprueInitialAdd(bpy.types.Operator):
+    bl_idname = "object.sprueinitialadd"
+    bl_label = "添加排气孔"
+
+    def invoke(self, context, event):
+
+        bpy.context.scene.var = 18
+        # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+
+
+        #添加排气孔
+        addSprue()
+        # 将Plane激活并选中
+        name = bpy.context.scene.leftWindowObj
+        planename = name + "Plane"
+        plane_obj = bpy.data.objects.get(planename)
+        cur_obj = bpy.data.objects.get(name)
+        bpy.ops.object.select_all(action='DESELECT')
+        plane_obj.select_set(True)
+        bpy.context.view_layer.objects.active = plane_obj
+        #将添加的排气孔位置设置未双击的位置
+        co, normal = cal_co(context, event)
+        if (co != -1):
+            sprue_fit_rotate(normal, co)
+        #设置旋转中心
+        bpy.ops.object.select_all(action='DESELECT')
+        cur_obj.select_set(True)
+        bpy.context.view_layer.objects.active = cur_obj
+
+
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+        global is_on_rotate
+        global is_on_rotateL
+        name = bpy.context.scene.leftWindowObj
+        is_on_rotate_cur = False
+        if (name == '右耳'):
+            is_on_rotate_cur = is_on_rotate
+        elif (name == '左耳'):
+            is_on_rotate_cur = is_on_rotateL
+        sprue_inner_obj = bpy.data.objects.get(name + "CylinderInner")
+        sprue_outer_obj = bpy.data.objects.get(name + "CylinderOuter")
+        sprue_inside_obj = bpy.data.objects.get(name + "CylinderInside")
+        sprue_inner_offset_compare_obj = bpy.data.objects.get(name + "CylinderInnerOffsetCompare")
+        sprue_outer_offset_compare_obj = bpy.data.objects.get(name + "CylinderOuterOffsetCompare")
+        sprue_inside_offset_compare_obj = bpy.data.objects.get(name + "CylinderInsideOffsetCompare")
+        planename = name + "Plane"
+        plane_obj = bpy.data.objects.get(planename)
+        cur_obj_name = name
+        cur_obj = bpy.data.objects.get(cur_obj_name)
+        if (bpy.context.scene.var == 18):
+            if(not is_on_rotate_cur):
+                if(sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
+                    if (is_mouse_on_object(context, event) and not is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
+                        # 公共鼠标行为加双击移动附件位置
+                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+                        # sprue_inner_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_inner_obj
+                        sprue_inner_obj.data.materials.clear()
+                        sprue_inner_obj.data.materials.append(red_material)
+                        # sprue_outer_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_outer_obj
+                        sprue_outer_obj.data.materials.clear()
+                        sprue_outer_obj.data.materials.append(red_material)
+                        # sprue_inside_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_inside_obj
+                        sprue_inside_obj.data.materials.clear()
+                        sprue_inside_obj.data.materials.append(red_material)
+                        bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
+                        cur_obj.select_set(True)
+                        bpy.context.view_layer.objects.active = cur_obj
+                        plane_obj.select_set(False)
+                    elif (is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
+                        # 调用sprue的鼠标行为
+                        yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
+                        # sprue_inner_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_inner_obj
+                        sprue_inner_obj.data.materials.clear()
+                        sprue_inner_obj.data.materials.append(yellow_material)
+                        # sprue_outer_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_outer_obj
+                        sprue_outer_obj.data.materials.clear()
+                        sprue_outer_obj.data.materials.append(yellow_material)
+                        # sprue_inside_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_inside_obj
+                        sprue_inside_obj.data.materials.clear()
+                        sprue_inside_obj.data.materials.append(yellow_material)
+                        bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+                        plane_obj.select_set(True)
+                        bpy.context.view_layer.objects.active = plane_obj
+                        cur_obj.select_set(False)
+                        sprue_inner_obj.select_set(False)
+                        sprue_outer_obj.select_set(False)
+                        sprue_inside_obj.select_set(False)
+                    elif ((not is_mouse_on_object(context, event)) and (is_changed_sprue(context, event) or is_changed(context, event))):
+                        # 调用公共鼠标行为
+                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+                        # sprue_inner_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_inner_obj
+                        sprue_inner_obj.data.materials.clear()
+                        sprue_inner_obj.data.materials.append(red_material)
+                        # sprue_outer_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_outer_obj
+                        sprue_outer_obj.data.materials.clear()
+                        sprue_outer_obj.data.materials.append(red_material)
+                        # sprue_inside_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_inside_obj
+                        sprue_inside_obj.data.materials.clear()
+                        sprue_inside_obj.data.materials.append(red_material)
+                        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                        cur_obj.select_set(True)
+                        bpy.context.view_layer.objects.active = cur_obj
+                        plane_obj.select_set(False)
+                        sprue_inner_obj.select_set(False)
+                        sprue_outer_obj.select_set(False)
+                        sprue_inside_obj.select_set(False)
+            elif(is_on_rotate_cur):
+                if (sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
+                    if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
+                            is_changed_sphere(context, event) or is_changed(context, event))):
+                        # 公共鼠标行为加双击移动附件位置
+                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+                        # sprue_inner_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_inner_obj
+                        sprue_inner_obj.data.materials.clear()
+                        sprue_inner_obj.data.materials.append(red_material)
+                        # sprue_outer_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_outer_obj
+                        sprue_outer_obj.data.materials.clear()
+                        sprue_outer_obj.data.materials.append(red_material)
+                        # sprue_inside_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_inside_obj
+                        sprue_inside_obj.data.materials.clear()
+                        sprue_inside_obj.data.materials.append(red_material)
+                        bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
+                        cur_obj.select_set(True)
+                        bpy.context.view_layer.objects.active = cur_obj
+                        plane_obj.select_set(False)
+                    elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+                        # 调用sprue的三维旋转鼠标行为
+                        yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
+                        # sprue_inner_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_inner_obj
+                        sprue_inner_obj.data.materials.clear()
+                        sprue_inner_obj.data.materials.append(yellow_material)
+                        # sprue_outer_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_outer_obj
+                        sprue_outer_obj.data.materials.clear()
+                        sprue_outer_obj.data.materials.append(yellow_material)
+                        # sprue_inside_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_inside_obj
+                        sprue_inside_obj.data.materials.clear()
+                        sprue_inside_obj.data.materials.append(yellow_material)
+                        bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
+                        plane_obj.select_set(True)
+                        bpy.context.view_layer.objects.active = plane_obj
+                        cur_obj.select_set(False)
+                        sprue_inner_obj.select_set(False)
+                        sprue_outer_obj.select_set(False)
+                        sprue_inside_obj.select_set(False)
+                    elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+                        # 调用公共鼠标行为
+                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+                        # sprue_inner_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_inner_obj
+                        sprue_inner_obj.data.materials.clear()
+                        sprue_inner_obj.data.materials.append(red_material)
+                        # sprue_outer_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_outer_obj
+                        sprue_outer_obj.data.materials.clear()
+                        sprue_outer_obj.data.materials.append(red_material)
+                        # sprue_inside_obj.select_set(True)
+                        # bpy.context.view_layer.objects.active = sprue_inside_obj
+                        sprue_inside_obj.data.materials.clear()
+                        sprue_inside_obj.data.materials.append(red_material)
+                        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                        cur_obj.select_set(True)
+                        bpy.context.view_layer.objects.active = cur_obj
+                        plane_obj.select_set(False)
+                        sprue_inner_obj.select_set(False)
+                        sprue_outer_obj.select_set(False)
+                        sprue_inside_obj.select_set(False)
+            return {'PASS_THROUGH'}
+        else:
+            return {'FINISHED'}
+
 class SprueSubmit(bpy.types.Operator):
     bl_idname = "object.spruesubmit"
     bl_label = "排气孔提交"
 
     def invoke(self, context, event):
-        bpy.context.scene.var = 18
+        bpy.context.scene.var = 19
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         self.execute(context)
         return {'FINISHED'}
 
     def execute(self, context):
-        sprueSaveInfo()
+        # sprueSaveInfo()
         sprueSubmit()
         return {'FINISHED'}
 
@@ -1737,15 +2124,16 @@ class MyTool_Sprue2(WorkSpaceTool):
     bl_idname = "my_tool.sprue_add"
     bl_label = "排气孔添加"
     bl_description = (
-        "在模型上添加一个排气孔"
+        "在模型上上一个排气孔的位置处添加一个排气孔"
     )
     bl_icon = "brush.sculpt.boundary"
     bl_widget = None
     bl_keymap = (
-        ("object.sprueadd", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
-        ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
+        ("object.sprueadd", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+        # ("object.sprueadd", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
+        # ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        # ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
+        # ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
     )
 
     def draw_settings(context, layout, tool):
@@ -1835,14 +2223,37 @@ class MyTool_Sprue_Mouse(bpy.types.WorkSpaceTool):
     def draw_settings(context, layout, tool):
         pass
 
+class MyTool_SprueInitial(WorkSpaceTool):
+    bl_space_type = 'VIEW_3D'
+    bl_context_mode = 'OBJECT'
+
+    # The prefix of the idname should be your add-on name.
+    bl_idname = "my_tool.sprue_initial"
+    bl_label = "排气孔添加初始化"
+    bl_description = (
+        "刚进入排气孔模块的时,在模型上双击位置处添加一个排气孔"
+    )
+    bl_icon = "brush.sculpt.snake_hook"
+    bl_widget = None
+    bl_keymap = (
+        ("object.sprueinitialadd", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
+        ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
+        ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
+    )
+
+    def draw_settings(context, layout, tool):
+        pass
+
+
 # 注册类
 _classes = [
     SprueReset,
     SprueAdd,
+    SprueInitialAdd,
     SprueSubmit,
     SprueDoubleClick,
     SprueRotate,
-    SprueTest
 ]
 
 
@@ -1855,6 +2266,7 @@ def register():
     bpy.utils.register_tool(MyTool_Sprue_Rotate, separator=True, group=False, after={MyTool_Sprue3.bl_idname})
     bpy.utils.register_tool(MyTool_Sprue_Mirror, separator=True, group=False, after={MyTool_Sprue_Rotate.bl_idname})
     bpy.utils.register_tool(MyTool_Sprue_Mouse, separator=True, group=False, after={MyTool_Sprue_Mirror.bl_idname})
+    bpy.utils.register_tool(MyTool_SprueInitial, separator=True, group=False, after={MyTool_Sprue_Mouse.bl_idname})
 
 
 def unregister():
@@ -1866,3 +2278,4 @@ def unregister():
     bpy.utils.unregister_tool(MyTool_Sprue_Rotate)
     bpy.utils.unregister_tool(MyTool_Sprue_Mirror)
     bpy.utils.unregister_tool(MyTool_Sprue_Mouse)
+    bpy.utils.unregister_tool(MyTool_SprueInitial)

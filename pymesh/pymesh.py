@@ -93,7 +93,11 @@ class Huier_OT_Pymesh(bpy.types.Operator):
                 with bpy.context.temp_override(**override):
                     bpy.ops.geometry.color_attribute_add(name="Color", color=(0, 0.25, 1, 1))
                     active_obj.data.materials.clear()
-                    active_obj.data.materials.append(bpy.data.materials['Yellow'])
+                    active_obj.data.materials.append(bpy.data.materials['YellowR'])
+
+                    active_obj.lock_location[0] = True
+                    active_obj.lock_location[1] = True
+                    active_obj.lock_location[2] = True
 
                 # 复制一份用于匹配模板位置
                 duplicate_obj = active_obj.copy()
@@ -110,12 +114,13 @@ class Huier_OT_Pymesh(bpy.types.Operator):
                     bpy.context.scene.collection.objects.unlink(duplicate_obj)
 
                 # 复制一份用于最原始物体的展示
+                bpy.context.scene.transparent2R = True
                 duplicate_obj2 = active_obj.copy()
                 duplicate_obj2.data = active_obj.data.copy()
                 duplicate_obj2.animation_data_clear()
                 duplicate_obj2.name = active_obj.name + "OriginForShow"
                 duplicate_obj2.data.materials.clear()
-                duplicate_obj2.data.materials.append(bpy.data.materials.get("tran_green"))
+                duplicate_obj2.data.materials.append(bpy.data.materials.get("tran_green_r"))
                 bpy.context.collection.objects.link(duplicate_obj2)
                 duplicate_obj2.hide_set(True)
 
@@ -146,7 +151,11 @@ class Huier_OT_Pymesh(bpy.types.Operator):
                 with bpy.context.temp_override(**override):
                     bpy.ops.geometry.color_attribute_add(name="Color", color=(0, 0.25, 1, 1))
                     active_obj.data.materials.clear()
-                    active_obj.data.materials.append(bpy.data.materials['Yellow'])
+                    active_obj.data.materials.append(bpy.data.materials['YellowL'])
+
+                    active_obj.lock_location[0] = True
+                    active_obj.lock_location[1] = True
+                    active_obj.lock_location[2] = True
 
                 # 复制一份用于匹配模板位置
                 duplicate_obj = active_obj.copy()
@@ -163,12 +172,13 @@ class Huier_OT_Pymesh(bpy.types.Operator):
                     bpy.context.scene.collection.objects.unlink(duplicate_obj)
 
                 # 复制一份用于展示最原始物体的展示
+                bpy.context.scene.transparent2L = True
                 duplicate_obj2 = active_obj.copy()
                 duplicate_obj2.data = active_obj.data.copy()
                 duplicate_obj2.animation_data_clear()
                 duplicate_obj2.name = active_obj.name + "OriginForShow"
                 duplicate_obj2.data.materials.clear()
-                duplicate_obj2.data.materials.append(bpy.data.materials.get("tran_green"))
+                duplicate_obj2.data.materials.append(bpy.data.materials.get("tran_green_l"))
                 bpy.context.collection.objects.link(duplicate_obj2)
                 duplicate_obj2.hide_set(True)
 
@@ -186,7 +196,7 @@ class Huier_OT_Pymesh(bpy.types.Operator):
                 bpy.context.collection.objects.link(duplicate_obj3)
                 duplicate_obj3.hide_set(True)
 
-                # 加到右耳集合
+                # 加到左耳集合
                 collection = bpy.data.collections['Left']
                 collection.objects.link(duplicate_obj3)
                 if duplicate_obj3.name in bpy.context.scene.collection.objects:

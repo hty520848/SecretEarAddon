@@ -4,7 +4,8 @@ import mathutils
 from mathutils import Vector
 from bpy_extras import view3d_utils
 from math import sqrt
-from .tool import newShader, moveToRight, moveToLeft, utils_re_color, delete_useless_object, newColor,getOverride
+from .tool import newShader, moveToRight, moveToLeft, utils_re_color, delete_useless_object, newColor, \
+    getOverride, apply_material
 import re
 
 prev_on_sphere = False
@@ -29,10 +30,8 @@ prev_sphere_number_plane = 0      #记录鼠标在管道中间的红球间切换
 prev_sphere_number_planeL = 0
 
 def initialTransparency():
-    mat = newShader("Transparency")  # 创建材质
+    mat = newColor("Transparency", 1, 0.319, 0.133, 1, 0.4)  # 创建材质
     mat.use_backface_culling = True
-    mat.blend_method = "BLEND"
-    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.4
 
 
 def get_region_and_space(context, area_type, region_type, space_type):
@@ -379,7 +378,7 @@ def convert_ventcanal():
     elif name == '左耳':
         bevel_depth = bpy.context.scene.tongQiGuanDaoZhiJing_L / 2
     bpy.context.active_object.data.bevel_depth = bevel_depth  # 设置曲线倒角深度
-    bpy.context.active_object.data.bevel_resolution = 16
+    bpy.context.active_object.data.bevel_resolution = 8  # 管道分辨率
     bpy.context.active_object.data.use_fill_caps = True  # 封盖
     bpy.ops.object.convert(target='MESH')  # 转化为网格
     duplicate_obj.hide_select = True
@@ -1041,7 +1040,7 @@ def new_curve(curve_name):
         bevel_depth = bpy.context.scene.tongQiGuanDaoZhiJing_L / 2
         moveToLeft(obj)
     obj.data.bevel_depth = bevel_depth  # 管道孔径
-    obj.data.bevel_resolution = 16
+    obj.data.bevel_resolution = 8  # 管道分辨率
     obj.data.use_fill_caps = True  # 封盖
     return obj
 
@@ -1413,8 +1412,7 @@ def submit_ventcanal():
             for key in object_dic:
                 need_to_delete_model_name_list.append(key)
             delete_useless_object(need_to_delete_model_name_list)
-            bpy.context.active_object.data.materials.clear()
-            bpy.context.active_object.data.materials.append(bpy.data.materials['Yellow'])
+            apply_material()
             utils_re_color(name, (1, 0.319, 0.133))
             bpy.context.active_object.data.use_auto_smooth = True
             bpy.context.object.data.auto_smooth_angle = 0.9
@@ -1433,8 +1431,7 @@ def submit_ventcanal():
             for key in object_dicL:
                 need_to_delete_model_name_list.append(key)
             delete_useless_object(need_to_delete_model_name_list)
-            bpy.context.active_object.data.materials.clear()
-            bpy.context.active_object.data.materials.append(bpy.data.materials['Yellow'])
+            apply_material()
             utils_re_color(name, (1, 0.319, 0.133))
             bpy.context.active_object.data.use_auto_smooth = True
             bpy.context.object.data.auto_smooth_angle = 0.9
@@ -1612,9 +1609,15 @@ def backToVentCanal():
     hard_support_compare_obj = bpy.data.objects.get(name + "ConeCompare")
     if (hard_support_compare_obj != None):
         bpy.data.objects.remove(hard_support_compare_obj, do_unlink=True)
-    sprue_compare_obj = bpy.data.objects.get(name + "SprueCompare")
-    if (sprue_compare_obj != None):
-        bpy.data.objects.remove(sprue_compare_obj, do_unlink=True)
+    for obj in bpy.data.objects:
+        if (name == "右耳"):
+            pattern = r'右耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
+        elif (name == "左耳"):
+            pattern = r'左耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
 
     exist_VentCanalReset = False
     all_objs = bpy.data.objects

@@ -38,7 +38,7 @@ def get_is_back():
 
 def get_is_dialog():
     global is_dialog
-    return  is_dialog
+    return is_dialog
 
 
 def remember_vertex_change():
@@ -185,14 +185,21 @@ def backToDamo():
     hard_support_compare_obj = bpy.data.objects.get(name + "ConeCompare")
     if (hard_support_compare_obj != None):
         bpy.data.objects.remove(hard_support_compare_obj, do_unlink=True)
-    sprue_compare_obj = bpy.data.objects.get(name + "SprueCompare")
-    if (sprue_compare_obj != None):
-        bpy.data.objects.remove(sprue_compare_obj, do_unlink=True)
+    for obj in bpy.data.objects:
+        if (name == "右耳"):
+            pattern = r'右耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
+        elif (name == "左耳"):
+            pattern = r'左耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
 
     # 根据保存的DamoCopy,复制一份用来替换当前激活物体
     name = bpy.context.scene.leftWindowObj
     # print('name',name)
     active_obj = bpy.data.objects.get(name)
+    collections = None
     if name == '右耳':
         copyname = name + "DamoCopy"
         waxname = name + "WaxForShow"
@@ -208,6 +215,11 @@ def backToDamo():
             bpy.context.scene.collection.objects.link(duplicate_obj)
             moveToRight(duplicate_obj)
             bpy.context.view_layer.objects.active = duplicate_obj
+
+        bpy.context.scene.transparent2R = True
+        bpy.context.scene.transparent3R = False
+        collections = bpy.data.collections['Right']
+
     elif name == '左耳':
         copyname = name + "DamoCopy"
         waxname = name + "WaxForShow"
@@ -224,9 +236,13 @@ def backToDamo():
             moveToLeft(duplicate_obj)
             bpy.context.view_layer.objects.active = duplicate_obj
 
+        bpy.context.scene.transparent2L = True
+        bpy.context.scene.transparent3L = False
+        collections = bpy.data.collections['Left']
+
     set_modal_start_false()
 
-    for obj in bpy.data.objects:
+    for obj in collections.objects:
         if obj.type == 'MESH':
             # 获取网格数据
             me = obj.data
@@ -262,6 +278,7 @@ def backFromDamo():
     active_obj = bpy.data.objects.get(name)
     # print('active',name)
     all_objs = bpy.data.objects
+    collections = None
     if name == '右耳':
         # 删除已经存在的右耳DamoCopy
         for selected_obj in all_objs:
@@ -273,17 +290,21 @@ def backFromDamo():
         duplicate_obj.name = name + "DamoCopy"
         bpy.context.collection.objects.link(duplicate_obj)
         moveToRight(duplicate_obj)
+
+        bpy.context.scene.transparent2R = False
+        bpy.context.scene.transparent3R = True
         duplicate_obj.hide_set(True)
         duplicate_obj2 = active_obj.copy()
         duplicate_obj2.data = active_obj.data.copy()
         duplicate_obj2.animation_data_clear()
         duplicate_obj2.name = name + "WaxForShow"
         bpy.context.collection.objects.link(duplicate_obj2)
-        duplicate_obj2.data.materials.append(bpy.data.materials.get("tran_blue"))
+        duplicate_obj2.data.materials.append(bpy.data.materials.get("tran_blue_r"))
         moveToRight(duplicate_obj2)
         duplicate_obj2.hide_set(True)
         active_obj = bpy.data.objects[name]
         bpy.context.view_layer.objects.active = active_obj
+        collections = bpy.data.collections['Right']
 
     elif name == '左耳':
         # 删除已经存在的左耳DamoCopy
@@ -296,17 +317,21 @@ def backFromDamo():
         duplicate_obj.name = name + "DamoCopy"
         bpy.context.collection.objects.link(duplicate_obj)
         moveToLeft(duplicate_obj)
+
+        bpy.context.scene.transparent2L = False
+        bpy.context.scene.transparent3L = True
         duplicate_obj.hide_set(True)
         duplicate_obj2 = active_obj.copy()
         duplicate_obj2.data = active_obj.data.copy()
         duplicate_obj2.animation_data_clear()
         duplicate_obj2.name = name + "WaxForShow"
         bpy.context.collection.objects.link(duplicate_obj2)
-        duplicate_obj2.data.materials.append(bpy.data.materials.get("tran_blue"))
+        duplicate_obj2.data.materials.append(bpy.data.materials.get("tran_blue_l"))
         moveToLeft(duplicate_obj2)
         duplicate_obj2.hide_set(True)
         active_obj = bpy.data.objects[name]
         bpy.context.view_layer.objects.active = active_obj
+        collections = bpy.data.collections['Left']
 
     # 将添加的鼠标监听删除
     global damo_mouse_listener
@@ -318,7 +343,7 @@ def backFromDamo():
         bpy.ops.object.mode_set(mode='OBJECT')
 
     # 获取网格数据
-    for obj in bpy.data.objects:
+    for obj in collections.objects:
         if obj.type == 'MESH':
             me = obj.data
             # 创建bmesh对象
@@ -351,23 +376,23 @@ def frontFromDamo():
         damo_mouse_listener.stop()
         damo_mouse_listener = None
 
-    name = bpy.context.scene.leftWindowObj
-    bpy.data.objects.remove(bpy.data.objects[name], do_unlink=True)
-    reset_name = name + "DamoReset"
-    ori_obj = bpy.data.objects[reset_name]
-    # 根据重置的物体复制出一份新的物体并替换原有的物体
-    duplicate_obj = ori_obj.copy()
-    duplicate_obj.data = ori_obj.data.copy()
-    duplicate_obj.name = name
-    duplicate_obj.animation_data_clear()
-    # 将复制的物体加入到场景集合中
-    scene = bpy.context.scene
-    scene.collection.objects.link(duplicate_obj)
-    if name == '右耳':
-        moveToRight(duplicate_obj)
-    elif name == '左耳':
-        moveToLeft(duplicate_obj)
-    duplicate_obj.hide_set(False)
+    # name = bpy.context.scene.leftWindowObj
+    # bpy.data.objects.remove(bpy.data.objects[name], do_unlink=True)
+    # reset_name = name + "DamoReset"
+    # ori_obj = bpy.data.objects[reset_name]
+    # # 根据重置的物体复制出一份新的物体并替换原有的物体
+    # duplicate_obj = ori_obj.copy()
+    # duplicate_obj.data = ori_obj.data.copy()
+    # duplicate_obj.name = name
+    # duplicate_obj.animation_data_clear()
+    # # 将复制的物体加入到场景集合中
+    # scene = bpy.context.scene
+    # scene.collection.objects.link(duplicate_obj)
+    # if name == '右耳':
+    #     moveToRight(duplicate_obj)
+    # elif name == '左耳':
+    #     moveToLeft(duplicate_obj)
+    # duplicate_obj.hide_set(False)
 
     if bpy.context.mode == 'SCULPT':
         bpy.ops.object.mode_set(mode='OBJECT')
@@ -456,7 +481,6 @@ class Thickening(bpy.types.Operator):
         smooth_modal_start = False
         global thinning_modal_start
         thinning_modal_start = False
-
         op_cls = Thickening
         bpy.context.scene.var = 1
         print("thicking_invoke")
@@ -489,7 +513,6 @@ class Thickening(bpy.types.Operator):
         op_cls.__flag = False
         op_cls.__is_changed = False
         # bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'
-        change_mat_mould(1)
         if not op_cls.__timer:
             op_cls.__timer = context.window_manager.event_timer_add(0.2, window=context.window)
 
@@ -1028,7 +1051,6 @@ class Thinning(bpy.types.Operator):
         op_cls.__flag = False
         op_cls.__is_changed = False
         # bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'
-        change_mat_mould(1)
         if not op_cls.__timer:
             op_cls.__timer = context.window_manager.event_timer_add(0.2, window=context.window)
 
@@ -1568,7 +1590,6 @@ class Smooth(bpy.types.Operator):
         op_cls.__flag = False
         op_cls.__is_changed = False
         # bpy.context.scene.tool_settings.unified_paint_settings.use_locked_size = 'SCENE'
-        change_mat_mould(1)
         if not op_cls.__timer:
             op_cls.__timer = context.window_manager.event_timer_add(0.2, window=context.window)
         global smooth_modal_start

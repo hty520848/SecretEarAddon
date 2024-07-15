@@ -5,13 +5,13 @@ from mathutils import Vector, Matrix
 import gpu
 from gpu_extras.batch import batch_for_shader
 from math import degrees, radians, sin, cos, pi
-from ...tool import delete_vert_group, laplacian_smooth
+from ..tool import delete_vert_group, laplacian_smooth
 import math
 
 
-class OffsetCut(bpy.types.Operator):
-    bl_idname = "hardeardrum.smooth"
-    bl_label = "Hardeardrum: Smooth"
+class StepSmooth(bpy.types.Operator):
+    bl_idname = "step.smooth"
+    bl_label = "Step: Smooth"
     bl_description = "description"
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -126,7 +126,7 @@ class OffsetCut(bpy.types.Operator):
 
         pipe_cut()
 
-        bpy.ops.mesh.select_all(action='DESELECT')
+        # bpy.ops.mesh.select_all(action='DESELECT')
 
         active = context.active_object
         bm = bmesh.from_edit_mesh(active.data)
@@ -134,8 +134,9 @@ class OffsetCut(bpy.types.Operator):
         face_layer = bm.faces.layers.int.get('OffsetCutFaces')
         vert_layer = bm.verts.layers.int.new('OffsetCutVerts')
 
-        merge_verts = []
-        junk_edges = []
+        # merge_verts = []
+        # junk_edges = []
+        # edges = []
 
         for pipe_idx, (coords, cyclic) in enumerate(pipes):
             faces = [f for f in bm.faces if f[face_layer] == pipe_idx + 1]
@@ -147,26 +148,24 @@ class OffsetCut(bpy.types.Operator):
             border_edges = {e for f in border_faces for e in f.edges}
             border_verts = {v for f in border_faces for v in f.verts}
 
-            sweeps, non_sweep_edges, has_caps = self.get_sorted_sweep_edges(len(coords), edges, edge_layer, pipe_idx)
+            select_vert(edges, edge_layer, pipe_idx, coords, border_verts, vert_layer)
 
-            end_rail_edges = self.set_end_sweeps(sweeps, border_verts, border_edges) if not cyclic and len(
-                sweeps) > 2 else set()
+            # sweeps, non_sweep_edges, has_caps = self.get_sorted_sweep_edges(len(coords), edges, edge_layer, pipe_idx)
 
-            junk = self.collect_junk_edges(non_sweep_edges, border_edges, border_verts, end_rail_edges)
-            junk_edges.extend(junk)
-            merge = self.recreate_hard_edges(sweeps, cyclic, coords, border_verts, self.override, vert_layer)
-            merge_verts.extend(merge)
+            # end_rail_edges = self.set_end_sweeps(sweeps, border_verts, border_edges) if not cyclic and len(
+            #     sweeps) > 2 else set()
 
-            self.mark_end_sweep_edges_sharp(self.mark_sharp, cyclic, has_caps, border_edges, merge_verts)
+            # junk = self.collect_junk_edges(non_sweep_edges, border_edges, border_verts, end_rail_edges)
+            # junk_edges.extend(junk)
 
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
-        bpy.ops.object.vertex_group_select()
+            # merge = self.recreate_hard_edges(sweeps, cyclic, coords, border_verts, self.override, vert_layer)
+            # merge_verts.extend(merge)
+
+            # self.mark_end_sweep_edges_sharp(self.mark_sharp, cyclic, has_caps, border_edges, merge_verts)
+
+        # 删除中间部分，区分上下边界
         bpy.ops.mesh.delete(type='FACE')
-        bpy.ops.object.vertex_group_select()
-        bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
-        bpy.ops.mesh.select_all(action='DESELECT')
-
+        bpy.ops.mesh.select_mode(type='VERT')
         get_outer_and_inner_vert_group()
 
         # 添加每个环的圆心
@@ -194,6 +193,7 @@ class OffsetCut(bpy.types.Operator):
         bpy.ops.object.vertex_group_assign()
 
         bridge_border(self.width, self.center_border_group_name)
+        # smooth_after_bevel()
         bm = bmesh.new()
         bm.from_mesh(active.data)
         bm.select_flush(True)
@@ -215,9 +215,6 @@ class OffsetCut(bpy.types.Operator):
         delete_vert_group("StepCutOuter")
         delete_vert_group(self.center_border_group_name)
         delete_vert_group("StepCutInner")
-        delete_vert_group("BevelSmooth")
-        delete_vert_group("BevelBorder")
-
 
         return {'FINISHED'}
 
@@ -980,6 +977,34 @@ def resample_coords(coords, cyclic, segments=None, shift=0, mx=None, debug=False
     return new_coords
 
 
+def select_vert(edges, layer, pipe_idx, coords, border_verts, vert_layer):
+    sweeps = [None] * len(coords)
+
+    for e in edges:
+        edge_string = e[layer].decode()
+
+        if edge_string:
+            edge_dict = eval(edge_string)
+
+            sweep_idx = edge_dict.get(pipe_idx)
+
+            sweep = sweeps[sweep_idx]
+
+            if sweep:
+                sweeps[sweep_idx].append(e)
+
+            else:
+                sweeps[sweep_idx] = [e]
+
+    for idx, (sweep, co) in enumerate(zip(sweeps, coords)):
+        if sweep:
+            sweep_verts = {v for e in sweep for v in e.verts}
+
+            for v in sweep_verts:
+                if v in border_verts:
+                    v[vert_layer] = idx + 1
+
+
 def pipe_cut():
     # 分离出管道
     bpy.ops.mesh.separate(type='SELECTED')
@@ -1003,7 +1028,7 @@ def pipe_cut():
     bpy.ops.mesh.select_interior_faces()
     bpy.ops.mesh.select_mode(type='FACE')
     bpy.ops.mesh.delete(type='FACE')
-    bpy.ops.mesh.select_mode(type='VERT')
+    # bpy.ops.mesh.select_mode(type='VERT')
     bpy.ops.mesh.select_all(action='SELECT')
 
     # 切割
@@ -1091,7 +1116,6 @@ def bridge_border(width, center_border_group_name):
             v_layer_value_set.add(v.index)
             v_index_layer_value_dict[v_layer_value] = v_layer_value_set
 
-
     # 区分上下边界index
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
@@ -1127,8 +1151,17 @@ def bridge_border(width, center_border_group_name):
     bpy.ops.object.vertex_group_select()
     # 进行倒角
     bpy.ops.mesh.bevel(offset=width * 0.8, segments=int(width / 0.1))
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def smooth_after_bevel():
+    main_obj = bpy.context.active_object
+    bpy.ops.object.mode_set(mode='EDIT')
     # 细分
-    bpy.ops.mesh.subdivide(number_cuts=2)
+    bpy.ops.mesh.subdivide(number_cuts=1)
     # 新建顶点组
     main_obj.vertex_groups.new(name="BevelSmooth")
     bpy.ops.object.vertex_group_assign()
@@ -1156,39 +1189,20 @@ def bridge_border(width, center_border_group_name):
     bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
 
-    # 获取StepCutOuter和StepCutInner顶点index用于平滑
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
-    bpy.ops.object.vertex_group_select()
-    bpy.ops.mesh.select_more()
-    bpy.ops.mesh.select_more()
-    bpy.ops.object.vertex_group_set_active(group='BevelSmooth')
-    bpy.ops.object.vertex_group_deselect()
-    bpy.ops.object.vertex_group_set_active(group='StepCutInner')
-    bpy.ops.object.vertex_group_select()
-    bm = bmesh.from_edit_mesh(main_obj.data)
-    smooth_index = [v.index for v in bm.verts if v.select]
-    bpy.ops.mesh.select_all(action='DESELECT')
-
-
-    bpy.ops.object.mode_set(mode='OBJECT')
-
-    # 对切割边界进行平滑
-    laplacian_smooth(smooth_index, 0.5, 10)
     # 平滑矢量来光滑倒角边缘
-    bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.vertex_group_set_active(group='BevelSmooth')
     bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.smooth_normals(factor=1)
     bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.mesh.mark_sharp(clear=True)
-    bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.mode_set(mode='OBJECT')
-    bpy.ops.object.shade_smooth(auto_smooth_angle=3.14159)
+    delete_vert_group("BevelSmooth")
+    delete_vert_group("BevelBorder")
 
 
-def filter_error_data(v_index_layer_value_dict, outer_border_index_set, inner_border_index_set, center_border_index_set):
+def filter_error_data(v_index_layer_value_dict, outer_border_index_set, inner_border_index_set,
+                      center_border_index_set):
     for key in range(1, len(v_index_layer_value_dict) + 1):
         layer_value_set = v_index_layer_value_dict[key]
         if len(layer_value_set) != 3:
@@ -1328,8 +1342,10 @@ def resample_mesh(obj, resample_num):
 
     bpy.data.node_groups.remove(node_tree)
 
+
 def register():
-    bpy.utils.register_class(OffsetCut)
+    bpy.utils.register_class(StepSmooth)
+
 
 def unregister():
-    bpy.utils.unregister_class(OffsetCut)
+    bpy.utils.unregister_class(StepSmooth)

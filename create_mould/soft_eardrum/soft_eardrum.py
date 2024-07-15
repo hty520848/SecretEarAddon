@@ -65,7 +65,7 @@ class TimerSoftEarDrumThicknessUpdate(bpy.types.Operator):
         global thickness_update
         global mouse_listener
         #处于创建磨具的软而莫从时,该modal才运行,否则退出
-        if (mould_type == "OP1" and bpy.context.screen.areas[1].spaces.active.context == 'SCENE'):
+        if (mould_type == "OP1" and bpy.context.screen.areas[0].spaces.active.context == 'SCENE'):
             if (thickness_update == True):
                 thickness_update = False
                 try:

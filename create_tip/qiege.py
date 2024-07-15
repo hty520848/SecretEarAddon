@@ -7,7 +7,7 @@ from mathutils import Vector
 from bpy.types import WorkSpaceTool
 from ..tool import moveToRight, moveToLeft, newMaterial, getOverride2, is_mouse_on_object, \
     is_mouse_on_which_object, is_changed_stepcut, get_cast_index, get_region_and_space, utils_re_color, \
-    set_vert_group, delete_vert_group
+    set_vert_group, delete_vert_group, apply_material
 import math
 from math import *
 from pynput import mouse
@@ -19,6 +19,7 @@ zmax = 0  # 物体z坐标的最大值，用于初始化
 zmin = 0  # 物体z坐标的最小值，用于初始化
 
 ############ 环切用到的全局变量 ############
+# todo:左右耳适配
 old_radius = 8.0
 now_radius = 0
 scale_ratio = 1
@@ -358,7 +359,7 @@ def apply_circle_cut(obj_name):
             # bpy.ops.mesh.region_to_loop()
             # bpy.ops.object.vertex_group_assign()
             bpy.ops.object.mode_set(mode='OBJECT')
-            utils_re_color(operator_obj, (1, 0.319, 0.133))
+            # utils_re_color(operator_obj, (1, 0.319, 0.133))
             bpy.ops.object.select_all(action='DESELECT')
             bpy.context.view_layer.objects.active = obj_circle
             obj_circle.select_set(True)
@@ -516,14 +517,14 @@ def smooth_circlecut(obj_name, pianyi):
         bpy.ops.mesh.select_mode(type='EDGE')
         bpy.ops.mesh.region_to_loop()
         if pianyi > 0:
-            bpy.ops.qiege.smooth(width=pianyi, center_border_group_name='CircleCutBorderVertex',
+            bpy.ops.circle.smooth(width=pianyi, center_border_group_name='CircleCutBorderVertex',
                              max_smooth_width=3)
         else:
             bpy.ops.mesh.select_mode(type='VERT')
         bpy.data.objects.remove(bpy.data.objects[obj_name], do_unlink=True)
         duplicate_obj.name = obj_name
         bpy.ops.object.mode_set(mode='OBJECT')
-        utils_re_color(operator_obj, (1, 0.319, 0.133))
+        # utils_re_color(operator_obj, (1, 0.319, 0.133))
 
     except:
         print('平滑失败')
@@ -606,7 +607,7 @@ def apply_stepcut(obj_name):
     duplicate_obj.vertex_groups.new(name="StepCutBorderVertex")
     bpy.ops.object.vertex_group_assign()
     bpy.ops.object.mode_set(mode='OBJECT')
-    utils_re_color(duplicate_obj, (1, 0.319, 0.133))
+    # utils_re_color(duplicate_obj, (1, 0.319, 0.133))
 
     # bpy.ops.mesh.separate(type='SELECTED')
     # for obj in bpy.data.objects:
@@ -672,13 +673,13 @@ def smooth_stepcut(obj_name, pianyi):
         bpy.ops.mesh.select_mode(type='EDGE')
         bpy.ops.mesh.region_to_loop()
         if pianyi > 0:
-            bpy.ops.hardeardrum.smooth(width=pianyi, center_border_group_name='StepCutBorderVertex')
+            bpy.ops.step.smooth(width=pianyi, center_border_group_name='StepCutBorderVertex')
         else:
             bpy.ops.mesh.select_mode(type='VERT')
         bpy.data.objects.remove(bpy.data.objects[obj_name], do_unlink=True)
         duplicate_obj.name = obj_name
         bpy.ops.object.mode_set(mode='OBJECT')
-        utils_re_color(duplicate_obj, (1, 0.319, 0.133))
+        # utils_re_color(duplicate_obj, (1, 0.319, 0.133))
 
     except:
         if bpy.data.objects.get(obj_name + 'forresetcopy'):
@@ -867,8 +868,7 @@ def initCircle(obj_name):
 
     # obj_main.data.materials.clear()
     # newColor('yellow', 1.0, 0.319, 0.133, 0, 1)
-    obj_main.data.materials.clear()
-    obj_main.data.materials.append(bpy.data.materials['Yellow'])
+    apply_material()
     newColor('yellow2', 1.0, 0.319, 0.133, 1, 0.5)
     obj_compare = bpy.data.objects[obj_name + 'huanqiecompare']
     obj_compare.data.materials.clear()
@@ -1148,14 +1148,14 @@ def update_plane(obj_name):
 
     mesh.verts.ensure_lookup_table()
     dis = (mesh.verts[1].co - mesh.verts[2].co).normalized()
-    mesh.verts[1].co += dis * 5
-    mesh.verts[2].co -= dis * 5
+    mesh.verts[1].co += dis * 20
+    mesh.verts[2].co -= dis * 20
     dis2 = (mesh.verts[0].co - (mesh.verts[1].co +
                                 mesh.verts[2].co) / 2).normalized()
-    mesh.verts[0].co += dis2 * 5
+    mesh.verts[0].co += dis2 * 20
     dis3 = (mesh.verts[3].co - (mesh.verts[1].co +
                                 mesh.verts[2].co) / 2).normalized()
-    mesh.verts[3].co += dis3 * 5
+    mesh.verts[3].co += dis3 * 20
 
     # 更新网格数据
     mesh.to_mesh(bm)
@@ -1274,8 +1274,7 @@ def initPlane(obj_name):
     # newColor('yellow', 1.0, 0.319, 0.133, 0, 1)
     newColor('yellow2', 1.0, 0.319, 0.133, 1, 0.5)
 
-    bpy.data.objects[obj_name].data.materials.clear()
-    bpy.data.objects[obj_name].data.materials.append(bpy.data.materials['Yellow'])
+    apply_material()
     bpy.data.objects[obj_name + 'ceqieCompare'].data.materials.clear()
     bpy.data.objects[obj_name + 'ceqieCompare'].data.materials.append(
         bpy.data.materials['yellow2'])
@@ -1936,16 +1935,12 @@ class Step_Cut(bpy.types.Operator):
         Step_Cut.__smooth = False
         Step_Cut.__left_mouse_press = False
         bpy.context.view_layer.objects.active = bpy.data.objects["右耳"]
-        bpy.context.object.data.use_auto_smooth = True
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         update_plane(operator_obj)
         apply_stepcut(operator_obj)
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
-
-        if context.area:
-            context.area.tag_redraw()
 
         global qiegeenum
         global finish
@@ -1992,6 +1987,7 @@ class Step_Cut(bpy.types.Operator):
                     if Step_Cut.__mouse_listener:
                         # 关闭监听器
                         Step_Cut.__mouse_listener.stop()
+                        Step_Cut.__mouse_listener = None
                     return {'FINISHED'}
 
                 elif (is_changed_stepcut(operator_obj, context, event) and not self.__left_mouse_press):
@@ -2066,8 +2062,7 @@ class Finish_Cut(bpy.types.Operator):
             obj = bpy.data.objects[operator_obj]
             bpy.context.view_layer.objects.active = obj
             utils_re_color(operator_obj, (1, 0.319, 0.133))
-            obj.data.materials.clear()
-            obj.data.materials.append(bpy.data.materials['Yellow'])
+            apply_material()
             delete_vert_group("CircleCutBorderVertex")
 
         if (qiegeenum == 2):
@@ -2113,8 +2108,7 @@ class Finish_Cut(bpy.types.Operator):
             obj.vertex_groups.remove(step_cut_vertex_group)
         bpy.context.view_layer.objects.active = obj
         utils_re_color(operator_obj, (1, 0.319, 0.133))
-        obj.data.materials.clear()
-        obj.data.materials.append(bpy.data.materials['Yellow'])
+        apply_material()
 
         return {'FINISHED'}
 
@@ -2396,13 +2390,11 @@ def frontFromQieGe():
     if enum == "OP1":
         quitCut(name)
         utils_re_color(operator_obj, (1, 0.319, 0.133))
-        bpy.data.objects[operator_obj].data.materials.clear()
-        bpy.data.objects[operator_obj].data.materials.append(bpy.data.materials['Yellow'])
+        apply_material()
     if enum == "OP2":
         quitStepCut(name)
         utils_re_color(operator_obj, (1, 0.319, 0.133))
-        bpy.data.objects[operator_obj].data.materials.clear()
-        bpy.data.objects[operator_obj].data.materials.append(bpy.data.materials['Yellow'])
+        apply_material()
     # 将切割模式中运行的Model退出
     qiegeenum = 0
 
@@ -2498,9 +2490,15 @@ def backToQieGe():
     hard_support_compare_obj = bpy.data.objects.get(name + "ConeCompare")
     if (hard_support_compare_obj != None):
         bpy.data.objects.remove(hard_support_compare_obj, do_unlink=True)
-    sprue_compare_obj = bpy.data.objects.get(name + "SprueCompare")
-    if (sprue_compare_obj != None):
-        bpy.data.objects.remove(sprue_compare_obj, do_unlink=True)
+    for obj in bpy.data.objects:
+        if (name == "右耳"):
+            pattern = r'右耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
+        elif (name == "左耳"):
+            pattern = r'左耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
 
     # 根据切割中保存的物体,将其复制一份替换当前激活物体
     name = bpy.context.scene.leftWindowObj

@@ -3,7 +3,8 @@ import bmesh
 import re
 
 from ..utils.utils import *
-from ..tool import moveToRight,moveToLeft, initialTransparency, newColor, is_on_object, extrude_border_by_vertex_groups
+from ..tool import moveToRight, moveToLeft, initialTransparency, newColor, is_on_object, \
+    extrude_border_by_vertex_groups, apply_material
 from .frame_style_eardrum.frame_style_eardrum import apply_frame_style_eardrum_template
 from .soft_eardrum.soft_eardrum import apply_soft_eardrum_template
 from .soft_eardrum.soft_eardrum import soft_eardrum_smooth_submit
@@ -70,8 +71,7 @@ def frontToCreateMould():
         moveToRight(duplicate_obj1)
     elif name == '左耳':
         moveToLeft(duplicate_obj1)
-    obj.data.materials.clear()
-    obj.data.materials.append(bpy.data.materials['Yellow'])
+    apply_material()
 
     global is_init_finish
     global is_init_finishL
@@ -221,9 +221,15 @@ def backToCreateMould():
     hard_support_compare_obj = bpy.data.objects.get(name + "ConeCompare")
     if (hard_support_compare_obj != None):
         bpy.data.objects.remove(hard_support_compare_obj, do_unlink=True)
-    sprue_compare_obj = bpy.data.objects.get(name + "SprueCompare")
-    if (sprue_compare_obj != None):
-        bpy.data.objects.remove(sprue_compare_obj, do_unlink=True)
+    for obj in bpy.data.objects:
+        if (name == "右耳"):
+            pattern = r'右耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
+        elif (name == "左耳"):
+            pattern = r'左耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
 
 
     # 先判断是否存在MouldReset                                            #TODO   使用MouldReset恢复为CreateMould模块执行后的最初状态,之后再初始化
@@ -254,8 +260,7 @@ def backToCreateMould():
             moveToLeft(duplicate_obj)
         duplicate_obj.select_set(True)
         bpy.context.view_layer.objects.active = duplicate_obj
-        duplicate_obj.data.materials.clear()
-        duplicate_obj.data.materials.append(bpy.data.materials['Yellow'])
+        apply_material()
 
         if (name == "右耳"):
             is_init_finish = False
@@ -306,8 +311,7 @@ def backToCreateMould():
             moveToLeft(duplicate_obj)
         duplicate_obj.select_set(True)
         bpy.context.view_layer.objects.active = duplicate_obj
-        duplicate_obj.data.materials.clear()
-        duplicate_obj.data.materials.append(bpy.data.materials['Yellow'])
+        apply_material()
 
         if (name == "右耳"):
             is_init_finish = False
@@ -565,7 +569,7 @@ class CreateMould(bpy.types.Operator):
     def modal(self, context, event):
         # 主窗口物体
         name = bpy.context.scene.leftWindowObj
-        if bpy.context.screen.areas[1].spaces.active.context == 'SCENE':
+        if bpy.context.screen.areas[0].spaces.active.context == 'SCENE':
             if is_on_object(name+'MouldReset', context, event):
                 bpy.data.objects[name+"MouldReset"].hide_set(False)
             else:
@@ -779,7 +783,7 @@ class CreateMouldFill(bpy.types.Operator): # 这里填充
                     bpy.ops.object.mode_set(mode='EDIT')
                     bpy.ops.mesh.select_mode(type='VERT')
                     bpy.ops.object.mode_set(mode='OBJECT')
-                if mould_type == "OP2":
+                if mould_type == "OP1":
                     reset_to_after_cut()
                     bpy.ops.object.mode_set(mode='EDIT')
                     bpy.ops.mesh.select_mode(type='VERT')

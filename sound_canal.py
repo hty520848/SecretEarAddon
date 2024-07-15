@@ -7,7 +7,7 @@ from bpy_extras import view3d_utils
 from math import sqrt
 from pynput import mouse
 from .tool import newShader, get_region_and_space, moveToRight, moveToLeft, utils_re_color, delete_useless_object, \
-    newColor, getOverride, getOverride2
+    newColor, getOverride, getOverride2, apply_material
 import re
 import os
 
@@ -68,17 +68,13 @@ def set_is_on_rotate(value):
 
 
 def initialTransparency():
-    mat = newShader("Transparency")  # 创建材质
+    mat = newColor("Transparency", 1, 0.319, 0.133, 1, 0.4)  # 创建材质
     mat.use_backface_culling = True
-    mat.blend_method = "BLEND"
-    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.4
 
 
 def initialSoundcanalTransparency():
-    mat = newShader("SoundcanalTransparency")  # 创建材质
+    mat = newColor("SoundcanalTransparency", 1, 0.319, 0.133, 1, 0.01)  # 创建材质
     mat.use_backface_culling = True
-    mat.blend_method = "BLEND"
-    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.01
 
 
 def get_object_dic_index():
@@ -585,7 +581,7 @@ def convert_soundcanal():
     elif name == '左耳':
         bevel_depth = bpy.context.scene.chuanShenGuanDaoZhiJing_L / 2
     bpy.context.active_object.data.bevel_depth = bevel_depth  # 设置曲线倒角深度
-    bpy.context.active_object.data.bevel_resolution = 16
+    bpy.context.active_object.data.bevel_resolution = 8  # 管道分辨率
     bpy.context.active_object.data.use_fill_caps = True  # 封盖
     bpy.ops.object.convert(target='MESH')  # 转化为网格
     duplicate_obj.hide_select = True
@@ -671,7 +667,6 @@ def mouse_switch(context, event):
             sphere_number = on_which_shpere(context, event)
             if (sphere_number == 200 and mouse_index != 1):
                 mouse_index = 1
-                # update_hornpipe_rotate_finish()  # TODO
                 # 号角管显示圆球颜色设置为红色
                 sphere_name = name + 'soundcanalsphere' + '101'
                 hornpipe_sphere_obj = bpy.data.objects.get(sphere_name)
@@ -688,7 +683,6 @@ def mouse_switch(context, event):
                 bpy.context.view_layer.objects.active = hornpipe_obj
             elif (sphere_number == 0 and mouse_index != 2):
                 mouse_index = 2
-                # update_hornpipe_rotate_finish()  # TODO
                 # 号角管显示圆球颜色设置为红色
                 sphere_name = name + 'soundcanalsphere' + '101'
                 hornpipe_sphere_obj = bpy.data.objects.get(sphere_name)
@@ -706,7 +700,6 @@ def mouse_switch(context, event):
                 bpy.ops.wm.tool_set_by_id(name="my_tool.addsoundcanal2")
             elif (sphere_number != 200 and sphere_number != 0 and mouse_index != 3):
                 mouse_index = 3
-                # update_hornpipe_rotate_finish()  # TODO
                 # 激活号角管圆球的时,号角管显示圆球颜色设置为黄色
                 if (sphere_number == 100 or sphere_number == 101):
                     newColor('yellow', 1, 1, 0, 1, 0.8)
@@ -729,7 +722,6 @@ def mouse_switch(context, event):
             sphere_number = on_which_shpere(context, event)
             if (sphere_number == 200 and mouse_indexL != 1):
                 mouse_indexL = 1
-                # update_hornpipe_rotate_finish()  # TODO
                 # 号角管显示圆球颜色设置为红色
                 sphere_name = name + 'soundcanalsphere' + '101'
                 hornpipe_sphere_obj = bpy.data.objects.get(sphere_name)
@@ -746,7 +738,6 @@ def mouse_switch(context, event):
                 bpy.context.view_layer.objects.active = hornpipe_obj
             elif (sphere_number == 0 and mouse_indexL != 2):
                 mouse_indexL = 2
-                # update_hornpipe_rotate_finish()  # TODO
                 # 号角管显示圆球颜色设置为红色
                 sphere_name = name + 'soundcanalsphere' + '101'
                 hornpipe_sphere_obj = bpy.data.objects.get(sphere_name)
@@ -764,7 +755,6 @@ def mouse_switch(context, event):
                 bpy.ops.wm.tool_set_by_id(name="my_tool.addsoundcanal2")
             elif (sphere_number != 200 and sphere_number != 0 and mouse_indexL != 3):
                 mouse_indexL = 3
-                # update_hornpipe_rotate_finish()  # TODO
                 # 激活号角管圆球时,号角管显示圆球颜色设置为黄色
                 if (sphere_number == 100 or sphere_number == 101):
                     newColor('yellow', 1, 1, 0, 1, 0.8)
@@ -783,13 +773,12 @@ def mouse_switch(context, event):
                 sphere_obj.select_set(True)
                 bpy.context.view_layer.objects.active = sphere_obj
                 bpy.ops.wm.tool_set_by_id(name="my_tool.addsoundcanal3")
-    elif (is_on_rotate_cur):  # TODO    调整三维旋转状态下的鼠标切换
+    elif (is_on_rotate_cur):
         if (name == '右耳'):
             if (is_mouse_on_sphere(context, event) and mouse_index != 4):
                 mouse_index = 4
                 print("鼠标行为1")
                 # 切换到三维旋转的模式
-                # update_hornpipe_rotate_initial()  # TODO
                 plane_name = name + 'HornpipePlane'
                 plane_obj = bpy.data.objects.get(plane_name)
                 bpy.ops.object.select_all(action='DESELECT')
@@ -806,10 +795,9 @@ def mouse_switch(context, event):
                 bpy.data.objects[name].select_set(True)
                 bpy.ops.wm.tool_set_by_id(name="my_tool.addsoundcanal2")
         elif (name == '左耳'):
-            if (is_mouse_on_sphere(context, event) and mouse_index != 4):
+            if (is_mouse_on_sphere(context, event) and mouse_indexL != 4):
                 mouse_indexL = 4
                 # 切换到三维旋转的模式
-                # update_hornpipe_rotate_initial()  # TODO
                 plane_name = name + 'HornpipePlane'
                 plane_obj = bpy.data.objects.get(plane_name)
                 bpy.ops.object.select_all(action='DESELECT')
@@ -817,7 +805,7 @@ def mouse_switch(context, event):
                 bpy.context.view_layer.objects.active = plane_obj
                 bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
                 bpy.context.scene.transform_orientation_slots[2].type = 'NORMAL'
-            elif (not is_mouse_on_sphere(context, event) and mouse_index != 5):
+            elif (not is_mouse_on_sphere(context, event) and mouse_indexL != 5):
                 mouse_indexL = 5
                 # 鼠标不在圆球上的时候，调用传声孔的鼠标行为,公共鼠标行为 双击添加圆球
                 bpy.ops.object.select_all(action='DESELECT')
@@ -1137,12 +1125,12 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
                     dis = math.sqrt(math.fabs(self.__mouse_x - mouse_x) ** 2 + math.fabs(
                         self.__mouse_y - mouse_y) ** 2)
 
-                    # TODO： 距离（dis)的调整
-                    if not self.__start_update and  self.__left_mouse_press == True and dis > 5:
+                    # TODO： 距离(dis)参数的调整
+                    if not self.__start_update and self.__left_mouse_press == True and dis > 5:
                         self.__start_update = True
 
                     if (event.type == 'TIMER' and self.__left_mouse_press == True and self.__start_update and dis > 1):
-                        update_hornpipe_rotate()  # TODO     三维鼠标旋转状态下实时更新管道
+                        update_hornpipe_rotate()
 
                     return {'PASS_THROUGH'}
 
@@ -1318,15 +1306,6 @@ class TEST_OT_soundcanalrotate(bpy.types.Operator):
         sphere_obj = bpy.data.objects.get(spherename)
         if (plane_obj != None and sphere_obj != None):
             print("三维鼠标旋转按钮")
-            # # 切换到三维旋转的模式
-            # update_hornpipe_rotate_initial()
-            # # 鼠标位于号角管上的时候,调用左键旋转的鼠标行为
-            # plane_name = name + 'HornpipePlane'
-            # plane_obj = bpy.data.objects.get(plane_name)
-            # bpy.ops.object.select_all(action='DESELECT')
-            # plane_obj.select_set(True)
-            # bpy.context.view_layer.objects.active = plane_obj
-            # bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
             if (name == '右耳'):
                 is_on_rotate = not is_on_rotate
                 if (is_on_rotate == True):
@@ -1372,7 +1351,7 @@ def new_curve(curve_name):
         bevel_depth = bpy.context.scene.chuanShenGuanDaoZhiJing_L / 2
         moveToLeft(obj)
     obj.data.bevel_depth = bevel_depth  # 管道孔径
-    obj.data.bevel_resolution = 16
+    obj.data.bevel_resolution = 8  # 管道分辨率
     obj.data.use_fill_caps = True  # 封盖
     return obj
 
@@ -2491,8 +2470,7 @@ def submit_soundcanal():
             for key in object_dic:
                 need_to_delete_model_name_list.append(key)
             delete_useless_object(need_to_delete_model_name_list)
-            bpy.context.active_object.data.materials.clear()
-            bpy.context.active_object.data.materials.append(bpy.data.materials['Yellow'])
+            apply_material()
             utils_re_color(name, (1, 0.319, 0.133))
             bpy.context.active_object.data.use_auto_smooth = True
             bpy.context.object.data.auto_smooth_angle = 0.9
@@ -2523,8 +2501,7 @@ def submit_soundcanal():
             for key in object_dicL:
                 need_to_delete_model_name_list.append(key)
             delete_useless_object(need_to_delete_model_name_list)
-            bpy.context.active_object.data.materials.clear()
-            bpy.context.active_object.data.materials.append(bpy.data.materials['Yellow'])
+            apply_material()
             utils_re_color(name, (1, 0.319, 0.133))
             bpy.context.active_object.data.use_auto_smooth = True
             bpy.context.object.data.auto_smooth_angle = 0.9
@@ -2729,9 +2706,15 @@ def backToSoundCanal():
     hard_support_compare_obj = bpy.data.objects.get(name + "ConeCompare")
     if (hard_support_compare_obj != None):
         bpy.data.objects.remove(hard_support_compare_obj, do_unlink=True)
-    sprue_compare_obj = bpy.data.objects.get(name + "SprueCompare")
-    if (sprue_compare_obj != None):
-        bpy.data.objects.remove(sprue_compare_obj, do_unlink=True)
+    for obj in bpy.data.objects:
+        if (name == "右耳"):
+            pattern = r'右耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
+        elif (name == "左耳"):
+            pattern = r'左耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
 
     # 主窗口物体
     name = bpy.context.scene.leftWindowObj

@@ -40,9 +40,9 @@ del stdout
 
 # if (workspace != prev_workspace):
 #     if context.scene.leftWindowObj == "右耳":
-#         bpy.context.screen.areas[1].spaces.active.context = prev_properties_context_right
+#         bpy.context.screen.areas[0].spaces.active.context = prev_properties_context_right
 #     else:
-#         bpy.context.screen.areas[1].spaces.active.context = prev_properties_context_left
+#         bpy.context.screen.areas[0].spaces.active.context = prev_properties_context_left
 
 
 bool_modifier2 = object.modifiers.new(
@@ -988,3 +988,36 @@ def handle_depsgraph_update_post(scene):
 
 # 注册事件处理程序
 bpy.app.handlers.depsgraph_update_post.append(handle_depsgraph_update_post)
+
+ori_obj = '右耳'
+tar_obj = '左耳'
+curve_obj = bpy.data.objects[ori_obj + 'LocalThickAreaClassificationBorder']
+new_curve = bpy.data.curves.new(tar_obj + 'LocalThickAreaClassificationBorder', 'CURVE')
+new_curve.dimensions = '3D'
+new_obj = bpy.data.objects.new(tar_obj + 'LocalThickAreaClassificationBorder', new_curve)
+new_curve.splines.clear()
+for spline in curve_obj.data.splines:
+    new_spline = new_curve.splines.new(spline.type)
+    new_spline.points.add(len(spline.points) - 1)
+    new_spline.use_cyclic_u = True
+    for i, point in enumerate(spline.points):
+        new_spline.points[i].co = [point.co[0], -point.co[1], point.co[2], 1]
+
+# 平滑
+bpy.context.view_layer.objects.active = new_obj
+bpy.ops.object.mode_set(mode='EDIT')
+for i in range(10):
+    bpy.ops.curve.smooth()
+bpy.ops.object.mode_set(mode='OBJECT')
+
+# 吸附
+for spline in new_obj.data.splines:
+    for point in enumerate(spline.points):
+        _, closest_co, _, _ = bpy.data.objects[tar_obj].closest_point_on_mesh(
+            mathutils.Vector(point.co[0:3]))
+        point.co[0:3] = closest_co
+
+new_obj.data.bevel_depth = 0.1
+new_obj.data.bevel_resolution = 10
+newColor('localthick_border_red', 1, 0, 0, 0, 1)
+new_obj.data.materials.append(bpy.data.materials["localthick_border_red"])

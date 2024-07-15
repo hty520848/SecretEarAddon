@@ -22,15 +22,31 @@ label_info_save = []    #保存已经提交过的label信息,用于模块切换�
 label_info_saveL = []
 
 
+def newColor(id, r, g, b, is_transparency, transparency_degree):
+    mat = newMaterial(id)
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    output = nodes.new(type='ShaderNodeOutputMaterial')
+    shader = nodes.new(type='ShaderNodeBsdfPrincipled')
+    shader.inputs[0].default_value = (r, g, b, 1)
+    links.new(shader.outputs[0], output.inputs[0])
+    if is_transparency:
+        mat.blend_method = "BLEND"
+        shader.inputs[21].default_value = transparency_degree
+    return mat
+
+
 def initialTransparency():
-    mat = newShader("Transparency")  # 创建材质
-    mat.blend_method = "BLEND"
-    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.3
+    newColor("Transparency", 1, 0.319, 0.133, 1, 0.3)  # 创建材质
+    # mat = newShader("Transparency")  # 创建材质
+    # mat.blend_method = "BLEND"
+    # mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.3
 
 def initialLabelTransparency():
-    mat = newShader("LabelTransparency")  # 创建材质
-    mat.blend_method = "BLEND"
-    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.01
+    newColor("LabelTransparency", 1, 0.319, 0.133, 1, 0.01)  # 创建材质
+    # mat = newShader("LabelTransparency")  # 创建材质
+    # mat.blend_method = "BLEND"
+    # mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.01
 
 
 # 判断鼠标是否在物体上,字体
@@ -401,10 +417,12 @@ def frontFromLabel():
     labelSubmit()
 
     #将用于铸造法的立方体删除
-    name = bpy.context.scene.leftWindowObj
-    label_for_casting_obj = bpy.data.objects.get(name + "LabelPlaneForCasting")     #TODO 正则匹配
-    if(label_for_casting_obj != None):
-        bpy.data.objects.remove(label_for_casting_obj, do_unlink=True)
+    for obj in bpy.data.objects:
+        patternR = r'右耳LabelPlaneForCasting'
+        patternL = r'左耳LabelPlaneForCasting'
+        if re.match(patternR, obj.name) or re.match(patternL, obj.name):
+            label_obj = obj
+            bpy.data.objects.remove(label_obj, do_unlink=True)
 
     #将右耳还原
     name = bpy.context.scene.leftWindowObj
@@ -433,11 +451,11 @@ def frontFromLabel():
     if name == '右耳':
         for i in range(len(label_info_save)):
             label_info = label_info_save[i]
-            print(label_info.text)
+            print(label_info.style)
     elif name == '左耳':
         for i in range(len(label_info_saveL)):
             label_info = label_info_saveL[i]
-            print(label_info.text)
+            print(label_info.style)
 
     #调用公共鼠标行为
     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
@@ -452,7 +470,7 @@ def frontFromLabel():
 
 def backToLabel():
     # 判断是否存在LabelReset
-    # 若没有LabelReset,则说明跳过了Label模块,再直接由后面的模块返回该模块。   TODO  根据切割操作的最后状态复制出LabelReset和LabelLast
+    # 若没有LabelReset,则说明跳过了Label模块,再直接由后面的模块返回该模块。
     # 若存在LabelReset,则直接将LabelReset复制一份用于替换当前操作物体
 
     # 若添加铸造法之后切换到支撑或者排气孔模块,再由支撑或排气孔模块跳过铸造法模块直接切换回前面的模块,则需要对物体进行特殊的处理
@@ -471,12 +489,14 @@ def backToLabel():
             bpy.data.objects.remove(casting_last_obj, do_unlink=True)
             bpy.data.objects.remove(casting_compare_last_obj, do_unlink=True)
 
-    #铸造法相关,删除用于铸造法的立方体
     # 将用于铸造法的立方体删除
     name = bpy.context.scene.leftWindowObj
-    label_for_casting_obj = bpy.data.objects.get(name + "LabelPlaneForCasting")  # TODO 正则匹配
-    if (label_for_casting_obj != None):
-        bpy.data.objects.remove(label_for_casting_obj, do_unlink=True)
+    for obj in bpy.data.objects:
+        patternR = r'右耳LabelPlaneForCasting'
+        patternL = r'左耳LabelPlaneForCasting'
+        if re.match(patternR, obj.name) or re.match(patternL, obj.name):
+            label_obj = obj
+            bpy.data.objects.remove(label_obj, do_unlink=True)
 
     # 将后续模块中的reset和last都删除
     casting_reset = bpy.data.objects.get(name + "CastingReset")
@@ -505,9 +525,15 @@ def backToLabel():
     hard_support_compare_obj = bpy.data.objects.get(name + "ConeCompare")
     if (hard_support_compare_obj != None):
         bpy.data.objects.remove(hard_support_compare_obj, do_unlink=True)
-    sprue_compare_obj = bpy.data.objects.get(name + "SprueCompare")
-    if (sprue_compare_obj != None):
-        bpy.data.objects.remove(sprue_compare_obj, do_unlink=True)
+    for obj in bpy.data.objects:
+        if (name == "右耳"):
+            pattern = r'右耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
+        elif (name == "左耳"):
+            pattern = r'左耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
 
 
     exist_LabelReset = False
@@ -648,7 +674,6 @@ def backFromLabel():
     # 将提交之后的模型保存LabelLast,用于模块切换,若存在LabelLast,则先将其删除
 
     #将模型提交
-    saveLabelPlaneForCasting()
     labelSubmit()
 
     name = bpy.context.scene.leftWindowObj
@@ -679,8 +704,10 @@ def backFromLabel():
     cur_obj.select_set(True)
     bpy.context.view_layer.objects.active = cur_obj
 
-#在label提交前会保存label的相关信息
 def saveInfo():
+    '''
+    #在label提交前会保存label的相关信息
+    '''
     global label_info_save
     global label_info_saveL
 
@@ -719,6 +746,9 @@ def saveInfo():
 
 
 def initial():
+    ''''
+    切换到字体模块的时候,根据之前保存的字体信息进行初始化,恢复之前添加的字体状态
+    '''
     global label_info_save
     global label_info_saveL
     name = bpy.context.scene.leftWindowObj
@@ -731,7 +761,6 @@ def initial():
                 depth = labelInfo.depth
                 size = labelInfo.size
                 style = labelInfo.style
-                print(style)
                 l_x = labelInfo.l_x
                 l_y = labelInfo.l_y
                 l_z = labelInfo.l_z
@@ -753,8 +782,9 @@ def initial():
             r_z = labelInfo.r_z
             # 先根据text信息添加一个label,激活鼠标行为
             bpy.ops.object.labeladd('INVOKE_DEFAULT')
-            # 更新label的text时,会将之前物体删除并将信息保存到label_info_save中,多余的信息需要删除
+            # 更新label的text
             bpy.context.scene.labelText = text
+            #新添加的最后一个字体并未提交,多余的信息需要删除
             label_info_save.pop()
             # 获取添加后的label,并根据参数设置其形状大小
             name = bpy.context.scene.leftWindowObj
@@ -770,7 +800,7 @@ def initial():
             plane_obj.rotation_euler[1] = r_y
             plane_obj.rotation_euler[2] = r_z
         else:
-            bpy.ops.wm.tool_set_by_id(name="my_tool.label_add")
+            bpy.ops.wm.tool_set_by_id(name="my_tool.label_initial")
     elif name == '左耳':
         if (len(label_info_saveL) > 0):
             for i in range(len(label_info_saveL) - 1):
@@ -779,7 +809,6 @@ def initial():
                 depth = labelInfo.depth
                 size = labelInfo.size
                 style = labelInfo.style
-                print(style)
                 l_x = labelInfo.l_x
                 l_y = labelInfo.l_y
                 l_z = labelInfo.l_z
@@ -801,8 +830,9 @@ def initial():
             r_z = labelInfo.r_z
             # 先根据text信息添加一个label,激活鼠标行为
             bpy.ops.object.labeladd('INVOKE_DEFAULT')
-            # 更新label的text时,会将之前物体删除并将信息保存到label_info_saveL中,多余的信息需要删除
+            # 更新label的text
             bpy.context.scene.labelTextL = text
+            # 新添加的最后一个字体并未提交,多余的信息需要删除
             label_info_saveL.pop()
             # 获取添加后的label,并根据参数设置其形状大小
             name = bpy.context.scene.leftWindowObj
@@ -818,7 +848,7 @@ def initial():
             plane_obj.rotation_euler[1] = r_y
             plane_obj.rotation_euler[2] = r_z
         else:
-            bpy.ops.wm.tool_set_by_id(name="my_tool.label_add")
+            bpy.ops.wm.tool_set_by_id(name="my_tool.label_initial")
 
     # 将旋转中心设置为左右耳模型
     cur_obj = bpy.data.objects.get(name)
@@ -828,8 +858,11 @@ def initial():
 
 
 
-# 模块切换时,根据提交时保存的信息,添加label进行初始化,先根据信息添加label,之后再将label提交。与submit函数相比,提交时不必保存label信息。
 def labelInitial(text, depth, size, style, l_x, l_y, l_z, r_x, r_y, r_z):
+    '''
+    根据状态数组中保存的信息,生成一个字体
+    模块切换时,根据提交时保存的信息,添加label进行初始化,先根据信息添加label,之后再将label提交。与submit函数相比,提交时不必保存label信息。
+    '''
 
     # 先根据text信息添加一个label
     addLabel(text)
@@ -858,6 +891,9 @@ def labelInitial(text, depth, size, style, l_x, l_y, l_z, r_x, r_y, r_z):
     plane_obj.rotation_euler[1] = r_y
     plane_obj.rotation_euler[2] = r_z
 
+    #为外凸字体创建用于实体化的外壳
+    saveLabelPlaneForCasting()
+
     # 应用Label的晶格形变修改器
     text_modifier_name = "Lattice"
     target_modifier = None
@@ -882,9 +918,9 @@ def labelInitial(text, depth, size, style, l_x, l_y, l_z, r_x, r_y, r_z):
     # 将模型与Label根据style进行合并
     enum = None
     if name == '右耳':
-        enum = bpy.types.Scene.styleEnum
+        enum = bpy.context.scene.styleEnum
     elif name == '左耳':
-        enum = bpy.types.Scene.styleEnumL
+        enum = bpy.context.scene.styleEnumL
     if enum == "OP1":
         bpy.context.object.modifiers["Boolean"].operation = 'DIFFERENCE'
     if enum == "OP2":
@@ -999,17 +1035,15 @@ def addLabel(text):
     if enum == "OP1":
         # 为字体添加红色材质
         bpy.context.view_layer.objects.active = text_obj
-        red_material = bpy.data.materials.new(name="Red")
-        red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+        red_material = newColor("LabelRed", 1, 0, 0, 0, 1)
         text_obj.data.materials.clear()
         text_obj.data.materials.append(red_material)
     elif enum == "OP2":
         # 为字体添加青色材质
         bpy.context.view_layer.objects.active = text_obj
-        red_material = bpy.data.materials.new(name="Red")
-        red_material.diffuse_color = (0, 0.4, 1.0, 1.0)
+        green_material = newColor("LabelBlue", 0, 0.4, 1, 0, 1)
         text_obj.data.materials.clear()
-        text_obj.data.materials.append(red_material)
+        text_obj.data.materials.append(green_material)
     # 为字体添加细分修改器并应用。对字体添加表面形变修改器，将目标绑定为平面
     bpy.ops.object.modifier_add(type='SUBSURF')
     bpy.context.object.modifiers["Subdivision"].subdivision_type = 'SIMPLE'
@@ -1152,6 +1186,9 @@ def labelTextUpdate(text):
     plane_obj_location_x = 0
     plane_obj_location_y = 0
     plane_obj_location_z = 0
+    plane_obj_rotation_x = 0
+    plane_obj_rotation_y = 0
+    plane_obj_rotation_z = 0
     if (plane_for_active_obj != None):
         bpy.data.objects.remove(plane_for_active_obj, do_unlink=True)
     if (text_obj != None):
@@ -1160,6 +1197,9 @@ def labelTextUpdate(text):
         plane_obj_location_x = plane_obj.location[0]
         plane_obj_location_y = plane_obj.location[1]
         plane_obj_location_z = plane_obj.location[2]
+        plane_obj_rotation_x = plane_obj.rotation_euler[0]
+        plane_obj_rotation_y = plane_obj.rotation_euler[1]
+        plane_obj_rotation_z = plane_obj.rotation_euler[2]
         bpy.data.objects.remove(plane_obj, do_unlink=True)
         # 将属性面板中的text属性值读取到剪切板中生成新的label
     addLabel(text)
@@ -1170,6 +1210,9 @@ def labelTextUpdate(text):
         plane_obj.location[0] = plane_obj_location_x
         plane_obj.location[1] = plane_obj_location_y
         plane_obj.location[2] = plane_obj_location_z
+        plane_obj.rotation_euler[0] = plane_obj_rotation_x
+        plane_obj.rotation_euler[1] = plane_obj_rotation_y
+        plane_obj.rotation_euler[2] = plane_obj_rotation_z
     plane_obj.select_set(True)
     bpy.context.view_layer.objects.active = plane_obj
 
@@ -1191,14 +1234,13 @@ def labelSubmit():
     plane_obj = bpy.data.objects.get(planename)
     plane_for_active_name = name + "PlaneForLabelActive"
     plane_for_active_obj = bpy.data.objects.get(plane_for_active_name)
-    label_for_casting_name = name + "LabelPlaneForCasting"
-    label_for_casting_obj = bpy.data.objects.get(label_for_casting_name)
-    if(plane_for_active_obj != None):
-        bpy.data.objects.remove(plane_for_active_obj, do_unlink=True)
     # 存在未提交的Label和Plane时
-    if (text_obj != None and plane_obj != None):
+    if (text_obj != None and plane_obj != None and plane_for_active_obj != None):
         #先将该Label的相关信息保存下来,用于模块切换时的初始化。
         saveInfo()
+
+        #为外凸字体创建用于实体化的外壳
+        saveLabelPlaneForCasting()
 
         # 应用Label的表面形变修改器
         text_modifier_name = "Lattice"
@@ -1227,34 +1269,15 @@ def labelSubmit():
             bpy.context.object.modifiers["Boolean"].operation = 'UNION'
         bpy.context.object.modifiers["Boolean"].object = text_obj
         bpy.ops.object.modifier_apply(modifier="Boolean",single_user=True)
+
         #开启自动平滑功能
         bpy.context.object.data.use_auto_smooth = True
         bpy.context.object.data.auto_smooth_angle = 0.9
 
-        #记录平面位置,将用于铸造法的平面位置设置为其位置
-        location_x = plane_obj.location[0]
-        location_y = plane_obj.location[1]
-        location_z = plane_obj.location[2]
-        rotate_x = plane_obj.rotation_euler[0]
-        rotate_y = plane_obj.rotation_euler[1]
-        rotate_z = plane_obj.rotation_euler[2]
-        text_x = text_obj.dimensions.x
-        text_y = text_obj.dimensions.y
-
         #删除平面和字体
         bpy.data.objects.remove(plane_obj, do_unlink=True)
         bpy.data.objects.remove(text_obj, do_unlink=True)
-
-        # 设置用于铸造法的平面的位置,角度,大小
-        if (label_for_casting_obj != None):
-            label_for_casting_obj.location[0] = location_x
-            label_for_casting_obj.location[1] = location_y
-            label_for_casting_obj.location[2] = location_z
-            label_for_casting_obj.rotation_euler[0] = rotate_x
-            label_for_casting_obj.rotation_euler[1] = rotate_y
-            label_for_casting_obj.rotation_euler[2] = rotate_z
-            label_for_casting_obj.dimensions.x = text_x * 1.2
-            label_for_casting_obj.dimensions.y = text_y * 1.2
+        bpy.data.objects.remove(plane_for_active_obj, do_unlink=True)
 
 
         #合并后Label会被去除材质,因此需要重置一下模型颜色为黄色
@@ -1270,12 +1293,9 @@ def saveLabelPlaneForCasting():
         若添加了外凸字体,在提交时则需要保存平面信息,在铸造法模块将该区域鼓起
     '''
 
-    all_objects = bpy.data.objects
-    for obj in bpy.data.objects:
-        obj.select_set(False)
-
     name = bpy.context.scene.leftWindowObj
     obj = bpy.data.objects.get(name)
+    text_obj = bpy.data.objects.get(name + "Text")
     plane_obj = bpy.data.objects.get(name + "Plane")
     plane_for_active_obj = bpy.data.objects.get(name + "PlaneForLabelActive")
     label_enum = None
@@ -1286,7 +1306,7 @@ def saveLabelPlaneForCasting():
     elif name == '左耳':
         label_enum = bpy.context.scene.styleEnumL
         depth = bpy.context.scene.deepL
-    if(obj != None and plane_for_active_obj != None):
+    if(obj != None and text_obj != None and plane_obj != None and plane_for_active_obj != None):
         if(label_enum == "OP2"):
             label_plane_for_casting_obj = plane_for_active_obj.copy()
             label_plane_for_casting_obj.data = plane_for_active_obj.data.copy()
@@ -1305,9 +1325,11 @@ def saveLabelPlaneForCasting():
             label_plane_for_casting_obj.scale[1] = prev_scale1 * 1.2
 
             # 将平面设置为激活物体
+            bpy.ops.object.select_all(action='DESELECT')
             label_plane_for_casting_obj.select_set(True)
             bpy.context.view_layer.objects.active = label_plane_for_casting_obj
 
+            #应用平面的缩裹修改器
             panel_modifier_name = "Shrinkwrap"
             target_modifier = None
             for modifier in label_plane_for_casting_obj.modifiers:
@@ -1317,10 +1339,11 @@ def saveLabelPlaneForCasting():
                 bpy.ops.object.modifier_apply(modifier="Shrinkwrap", single_user=True)
 
             #为用于铸造法的物体添加材质
-            yellow_material = bpy.data.materials.new(name="Yellow")
-            yellow_material.diffuse_color = (1.0, 0.319, 0.133, 1.0)
             label_plane_for_casting_obj.data.materials.clear()
-            label_plane_for_casting_obj.data.materials.append(yellow_material)
+            if name == '右耳':
+                label_plane_for_casting_obj.data.materials.append(bpy.data.materials["YellowR"])
+            elif name == '左耳':
+                label_plane_for_casting_obj.data.materials.append(bpy.data.materials["YellowL"])
 
             #将平面细分并沿法线挤出形成凸起
             bpy.ops.object.mode_set(mode='EDIT')
@@ -1340,8 +1363,19 @@ def saveLabelPlaneForCasting():
             #为立方体添加黄色透明材质
             initialTransparency()
             label_plane_for_casting_obj.data.materials.clear()
-            bpy.ops.geometry.color_attribute_add(name="Color", color=(1, 0.319, 0.133, 1))
             label_plane_for_casting_obj.data.materials.append(bpy.data.materials['Transparency'])
+
+            # 记录平面位置,将用于铸造法的平面位置设置为其位置
+            text_x = text_obj.dimensions.x
+            text_y = text_obj.dimensions.y
+            label_plane_for_casting_obj.location[0] = plane_obj.location[0]
+            label_plane_for_casting_obj.location[1] = plane_obj.location[1]
+            label_plane_for_casting_obj.location[2] = plane_obj.location[2]
+            label_plane_for_casting_obj.rotation_euler[0] = plane_obj.rotation_euler[0]
+            label_plane_for_casting_obj.rotation_euler[1] = plane_obj.rotation_euler[1]
+            label_plane_for_casting_obj.rotation_euler[2] = plane_obj.rotation_euler[2]
+            label_plane_for_casting_obj.dimensions.x = text_x * 1.2
+            label_plane_for_casting_obj.dimensions.y = text_y * 1.2
 
             #将该物体隐藏并将平面设置为当前激活物体
             label_plane_for_casting_obj.select_set(False)
@@ -1351,21 +1385,10 @@ def saveLabelPlaneForCasting():
 
 
 
-
-class LabelTest(bpy.types.Operator):
-    bl_idname = "object.labeltestfunc"
-    bl_label = "功能测试"
-
-    def invoke(self, context, event):
-        addLabel("HDU")
-
-
-        return {'FINISHED'}
-
-
-
-#保存提交前的每个Label信息
 class LabelInfoSave(object):
+    '''
+    保存提交前的每个Label信息
+    '''
     def __init__(self,text,depth,size,style,l_x,l_y,l_z,r_x,r_y,r_z):
         self.text = text
         self.depth = depth
@@ -1422,9 +1445,12 @@ class LabelReset(bpy.types.Operator):
         if (plane_for_active_obj != None):
             bpy.data.objects.remove(plane_for_active_obj, do_unlink=True)
         # 将用于铸造法的立方体删除
-        label_for_casting_obj = bpy.data.objects.get(name + "LabelPlaneForCasting")  # TODO 正则匹配
-        if (label_for_casting_obj != None):
-            bpy.data.objects.remove(label_for_casting_obj, do_unlink=True)
+        for obj in bpy.data.objects:
+            patternR = r'右耳LabelPlaneForCasting'
+            patternL = r'左耳LabelPlaneForCasting'
+            if re.match(patternR, obj.name) or re.match(patternL, obj.name):
+                label_obj = obj
+                bpy.data.objects.remove(label_obj, do_unlink=True)
         # 将LabelReset复制并替代当前操作模型
         oriname = bpy.context.scene.leftWindowObj
         ori_obj = bpy.data.objects.get(oriname)
@@ -1441,38 +1467,65 @@ class LabelReset(bpy.types.Operator):
                 moveToRight(duplicate_obj)
             elif (oriname == "左耳"):
                 moveToLeft(duplicate_obj)
-        bpy.ops.wm.tool_set_by_id(name="my_tool.label_add")
+        bpy.ops.wm.tool_set_by_id(name="my_tool.label_initial")
+        # 将激活物体设置为左/右耳
+        cur_obj = bpy.data.objects.get(name)
+        bpy.ops.object.select_all(action='DESELECT')
+        cur_obj.select_set(True)
+        bpy.context.view_layer.objects.active = cur_obj
         return {'FINISHED'}
 
 
 class LabelAdd(bpy.types.Operator):
     bl_idname = "object.labeladd"
-    bl_label = "添加标签"
+    bl_label = "在上一个字体的位置处添加一个标签"
 
     def invoke(self, context, event):
 
         bpy.context.scene.var = 11
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+
         name = bpy.context.scene.leftWindowObj
-        # 若模型上存在未提交的Label,则先将其提交
-        labelSubmit()
-        # 创建新的Label
+        global label_info_save
+        global label_info_saveL
         labelText = None
+        label_info_save_cur = None
         if name == '右耳':
             labelText = bpy.context.scene.labelText
+            label_info_save_cur = label_info_save
         elif name == '左耳':
             labelText = bpy.context.scene.labelTextL
+            label_info_save_cur = label_info_saveL
+
+        # 若模型上存在未提交的Label,则先将其提交
+        labelSubmit()
+
+        # 双击添加过一个字体之后,才能够继续添加字体
+        if (len(label_info_save_cur) == 0):
+            bpy.ops.wm.tool_set_by_id(name="my_tool.label_initial")
+            return {'FINISHED'}
+        # 创建新的Label
         addLabel(labelText)
         # 将Plane激活并选中
         planename = name + "Plane"
         plane_obj = bpy.data.objects.get(planename)
         plane_obj.select_set(True)
         bpy.context.view_layer.objects.active = plane_obj
-        co, normal = cal_co(context,event)
-        if(co != -1):
-            # plane_obj.location = co
-            label_fit_rotate(normal,co)
+        #将新创建的字体位置设置未上一个提交的字体位置
+        labelInfo = label_info_save_cur[len(label_info_save_cur) - 1]
+        l_x = labelInfo.l_x
+        l_y = labelInfo.l_y
+        l_z = labelInfo.l_z
+        r_x = labelInfo.r_x
+        r_y = labelInfo.r_y
+        r_z = labelInfo.r_z
+        plane_obj.location[0] = l_x
+        plane_obj.location[1] = l_y
+        plane_obj.location[2] = l_z
+        plane_obj.rotation_euler[0] = r_x
+        plane_obj.rotation_euler[1] = r_y
+        plane_obj.rotation_euler[2] = r_z
 
 
         context.window_manager.modal_handler_add(self)
@@ -1507,13 +1560,73 @@ class LabelAdd(bpy.types.Operator):
         else:
             return {'FINISHED'}
 
+class LabelInitialAdd(bpy.types.Operator):
+    bl_idname = "object.labelinitialadd"
+    bl_label = "在模型双击位置添加一个标签"
+
+    def invoke(self, context, event):
+
+        bpy.context.scene.var = 12
+        # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        name = bpy.context.scene.leftWindowObj
+        # 创建新的Label
+        labelText = None
+        if name == '右耳':
+            labelText = bpy.context.scene.labelText
+        elif name == '左耳':
+            labelText = bpy.context.scene.labelTextL
+        addLabel(labelText)
+        # 将Plane激活并选中
+        planename = name + "Plane"
+        plane_obj = bpy.data.objects.get(planename)
+        plane_obj.select_set(True)
+        bpy.context.view_layer.objects.active = plane_obj
+        co, normal = cal_co(context,event)
+        if(co != -1):
+            # plane_obj.location = co
+            label_fit_rotate(normal,co)
+
+
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+        name = bpy.context.scene.leftWindowObj
+        cubename = name + "Text"
+        label_obj = bpy.data.objects.get(cubename)
+        planename = name + "Plane"
+        plane_obj = bpy.data.objects.get(planename)
+        cur_obj_name = bpy.context.scene.leftWindowObj
+        cur_obj = bpy.data.objects.get(cur_obj_name)
+        if (bpy.context.scene.var == 12):
+            if (is_mouse_on_object(context, event) and not is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
+                # 公共鼠标行为加双击移动附件位置
+                bpy.ops.wm.tool_set_by_id(name="my_tool.label_mouse")
+                cur_obj.select_set(True)
+                bpy.context.view_layer.objects.active = cur_obj
+                plane_obj.select_set(False)
+            elif (is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
+                bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+                plane_obj.select_set(True)
+                bpy.context.view_layer.objects.active = plane_obj
+                cur_obj.select_set(False)
+            elif ((not is_mouse_on_object(context, event)) and (is_changed_label(context, event) or is_changed(context, event))):
+                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                cur_obj.select_set(True)
+                bpy.context.view_layer.objects.active = cur_obj
+                plane_obj.select_set(False)
+            return {'PASS_THROUGH'}
+        else:
+            return {'FINISHED'}
+
 
 class LabelSubmit(bpy.types.Operator):
     bl_idname = "object.labelsubmit"
     bl_label = "标签提交"
 
     def invoke(self, context, event):
-        bpy.context.scene.var = 12
+        bpy.context.scene.var = 13
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
@@ -1521,7 +1634,6 @@ class LabelSubmit(bpy.types.Operator):
         return {'FINISHED'}
 
     def execute(self, context):
-        saveLabelPlaneForCasting()
         labelSubmit()
         return {'FINISHED'}
 
@@ -1576,15 +1688,16 @@ class MyTool_Label2(WorkSpaceTool):
     bl_idname = "my_tool.label_add"
     bl_label = "标签添加"
     bl_description = (
-        "在模型上添加一个标签"
+        "在模型中上一个标签的位置处添加一个标签"
     )
     bl_icon = "ops.mesh.primitive_torus_add_gizmo"
     bl_widget = None
     bl_keymap = (
-        ("object.labeladd", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
-        ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
+        ("object.labeladd", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+        # ("object.labeladd", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
+        # ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        # ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
+        # ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
     )
 
     def draw_settings(context, layout, tool):
@@ -1639,7 +1752,7 @@ class MyTool_Label_Mouse(bpy.types.WorkSpaceTool):
     bl_idname = "my_tool.label_mouse"
     bl_label = "双击改变字体位置"
     bl_description = (
-        "添加字体后,在模型上双击,附件移动到双击位置"
+        "添加字体后,公共鼠标行为的各种操作,在模型上双击,附件移动到双击位置"
     )
     bl_icon = "brush.uv_sculpt.pinch"
     bl_widget = None
@@ -1654,13 +1767,35 @@ class MyTool_Label_Mouse(bpy.types.WorkSpaceTool):
     def draw_settings(context, layout, tool):
         pass
 
+class MyTool_LabelInitial(WorkSpaceTool):
+    bl_space_type = 'VIEW_3D'
+    bl_context_mode = 'OBJECT'
+
+    # The prefix of the idname should be your add-on name.
+    bl_idname = "my_tool.label_initial"
+    bl_label = "标签添加初始化"
+    bl_description = (
+        "刚进入Label模块的时,在模型上双击位置处添加一个标签"
+    )
+    bl_icon = "brush.sculpt.thumb"
+    bl_widget = None
+    bl_keymap = (
+        ("object.labelinitialadd", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
+        ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
+        ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
+    )
+
+    def draw_settings(context, layout, tool):
+        pass
+
 # 注册类
 _classes = [
     LabelReset,
     LabelAdd,
+    LabelInitialAdd,
     LabelSubmit,
     LabelDoubleClick,
-    LabelTest,
 ]
 
 
@@ -1672,6 +1807,7 @@ def register():
     bpy.utils.register_tool(MyTool_Label3, separator=True, group=False, after={MyTool_Label2.bl_idname})
     bpy.utils.register_tool(MyTool_Label_Mirror, separator=True, group=False, after={MyTool_Label3.bl_idname})
     bpy.utils.register_tool(MyTool_Label_Mouse, separator=True, group=False, after={MyTool_Label_Mirror.bl_idname})
+    bpy.utils.register_tool(MyTool_LabelInitial, separator=True, group=False, after={MyTool_Label_Mouse.bl_idname})
 
 
 def unregister():
@@ -1682,3 +1818,4 @@ def unregister():
     bpy.utils.unregister_tool(MyTool_Label3)
     bpy.utils.unregister_tool(MyTool_Label_Mirror)
     bpy.utils.unregister_tool(MyTool_Label_Mouse)
+    bpy.utils.unregister_tool(MyTool_LabelInitial)

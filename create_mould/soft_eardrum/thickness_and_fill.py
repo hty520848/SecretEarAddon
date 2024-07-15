@@ -214,10 +214,7 @@ def distance_to_plane(plane_normal, plane_point, point):
 
 # 初始化圆环颜色
 def initialTorusColor():
-    yellow_material = bpy.data.materials.new(name="red")
-    yellow_material.use_nodes = True
-    bpy.data.materials["red"].node_tree.nodes["Principled BSDF"].inputs[0].default_value = (
-        1.0, 0.0, 0, 1.0)
+    red_material = newColor("red", 1, 0, 0, 0, 1)
 
 
 def draw_cut_plane(obj_name):
@@ -594,7 +591,7 @@ def fill():
     bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.mesh.region_to_loop()
     bpy.ops.mesh.select_all(action='INVERT')
-    bpy.ops.mesh.subdivide(number_cuts=2)
+    bpy.ops.mesh.subdivide(number_cuts=1)
     bpy.ops.mesh.select_mode(type='VERT')
 
     # 选出中线调整顶点组
@@ -618,22 +615,43 @@ def fill():
     bpy.ops.mesh.remove_doubles()
     bpy.ops.mesh.normals_make_consistent(inside=False)
 
-    # 分别对内外倒角
+    # 分别对内外倒角进行重拓扑
     if outer_offset != 0:
         bpy.ops.mesh.select_all(action='DESELECT')
         bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
         bpy.ops.object.vertex_group_select()
-        bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0, offset_pct=95, segments=16, affect='EDGES')
+        bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0, offset_pct=95, segments=16, profile=1, affect='EDGES')
+        # 更新顶点组
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
+        bpy.ops.object.vertex_group_select()
+        bpy.ops.object.vertex_group_remove_from()
+        for _ in range(int(16/2)):  # 16是bevel的segments
+            bpy.ops.mesh.select_less()
+        bpy.ops.object.vertex_group_assign()
     if inner_offset != 0:
         bpy.ops.mesh.select_all(action='DESELECT')
         bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
         bpy.ops.object.vertex_group_select()
-        bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0, offset_pct=95, segments=16, affect='EDGES')
-    bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0, offset_pct=95, segments=16, profile=1, affect='EDGES')
+        # 更新顶点组
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+        bpy.ops.object.vertex_group_select()
+        bpy.ops.object.vertex_group_remove_from()
+        for _ in range(int(16/2)):  # 16是bevel的segments
+            bpy.ops.mesh.select_less()
+        bpy.ops.object.vertex_group_assign()
+        bpy.ops.mesh.select_all(action='DESELECT')
 
     bpy.ops.object.mode_set(mode='OBJECT')
     # 平滑着色
     bpy.ops.object.shade_smooth(use_auto_smooth=True, auto_smooth_angle=3.14159)
+
+
+def smooth_border(obj, smooth_border_vert_group_name, limit_border_vert_group_name, width):
+
+    pass
 
 
 def soft_retopo_offset_cut(obj_name, border_vert_group_name, width):

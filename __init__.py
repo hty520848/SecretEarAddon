@@ -77,7 +77,7 @@ from . import  (
     last_damo,
     offset_cut
     )
-from .create_tip import qiege, qiege_smooth, cut_mould
+from .create_tip import qiege, circle_smooth, step_smooth, cut_mould
 from .create_mould.soft_eardrum import thickness_and_fill
 from .create_mould import point
 from .create_mould.hard_eardrum import hard_eardrum, hard_eardrum_offset_cut
@@ -109,7 +109,8 @@ def register():
     create_mould.create_mould.register()
     hard_eardrum_offset_cut.register()
     # pymesh.register()
-    qiege_smooth.register()
+    circle_smooth.register()
+    step_smooth.register()
     offset_cut.register()
     soft_eardrum_offset_cut.register()
     cut_mould.register()
@@ -137,7 +138,8 @@ def unregister():
     create_mould.create_mould.unregister()
     hard_eardrum_offset_cut.unregister()
     # pymesh.unregister()
-    qiege_smooth.unregister()
+    circle_smooth.unregister()
+    step_smooth.unregister()
     offset_cut.unregister()
     soft_eardrum_offset_cut.unregister()
     cut_mould.unregister()

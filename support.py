@@ -45,6 +45,21 @@ support_enumL = "OP1"
 support_offset = 0             #支撑偏移量
 support_offsetL = 0
 
+
+def newColor(id, r, g, b, is_transparency, transparency_degree):
+    mat = newMaterial(id)
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    output = nodes.new(type='ShaderNodeOutputMaterial')
+    shader = nodes.new(type='ShaderNodeBsdfPrincipled')
+    shader.inputs[0].default_value = (r, g, b, 1)
+    links.new(shader.outputs[0], output.inputs[0])
+    if is_transparency:
+        mat.blend_method = "BLEND"
+        shader.inputs[21].default_value = transparency_degree
+    return mat
+
+
 # 判断鼠标是否在物体上,硬耳膜支撑
 def is_mouse_on_hard_support(context, event):
     name = bpy.context.scene.leftWindowObj + "Cone"
@@ -616,9 +631,10 @@ def support_fit_rotate(normal,location):
         plane_obj.rotation_euler[2] = empty_rotation_z
 
 def initialSupportTransparency():
-    mat = newShader("SupportTransparency")  # 创建材质
-    mat.blend_method = "BLEND"
-    mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.01
+    newColor("SupportTransparency", 1, 0.319, 0.133, 1, 0.01)  # 创建材质
+    # mat = newShader("SupportTransparency")  # 创建材质
+    # mat.blend_method = "BLEND"
+    # mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.01
 
 def frontToSupport():
     all_objs = bpy.data.objects
@@ -771,9 +787,15 @@ def backToSupport():
     hard_support_compare_obj = bpy.data.objects.get(name + "ConeCompare")
     if (hard_support_compare_obj != None):
         bpy.data.objects.remove(hard_support_compare_obj, do_unlink=True)
-    sprue_compare_obj = bpy.data.objects.get(name + "SprueCompare")
-    if (sprue_compare_obj != None):
-        bpy.data.objects.remove(sprue_compare_obj, do_unlink=True)
+    for obj in bpy.data.objects:
+        if (name == "右耳"):
+            pattern = r'右耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
+        elif (name == "左耳"):
+            pattern = r'左耳SprueCompare'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
     #将右耳模型重置  若存在铸造法,则将铸造法中的内部红色对比物也重置
     exist_SupportReset = False
     all_objs = bpy.data.objects
@@ -1072,8 +1094,7 @@ def createHardMouldSupport():
         moveToLeft(sphere_obj)
 
     # 为硬耳膜支撑添加红色材质
-    red_material = bpy.data.materials.new(name="Red")
-    red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+    red_material = newColor("Red", 1, 0, 0, 0, 1)
     cone_obj.select_set(True)
     bpy.context.view_layer.objects.active = cone_obj
     cone_obj.data.materials.clear()
@@ -1187,8 +1208,7 @@ def createSoftMouldSupport():
 
 
     # 为内外壁和内芯添加红色材质
-    red_material = bpy.data.materials.new(name="Red")
-    red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+    red_material = newColor("Red", 1, 0, 0, 0, 1)
     support_outer_obj.select_set(True)
     bpy.context.view_layer.objects.active = support_outer_obj
     support_outer_obj.data.materials.clear()
@@ -1528,8 +1548,7 @@ def hardSupportSubmit():
         support_compare_obj = bpy.data.objects.get(name + ".001")
         if(support_compare_obj != None):
             support_compare_obj.name = name + "ConeCompare"
-            yellow_material = bpy.data.materials.new(name="Yellow")
-            yellow_material.diffuse_color = (1.0, 0.319, 0.133, 1.0)
+            yellow_material = newColor("SupportCompare", 1, 0.319, 0.133, 0, 1)
             support_compare_obj.data.materials.clear()
             support_compare_obj.data.materials.append(yellow_material)
             if (name == "右耳"):
@@ -1682,8 +1701,7 @@ def softSupportSubmit():
                 moveToRight(sprue_compare_obj)
             elif (name == "左耳"):
                 moveToLeft(sprue_compare_obj)
-            yellow_material = bpy.data.materials.new(name="Yellow")
-            yellow_material.diffuse_color = (1.0, 0.319, 0.133, 1.0)
+            yellow_material = newColor("SupportCompare", 1, 0.319, 0.133, 0, 1)
             sprue_compare_obj.data.materials.clear()
             sprue_compare_obj.data.materials.append(yellow_material)
 
@@ -1887,8 +1905,7 @@ class SupportAdd(bpy.types.Operator):
                     if(hard_support_obj != None):
                         if (is_mouse_on_object(context, event) and not is_mouse_on_hard_support(context, event) and (is_changed_hard_support(context, event) or is_changed(context, event))):
                             # 公共鼠标行为加双击移动附件位置
-                            red_material = bpy.data.materials.new(name="Red")
-                            red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
                             hard_support_obj.data.materials.clear()
                             hard_support_obj.data.materials.append(red_material)
                             bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
@@ -1897,8 +1914,7 @@ class SupportAdd(bpy.types.Operator):
                             plane_obj.select_set(False)
                         elif (is_mouse_on_hard_support(context, event) and (is_changed(context, event) or is_changed_hard_support(context,event))):
                             # 调用hardSupport的鼠标行为
-                            yellow_material = bpy.data.materials.new(name="Yellow")
-                            yellow_material.diffuse_color = (1.0, 1.0, 0.0, 1.0)
+                            yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
                             hard_support_obj.data.materials.clear()
                             hard_support_obj.data.materials.append(yellow_material)
                             bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
@@ -1907,8 +1923,7 @@ class SupportAdd(bpy.types.Operator):
                             cur_obj.select_set(False)
                         elif ((not is_mouse_on_object(context, event)) and (is_changed(context, event) or is_changed_hard_support(context,event))):
                             # 调用公共鼠标行为
-                            red_material = bpy.data.materials.new(name="Red")
-                            red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
                             hard_support_obj.data.materials.clear()
                             hard_support_obj.data.materials.append(red_material)
                             bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
@@ -1919,8 +1934,7 @@ class SupportAdd(bpy.types.Operator):
                     if(soft_support_inner_obj != None and soft_support_outer_obj != None and soft_support_inside_obj != None):
                         if (is_mouse_on_object(context, event) and not is_mouse_on_soft_support(context, event) and (is_changed_soft_support(context, event) or is_changed(context, event))):
                             # 公共鼠标行为加双击移动附件位置
-                            red_material = bpy.data.materials.new(name="Red")
-                            red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
                             # soft_support_inner_obj.select_set(True)
                             # bpy.context.view_layer.objects.active = soft_support_inner_obj
                             soft_support_inner_obj.data.materials.clear()
@@ -1939,8 +1953,7 @@ class SupportAdd(bpy.types.Operator):
                             plane_obj.select_set(False)
                         elif (is_mouse_on_soft_support(context, event) and (is_changed_soft_support(context, event) or is_changed(context, event))):
                             # 调用softSupport的鼠标行为
-                            yellow_material = bpy.data.materials.new(name="Yellow")
-                            yellow_material.diffuse_color = (1.0, 1.0, 0.0, 1.0)
+                            yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
                             # soft_support_inner_obj.select_set(True)
                             # bpy.context.view_layer.objects.active = soft_support_inner_obj
                             soft_support_inner_obj.data.materials.clear()
@@ -1962,8 +1975,7 @@ class SupportAdd(bpy.types.Operator):
                             soft_support_inside_obj.select_set(False)
                         elif ((not is_mouse_on_object(context, event)) and (is_changed_soft_support(context, event) or is_changed(context, event))):
                             # 调用公共鼠标行为
-                            red_material = bpy.data.materials.new(name="Red")
-                            red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
                             # soft_support_inner_obj.select_set(True)
                             # bpy.context.view_layer.objects.active = soft_support_inner_obj
                             soft_support_inner_obj.data.materials.clear()
@@ -1990,8 +2002,7 @@ class SupportAdd(bpy.types.Operator):
                         if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
                                 is_changed_sphere(context, event) or is_changed(context, event))):
                             # 公共鼠标行为加双击移动附件位置
-                            red_material = bpy.data.materials.new(name="Red")
-                            red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
                             hard_support_obj.data.materials.clear()
                             hard_support_obj.data.materials.append(red_material)
                             bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
@@ -2000,8 +2011,7 @@ class SupportAdd(bpy.types.Operator):
                             plane_obj.select_set(False)
                         elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
                             # 调用hardSupport的三维旋转鼠标行为
-                            yellow_material = bpy.data.materials.new(name="Yellow")
-                            yellow_material.diffuse_color = (1.0, 1.0, 0.0, 1.0)
+                            yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
                             hard_support_obj.data.materials.clear()
                             hard_support_obj.data.materials.append(yellow_material)
                             bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
@@ -2010,8 +2020,7 @@ class SupportAdd(bpy.types.Operator):
                             cur_obj.select_set(False)
                         elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
                             # 调用公共鼠标行为
-                            red_material = bpy.data.materials.new(name="Red")
-                            red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
                             hard_support_obj.data.materials.clear()
                             hard_support_obj.data.materials.append(red_material)
                             bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
@@ -2023,8 +2032,7 @@ class SupportAdd(bpy.types.Operator):
                         if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
                                 is_changed_sphere(context, event) or is_changed(context, event))):
                             # 公共鼠标行为加双击移动附件位置
-                            red_material = bpy.data.materials.new(name="Red")
-                            red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
                             # soft_support_inner_obj.select_set(True)
                             # bpy.context.view_layer.objects.active = soft_support_inner_obj
                             soft_support_inner_obj.data.materials.clear()
@@ -2043,8 +2051,7 @@ class SupportAdd(bpy.types.Operator):
                             plane_obj.select_set(False)
                         elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
                             # 调用softSupport的鼠标行为
-                            yellow_material = bpy.data.materials.new(name="Yellow")
-                            yellow_material.diffuse_color = (1.0, 1.0, 0.0, 1.0)
+                            yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
                             # soft_support_inner_obj.select_set(True)
                             # bpy.context.view_layer.objects.active = soft_support_inner_obj
                             soft_support_inner_obj.data.materials.clear()
@@ -2066,8 +2073,7 @@ class SupportAdd(bpy.types.Operator):
                             soft_support_inside_obj.select_set(False)
                         elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
                             # 调用公共鼠标行为
-                            red_material = bpy.data.materials.new(name="Red")
-                            red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
                             # soft_support_inner_obj.select_set(True)
                             # bpy.context.view_layer.objects.active = soft_support_inner_obj
                             soft_support_inner_obj.data.materials.clear()

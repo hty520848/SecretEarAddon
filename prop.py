@@ -3,12 +3,13 @@ import bpy.props
 from .damo import remember_vertex_change, get_modal_start, get_is_back, get_is_dialog
 from .jiahou import *
 from .create_tip.qiege import *
+from .create_tip.cut_mould import get_color_mode
 from .label import *
 from .support import *
 from .create_mould.soft_eardrum.thickness_and_fill import reset_and_refill
 from .create_mould.frame_style_eardrum.frame_style_eardrum import recover_and_refill
-from .create_mould.hard_eardrum.hard_eardrum_bottom_fill import smooth_initial,hard_eardrum_smooth
-from .create_mould.create_mould import recover,set_is_cut_finish
+from .create_mould.hard_eardrum.hard_eardrum_bottom_fill import smooth_initial, hard_eardrum_smooth
+from .create_mould.create_mould import recover, set_is_cut_finish
 from .sound_canal import initial_hornpipe, update_hornpipe_offset_location_normal, convert_soundcanal, get_object_dic_index
 from .vent_canal import convert_ventcanal
 from .casting import castingThicknessUpdate
@@ -536,13 +537,20 @@ def My_Properties():
             ('OP1', '排气孔', ''), ]
     )
 
-    bpy.types.Scene.transparent1 = bpy.props.BoolProperty(
+    bpy.types.Scene.transparent1R = bpy.props.BoolProperty(
         name="transparent1", default=False, update=show_transparent1)
-    bpy.types.Scene.transparent2 = bpy.props.BoolProperty(
+    bpy.types.Scene.transparent2R = bpy.props.BoolProperty(
         name="transparent2", default=False, update=show_transparent2)
-    bpy.types.Scene.transparent3 = bpy.props.BoolProperty(
-        name="transparent3", default=True, update=show_transparent3)
-    bpy.types.Scene.transparent1Enum = bpy.props.EnumProperty(
+    bpy.types.Scene.transparent3R = bpy.props.BoolProperty(
+        name="transparent3", default=False, update=show_transparent3)
+    bpy.types.Scene.transparent1L = bpy.props.BoolProperty(
+        name="transparent1", default=False, update=show_transparent1)
+    bpy.types.Scene.transparent2L = bpy.props.BoolProperty(
+        name="transparent2", default=False, update=show_transparent2)
+    bpy.types.Scene.transparent3L = bpy.props.BoolProperty(
+        name="transparent3", default=False, update=show_transparent3)
+
+    bpy.types.Scene.transparent1EnumR = bpy.props.EnumProperty(
         name="transparent1Enum",
         description='',
         items=[
@@ -551,9 +559,9 @@ def My_Properties():
             ('OP3', "透明", ""),
         ],
         update=update_transparent1,
-        default='OP3'
+        default='OP1'
     )
-    bpy.types.Scene.transparentper1Enum = bpy.props.EnumProperty(
+    bpy.types.Scene.transparentper1EnumR = bpy.props.EnumProperty(
         name="transparentper1Enum",
         description='',
         items=[
@@ -565,7 +573,30 @@ def My_Properties():
         update=update_transparentper1,
         default='0.6'
     )
-    bpy.types.Scene.transparent2Enum = bpy.props.EnumProperty(
+    bpy.types.Scene.transparent1EnumL = bpy.props.EnumProperty(
+        name="transparent1Enum",
+        description='',
+        items=[
+            ('OP1', "自动", ""),
+            ('OP2', "不透明", ""),
+            ('OP3', "透明", ""),
+        ],
+        update=update_transparent1,
+        default='OP1'
+    )
+    bpy.types.Scene.transparentper1EnumL = bpy.props.EnumProperty(
+        name="transparentper1Enum",
+        description='',
+        items=[
+            ('0.2', "20%", ""),
+            ('0.4', "40%", ""),
+            ('0.6', "60%", ""),
+            ('0.8', "80%", "")
+        ],
+        update=update_transparentper1,
+        default='0.6'
+    )
+    bpy.types.Scene.transparent2EnumR = bpy.props.EnumProperty(
         name="transparent2Enum",
         description='',
         items=[
@@ -574,9 +605,9 @@ def My_Properties():
             ('OP3', "透明", ""),
         ],
         update=update_transparent2,
-        default='OP3'
+        default='OP1'
     )
-    bpy.types.Scene.transparentper2Enum = bpy.props.EnumProperty(
+    bpy.types.Scene.transparentper2EnumR = bpy.props.EnumProperty(
         name="transparentper2Enum",
         description='',
         items=[
@@ -588,7 +619,30 @@ def My_Properties():
         update=update_transparentper2,
         default='0.6'
     )
-    bpy.types.Scene.transparent3Enum = bpy.props.EnumProperty(
+    bpy.types.Scene.transparent2EnumL = bpy.props.EnumProperty(
+        name="transparent2Enum",
+        description='',
+        items=[
+            ('OP1', "自动", ""),
+            ('OP2', "不透明", ""),
+            ('OP3', "透明", ""),
+        ],
+        update=update_transparent2,
+        default='OP1'
+    )
+    bpy.types.Scene.transparentper2EnumL = bpy.props.EnumProperty(
+        name="transparentper2Enum",
+        description='',
+        items=[
+            ('0.2', "20%", ""),
+            ('0.4', "40%", ""),
+            ('0.6', "60%", ""),
+            ('0.8', "80%", "")
+        ],
+        update=update_transparentper2,
+        default='0.6'
+    )
+    bpy.types.Scene.transparent3EnumR = bpy.props.EnumProperty(
         name="transparent3Enum",
         description='',
         items=[
@@ -599,7 +653,30 @@ def My_Properties():
         update=update_transparent3,
         default='OP1'
     )
-    bpy.types.Scene.transparentper3Enum = bpy.props.EnumProperty(
+    bpy.types.Scene.transparentper3EnumR = bpy.props.EnumProperty(
+        name="transparentper3Enum",
+        description='',
+        items=[
+            ('0.2', "20%", ""),
+            ('0.4', "40%", ""),
+            ('0.6', "60%", ""),
+            ('0.8', "80%", "")
+        ],
+        update=update_transparentper3,
+        default='0.6'
+    )
+    bpy.types.Scene.transparent3EnumL = bpy.props.EnumProperty(
+        name="transparent3Enum",
+        description='',
+        items=[
+            ('OP1', "自动", ""),
+            ('OP2', "不透明", ""),
+            ('OP3', "透明", ""),
+        ],
+        update=update_transparent3,
+        default='OP1'
+    )
+    bpy.types.Scene.transparentper3EnumL = bpy.props.EnumProperty(
         name="transparentper3Enum",
         description='',
         items=[
@@ -1301,8 +1378,7 @@ def LabelEnum(self, context):
             plane_obj = bpy.data.objects.get(planename)
             if(text_obj != None and text_obj != None):
                 bpy.context.view_layer.objects.active = text_obj
-                red_material = bpy.data.materials.new(name="Red")
-                red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+                red_material = newColor("Red", 1, 0, 0, 0, 1)
                 text_obj.data.materials.clear()
                 text_obj.data.materials.append(red_material)
                 bpy.context.view_layer.objects.active = plane_obj
@@ -1316,10 +1392,9 @@ def LabelEnum(self, context):
             plane_obj = bpy.data.objects.get(planename)
             if (text_obj != None and text_obj != None):
                 bpy.context.view_layer.objects.active = text_obj
-                red_material = bpy.data.materials.new(name="Blue")
-                red_material.diffuse_color = (0, 0.4, 1, 1.0)
+                green_material = newColor("Blue", 0, 0.4, 1, 0, 1)
                 text_obj.data.materials.clear()
-                text_obj.data.materials.append(red_material)
+                text_obj.data.materials.append(green_material)
                 bpy.context.view_layer.objects.active = plane_obj
 
 
@@ -1684,7 +1759,7 @@ def ventcanalupdate(self, context):
     convert_ventcanal()
 
 
-def appendmaterial(type, name, material_name):
+def appendmaterial(type, name, material_name, percent):
     obj = bpy.data.objects.get(name)
 
     if type == 'OP1':  # 自动，一般为实体
@@ -1696,7 +1771,6 @@ def appendmaterial(type, name, material_name):
         obj.data.materials.append(bpy.data.materials.get(material_name))
         changealpha(material_name, 1)
     elif type == "OP3":  # 透明
-        percent = 1 - float(bpy.context.scene.transparentper1Enum)
         obj.data.materials.clear()
         obj.data.materials.append(bpy.data.materials.get(material_name))
         changealpha(material_name, percent)
@@ -1716,115 +1790,294 @@ def changealpha(material_name, alpha):
 def show_transparent1(self, context):
     name = context.scene.leftWindowObj + 'OriginForShow'
     obj = bpy.data.objects.get(name)
-    if obj and context.scene.transparent1:
-        obj.hide_set(False)
-        type = context.scene.transparent1Enum
-        appendmaterial(type, name, "tran_green")
-    elif obj and not context.scene.transparent1:
-        obj.hide_set(True)
+    if context.scene.leftWindowObj == '右耳':
+        is_show = context.scene.transparent1R
+        type = context.scene.transparent1EnumR
+        percent = 1 - float(bpy.context.scene.transparentper1EnumR)
+        mat_name = "tran_green_r"
+    elif context.scene.leftWindowObj == '左耳':
+        is_show = context.scene.transparent1L
+        type = context.scene.transparent1EnumL
+        percent = 1 - float(bpy.context.scene.transparentper1EnumL)
+        mat_name = "tran_green_l"
+
+    if obj and is_show:
+        if obj.hide_get():
+            obj.hide_set(False)
+            appendmaterial(type, name, mat_name, percent)
+    elif obj and not is_show:
+        if not obj.hide_get():
+            obj.hide_set(True)
 
 
 def update_transparent1(self, context):
     name = context.scene.leftWindowObj + 'OriginForShow'
     obj = bpy.data.objects.get(name)
-    if obj and context.scene.transparent1:
-        type = context.scene.transparent1Enum
-        appendmaterial(type, name, "tran_green")
+    if obj:
+        if context.scene.leftWindowObj == '右耳' and context.scene.transparent1R:
+            type = context.scene.transparent1EnumR
+            percent = 1 - float(bpy.context.scene.transparentper1EnumR)
+            appendmaterial(type, name, "tran_green_r", percent)
+        elif context.scene.leftWindowObj == '左耳' and context.scene.transparent1L:
+            type = context.scene.transparent1EnumL
+            percent = 1 - float(bpy.context.scene.transparentper1EnumL)
+            appendmaterial(type, name, "tran_green_l", percent)
 
 
 def update_transparentper1(self, context):
     name = context.scene.leftWindowObj + 'OriginForShow'
     obj = bpy.data.objects.get(name)
-    if obj and context.scene.transparent1:
-        percent = 1 - float(context.scene.transparentper1Enum)
-        changealpha("tran_green", percent)
+    if obj:
+        if context.scene.leftWindowObj == '右耳' and context.scene.transparent1R:
+            percent = 1 - float(context.scene.transparentper1EnumR)
+            changealpha("tran_green_r", percent)
+        elif context.scene.leftWindowObj == '左耳' and context.scene.transparent1L:
+            percent = 1 - float(context.scene.transparentper1EnumL)
+            changealpha("tran_green_l", percent)
 
 
 # 完成打磨后的模型
 def show_transparent2(self, context):
-    name = context.scene.leftWindowObj + 'WaxForShow'
-    obj = bpy.data.objects.get(name)
-    if obj and context.scene.transparent2:
-        obj.hide_set(False)
-        type = context.scene.transparent2Enum
-        appendmaterial(type, name, "tran_blue")
-    elif obj and not context.scene.transparent2:
-        obj.hide_set(True)
+    if (bpy.context.screen.areas[0].spaces.active.context != 'RENDER' or
+            (bpy.context.screen.areas[0].spaces.active.context == 'MATERIAL' and get_color_mode() != 1)):
+        name = context.scene.leftWindowObj + 'WaxForShow'
+        obj = bpy.data.objects.get(name)
+        if context.scene.leftWindowObj == '右耳':
+            is_show = context.scene.transparent2R
+            type = context.scene.transparent2EnumR
+            mat_name = "tran_blue_r"
+            percent = 1 - float(bpy.context.scene.transparentper2EnumR)
+        elif context.scene.leftWindowObj == '左耳':
+            is_show = context.scene.transparent2L
+            type = context.scene.transparent2EnumL
+            mat_name = "tran_blue_l"
+            percent = 1 - float(bpy.context.scene.transparentper2EnumL)
+    else:
+        name = context.scene.leftWindowObj
+        obj = bpy.data.objects.get(name)
+        if name == '右耳':
+            is_show = context.scene.transparent2R
+            type = context.scene.transparent2EnumR
+            mat_name = "YellowR"
+            percent = 1 - float(bpy.context.scene.transparentper2EnumR)
+        elif name == '左耳':
+            is_show = context.scene.transparent2L
+            type = context.scene.transparent2EnumL
+            mat_name = "YellowL"
+            percent = 1 - float(bpy.context.scene.transparentper2EnumL)
+
+    if obj and is_show:
+        if obj.hide_get():
+            obj.hide_set(False)
+            appendmaterial(type, name, mat_name, percent)
+    elif obj and not is_show:
+        if not obj.hide_get():
+            obj.hide_set(True)
 
 
 def update_transparent2(self, context):
-    name = context.scene.leftWindowObj + 'WaxForShow'
-    obj = bpy.data.objects.get(name)
-    if obj and context.scene.transparent2:
-        type = context.scene.transparent2Enum
-        appendmaterial(type, name, "tran_blue")
+    if (bpy.context.screen.areas[0].spaces.active.context != 'RENDER' or
+            (bpy.context.screen.areas[0].spaces.active.context == 'MATERIAL' and get_color_mode() != 1)):
+        name = context.scene.leftWindowObj + 'WaxForShow'
+        obj = bpy.data.objects.get(name)
+        if context.scene.leftWindowObj == '右耳':
+            is_show = context.scene.transparent2R
+            type = context.scene.transparent2EnumR
+            percent = 1 - float(bpy.context.scene.transparentper2EnumR)
+            mat_name = "tran_blue_r"
+        elif context.scene.leftWindowObj == '左耳':
+            is_show = context.scene.transparent2L
+            type = context.scene.transparent2EnumL
+            mat_name = "tran_blue_l"
+            percent = 1 - float(bpy.context.scene.transparentper2EnumL)
+
+    else:
+        name = context.scene.leftWindowObj
+        obj = bpy.data.objects.get(name)
+        if name == '右耳':
+            is_show = context.scene.transparent2R
+            type = context.scene.transparent2EnumR
+            percent = 1 - float(bpy.context.scene.transparentper2EnumR)
+            mat_name = "YellowR"
+        elif name == '左耳':
+            is_show = context.scene.transparent2L
+            type = context.scene.transparent2EnumL
+            mat_name = "YellowL"
+            percent = 1 - float(bpy.context.scene.transparentper2EnumL)
+
+    if obj and is_show:
+        appendmaterial(type, name, mat_name, percent)
 
 
 def update_transparentper2(self, context):
-    name = context.scene.leftWindowObj + 'WaxForShow'
-    obj = bpy.data.objects.get(name)
-    if obj and context.scene.transparent2:
-        percent = 1 - float(context.scene.transparentper2Enum)
-        changealpha("tran_blue", percent)
+    if (bpy.context.screen.areas[0].spaces.active.context != 'RENDER' or
+            (bpy.context.screen.areas[0].spaces.active.context == 'MATERIAL' and get_color_mode() != 1)):
+        name = context.scene.leftWindowObj + 'WaxForShow'
+        obj = bpy.data.objects.get(name)
+        if context.scene.leftWindowObj == '右耳':
+            is_show = context.scene.transparent2R
+            percent = 1 - float(context.scene.transparentper2EnumR)
+            mat_name = "tran_blue_r"
+        elif context.scene.leftWindowObj == '左耳':
+            is_show = context.scene.transparent2L
+            percent = 1 - float(context.scene.transparentper2EnumL)
+            mat_name = "tran_blue_l"
+    else:
+        name = context.scene.leftWindowObj
+        obj = bpy.data.objects.get(name)
+        if name == '右耳':
+            is_show = context.scene.transparent2R
+            percent = 1 - float(context.scene.transparentper2EnumR)
+            mat_name = "YellowR"
+        elif name == '左耳':
+            is_show = context.scene.transparent2L
+            percent = 1 - float(context.scene.transparentper2EnumL)
+            mat_name = "YellowL"
+
+    if obj and is_show:
+        changealpha(mat_name, percent)
 
 
 # 正在操作的模型
 def show_transparent3(self, context):
-    name = context.scene.leftWindowObj
-    obj = bpy.data.objects.get(name)
-    if obj and context.scene.transparent3:
-        obj.hide_set(False)
-        type = context.scene.transparent3Enum
-        appendmaterial(type, name, "Yellow")
-    elif obj and not context.scene.transparent3:
-        obj.hide_set(True)
+    if (bpy.context.screen.areas[0].spaces.active.context != 'RENDER' or
+            (bpy.context.screen.areas[0].spaces.active.context == 'MATERIAL' and get_color_mode() != 1)):
+        name = context.scene.leftWindowObj
+        obj = bpy.data.objects.get(name)
+        if name == '右耳':
+            is_show = context.scene.transparent3R
+            type = context.scene.transparent3EnumR
+            percent = 1 - float(bpy.context.scene.transparentper3EnumR)
+            mat_name = "YellowR"
+        elif name == '左耳':
+            is_show = context.scene.transparent3L
+            type = context.scene.transparent3EnumL
+            mat_name = "YellowL"
+
+    elif bpy.context.screen.areas[0].spaces.active.context == 'RENDER':
+        return
+
+    # 从打磨切到切割模具
+    else:
+        name = context.scene.leftWindowObj
+        obj = bpy.data.objects.get(name)
+        if bpy.data.objects.get(name + 'cutmouldforshow') != None:
+            bpy.data.objects.remove(bpy.data.objects[name + 'cutmouldforshow'], do_unlink=True)
+        duplicate_obj = obj.copy()
+        duplicate_obj.data = obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = name + "cutmouldforshow"
+        bpy.context.collection.objects.link(duplicate_obj)
+        obj = duplicate_obj
+
+        if name == '右耳':
+            is_show = context.scene.transparent3R
+            type = context.scene.transparent3EnumR
+            mat = newMaterial("cutmould_yellow_r")
+            nodes = mat.node_tree.nodes
+            links = mat.node_tree.links
+            output = nodes.new(type='ShaderNodeOutputMaterial')
+            shader = nodes.new(type='ShaderNodeBsdfPrincipled')
+            shader.inputs[0].default_value = (1, 0.319, 0.133, 1)
+            links.new(shader.outputs[0], output.inputs[0])
+            mat_name = "cutmould_yellow_r"
+            percent = 1 - float(bpy.context.scene.transparentper3EnumR)
+            moveToRight(duplicate_obj)
+            # obj.data.materials.append(bpy.data.materials.get("YellowR"))
+            obj.hide_set(True)
+
+        elif name == '左耳':
+            is_show = context.scene.transparent3L
+            type = context.scene.transparent3EnumL
+            mat = newMaterial("cutmould_yellow_l")
+            nodes = mat.node_tree.nodes
+            links = mat.node_tree.links
+            output = nodes.new(type='ShaderNodeOutputMaterial')
+            shader = nodes.new(type='ShaderNodeBsdfPrincipled')
+            shader.inputs[0].default_value = (1, 0.319, 0.133, 1)
+            links.new(shader.outputs[0], output.inputs[0])
+            mat_name = "cutmould_yellow_l"
+            percent = 1 - float(bpy.context.scene.transparentper3EnumL)
+            moveToLeft(duplicate_obj)
+            # obj.data.materials.append(bpy.data.materials.get("YellowL"))
+            obj.hide_set(True)
+
+        name = obj.name
+
+    if obj and is_show:
+        if obj.hide_get():
+            obj.hide_set(False)
+            appendmaterial(type, name, mat_name, percent)
+    elif obj and not is_show:
+        if not obj.hide_get():
+            obj.hide_set(True)
 
 
 def update_transparent3(self, context):
     '''
         物体处于Auto状态下,是否透明取决于当前所处的模块以及对当前模块所作的操作
     '''
-    current_tab = bpy.context.screen.areas[1].spaces.active.context
+    current_tab = bpy.context.screen.areas[0].spaces.active.context
     name = context.scene.leftWindowObj
-    cur_name = None
-    material_name = None
     # 局部加厚模式下透明模式物体为作为对比的LocalThickCompare
     if (current_tab == 'OUTPUT'):
         cur_name = name + "LocalThickCompare"
-        material_name = "Yellow"
     # # 铸造法模式下透明模式物体为内部的红色物体CastingCompare
     # elif(current_tab == "PARTICLES"):
     #     cur_name = name + "CastingCompare"
     #     material_name = "CastingRed"
+    elif (current_tab == "MATERIAL" and get_color_mode() == 1):
+        cur_name = name + "cutmouldforshow"
     else:
         cur_name = name
-        material_name = "Yellow"
+
     obj = bpy.data.objects.get(cur_name)
-    if obj and context.scene.transparent3:
-        type = context.scene.transparent3Enum
-        appendmaterial(type, cur_name, material_name)
+    if obj:
+        if name == '右耳' and context.scene.transparent3R:
+            material_name = "YellowR"
+            if (current_tab == "MATERIAL" and get_color_mode() == 1):
+                material_name = "cutmould_yellow_r"
+            type = context.scene.transparent3EnumR
+            percent = 1 - float(bpy.context.scene.transparentper3EnumR)
+            appendmaterial(type, cur_name, material_name, percent)
+        elif name == '左耳' and context.scene.transparent3L:
+            material_name = "YellowL"
+            if (current_tab == "MATERIAL" and get_color_mode() == 1):
+                material_name = "cutmould_yellow_l"
+            type = context.scene.transparent3EnumL
+            percent = 1 - float(bpy.context.scene.transparentper3EnumL)
+            appendmaterial(type, cur_name, material_name, percent)
 
 
 def update_transparentper3(self, context):
-    current_tab = bpy.context.screen.areas[1].spaces.active.context
+    current_tab = bpy.context.screen.areas[0].spaces.active.context
     name = context.scene.leftWindowObj
-    cur_name = None
-    material_name = None
     # 局部加厚模式下透明模式物体为作为对比的LocalThickCompare
     if (current_tab == 'OUTPUT'):
         cur_name = name + "LocalThickCompare"
-        material_name = "Yellow"
     # 铸造法模式下透明模式物体为内部的红色物体CastingCompare
     # elif (current_tab == "PARTICLES"):
     #     cur_name = name + "CastingCompare"
     #     material_name = "CastingRed"
+    elif (current_tab == "MATERIAL" and get_color_mode() == 1):
+        cur_name = name + "cutmouldforshow"
     else:
         cur_name = name
-        material_name = "Yellow"
+
     obj = bpy.data.objects.get(cur_name)
-    if obj and context.scene.transparent3:
-        percent = 1 - float(context.scene.transparentper3Enum)
-        changealpha(material_name, percent)
+    if obj:
+        if name == '右耳' and context.scene.transparent3R:
+            material_name = "YellowR"
+            if (current_tab == "MATERIAL" and get_color_mode() == 1):
+                material_name = "cutmould_yellow_r"
+            percent = 1 - float(context.scene.transparentper3EnumR)
+            changealpha(material_name, percent)
+        elif name == '左耳' and context.scene.transparent3L:
+            material_name = "YellowL"
+            if (current_tab == "MATERIAL" and get_color_mode() == 1):
+                material_name = "cutmould_yellow_l"
+            percent = 1 - float(context.scene.transparentper3EnumL)
+            changealpha(material_name, percent)
 
 
 def register():
