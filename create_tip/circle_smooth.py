@@ -174,12 +174,12 @@ class Circle_Smooth(bpy.types.Operator):
             # self.mark_end_sweep_edges_sharp(self.mark_sharp, cyclic, has_caps, border_edges, merge_verts)
 
         bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
+        bpy.ops.object.vertex_group_set_active(group='CircleCutOuter')
         bpy.ops.object.vertex_group_select()
         bpy.ops.mesh.delete(type='FACE')
         bpy.ops.mesh.select_all(action='DESELECT')
 
-        bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
+        bpy.ops.object.vertex_group_set_active(group='CircleCutOuter')
         bpy.ops.object.vertex_group_select()
         bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
         bpy.ops.mesh.select_all(action='DESELECT')
@@ -246,9 +246,9 @@ class Circle_Smooth(bpy.types.Operator):
         bm.free()
 
         # 删除顶点组
-        delete_vert_group("StepCutOuter")
+        delete_vert_group("CircleCutOuter")
         delete_vert_group(self.center_border_group_name)
-        delete_vert_group("StepCutInner")
+        delete_vert_group("CircleCutInner")
 
         bpy.ops.object.shade_smooth()
 
@@ -1063,6 +1063,7 @@ def pipe_cut():
     bpy.ops.mesh.delete(type='FACE')
     bpy.ops.mesh.select_mode(type='VERT')
     bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)  # 让物体法线向内
 
     # 切割
     bpy.ops.object.mode_set(mode='OBJECT')
@@ -1073,14 +1074,14 @@ def pipe_cut():
     # 使用布尔插件
     bpy.ops.object.booltool_auto_difference()
     bpy.ops.object.mode_set(mode='EDIT')
-    active_obj.vertex_groups.new(name="StepCutOuter")
+    active_obj.vertex_groups.new(name="CircleCutOuter")
     bpy.ops.object.vertex_group_assign()
 
 
 def get_outer_and_inner_vert_group():
     main_obj = bpy.context.active_object
     bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
+    bpy.ops.object.vertex_group_set_active(group='CircleCutOuter')
     bpy.ops.object.vertex_group_select()
 
     bm = bmesh.from_edit_mesh(main_obj.data)
@@ -1104,16 +1105,16 @@ def get_outer_and_inner_vert_group():
         if v.is_boundary and v.index in inner_part_set:
             v.select_set(True)
 
-    main_obj.vertex_groups.new(name="StepCutInner")
+    main_obj.vertex_groups.new(name="CircleCutInner")
     bpy.ops.object.vertex_group_assign()
-    bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
+    bpy.ops.object.vertex_group_set_active(group='CircleCutOuter')
     bpy.ops.object.vertex_group_remove_from()
 
 
 def delete_inner_part():
     main_obj = bpy.context.active_object
     bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='StepCutInner')
+    bpy.ops.object.vertex_group_set_active(group='CircleCutInner')
     bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.delete(type='VERT')
     bpy.ops.object.vertex_group_remove()
@@ -1153,7 +1154,7 @@ def scale_border(scale_factor, center_border_group_name, vert_layer):
         vert[vert_layer] = extrude_direction[key]
         vert.co += (center - vert.co) * (1 - scale_factor)  # 沿中心方向缩放
 
-    active.vertex_groups.new(name="StepCutInner")
+    active.vertex_groups.new(name="CircleCutInner")
     bpy.ops.object.vertex_group_assign()
     bpy.ops.object.vertex_group_set_active(group=center_border_group_name)
     bpy.ops.object.vertex_group_remove_from()
@@ -1236,9 +1237,9 @@ def bridge_border(width, center_border_group_name):
 
     # 分离出桥接边
     bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
+    bpy.ops.object.vertex_group_set_active(group='CircleCutOuter')
     bpy.ops.object.vertex_group_select()
-    bpy.ops.object.vertex_group_set_active(group='StepCutInner')
+    bpy.ops.object.vertex_group_set_active(group='CircleCutInner')
     bpy.ops.object.vertex_group_select()
     bpy.ops.object.vertex_group_set_active(group=center_border_group_name)
     bpy.ops.object.vertex_group_select()
@@ -1272,11 +1273,11 @@ def bridge_border(width, center_border_group_name):
 
     # 区分上下边界index
     bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
+    bpy.ops.object.vertex_group_set_active(group='CircleCutOuter')
     bpy.ops.object.vertex_group_select()
     outer_border_index_set = set([v.index for v in bm.verts if v.select])
     bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='StepCutInner')
+    bpy.ops.object.vertex_group_set_active(group='CircleCutInner')
     bpy.ops.object.vertex_group_select()
     inner_border_index_set = set([v.index for v in bm.verts if v.select])
     bpy.ops.mesh.select_all(action='DESELECT')
@@ -1357,7 +1358,7 @@ def get_route_index(now_index, next_index, bm):
 def resample_outer_border(resample_num):
     main_obj = bpy.context.active_object
     bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
+    bpy.ops.object.vertex_group_set_active(group='CircleCutOuter')
     bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.separate(type='SELECTED')
 
@@ -1369,10 +1370,10 @@ def resample_outer_border(resample_num):
     outer_border_obj.select_set(False)
 
     bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
+    bpy.ops.object.vertex_group_set_active(group='CircleCutOuter')
     bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.select_more()
-    main_obj.vertex_groups.new(name="StepCutOuterBridge")
+    main_obj.vertex_groups.new(name="CircleCutOuterBridge")
     bpy.ops.object.vertex_group_assign()
     bpy.ops.mesh.delete(type='FACE')
     bpy.ops.object.mode_set(mode='OBJECT')
@@ -1381,7 +1382,7 @@ def resample_outer_border(resample_num):
     # 重新设置顶点组
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-    outer_border_obj.vertex_groups.new(name="StepCutOuter")
+    outer_border_obj.vertex_groups.new(name="CircleCutOuter")
     bpy.ops.object.vertex_group_assign()
     bpy.ops.object.mode_set(mode='OBJECT')
 
@@ -1392,12 +1393,12 @@ def resample_outer_border(resample_num):
 
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='StepCutOuterBridge')
+    bpy.ops.object.vertex_group_set_active(group='CircleCutOuterBridge')
     bpy.ops.object.vertex_group_select()
-    bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
+    bpy.ops.object.vertex_group_set_active(group='CircleCutOuter')
     bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.bridge_edge_loops()
-    delete_vert_group("StepCutOuterBridge")
+    delete_vert_group("CircleCutOuterBridge")
 
 
 def resample_mesh(obj, resample_num):

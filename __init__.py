@@ -78,13 +78,27 @@ from . import  (
     offset_cut
     )
 from .create_tip import qiege, circle_smooth, step_smooth, cut_mould
-from .create_mould.soft_eardrum import thickness_and_fill
-from .create_mould import point
-from .create_mould.hard_eardrum import hard_eardrum, hard_eardrum_offset_cut
-from .create_mould.soft_eardrum import soft_eardrum, soft_eardrum_offset_cut
-from .create_mould.frame_style_eardrum import frame_style_eardrum
-# from .pymesh import pymesh
-# from .tool import output_redirect
+from .create_mould import point, create_mould
+from .create_mould.hard_eardrum import hard_eardrum_offset_cut, hard_eardrum_bottom_fill
+from .create_mould.soft_eardrum import thickness_and_fill, soft_eardrum_offset_cut
+from .create_mould.frame_style_eardrum import frame_eardrum_offset_cut
+from .pymesh import pymesh
+from .tool import output_redirect
+
+import bpy
+from .damo import register_damo_tools
+from .jiahou import register_jiahou_tools
+from .create_tip.qiege import register_qiege_tools
+from .create_mould.point import register_createmould_tools
+from .sound_canal import register_soundcanal_tools
+from .vent_canal import register_ventcanal_tools
+from .label import register_label_tools
+from .handle import register_handle_tools
+from .support import register_support_tools
+from .casting import register_casting_tools
+from .sprue import register_sprue_tools
+from .last_damo import register_lastdamo_tools
+from .create_tip.cut_mould import register_cutmould_tools
 
 def register():
     ui.register()
@@ -101,19 +115,32 @@ def register():
     sound_canal.register()
     vent_canal.register()
     casting.register()
-    hard_eardrum.register()
-    soft_eardrum.register()
-    frame_style_eardrum.register()
     sprue.register()
     last_damo.register()
-    create_mould.create_mould.register()
+    create_mould.register()
     hard_eardrum_offset_cut.register()
-    # pymesh.register()
+    hard_eardrum_bottom_fill.register()
+    pymesh.register()
     circle_smooth.register()
     step_smooth.register()
     offset_cut.register()
     soft_eardrum_offset_cut.register()
     cut_mould.register()
+    frame_eardrum_offset_cut.register()
+
+    register_damo_tools()
+    register_jiahou_tools()
+    register_qiege_tools()
+    register_label_tools()
+    register_handle_tools()
+    register_support_tools()
+    register_createmould_tools()
+    register_soundcanal_tools()
+    register_ventcanal_tools()
+    register_casting_tools()
+    register_sprue_tools()
+    register_lastdamo_tools()
+    register_cutmould_tools()
 
 
 def unregister():
@@ -130,19 +157,18 @@ def unregister():
     sound_canal.unregister()
     vent_canal.unregister()
     casting.unregister()
-    hard_eardrum.unregister()
-    soft_eardrum.unregister()
-    frame_style_eardrum.unregister()
     sprue.unregister()
     last_damo.unregister()
-    create_mould.create_mould.unregister()
+    create_mould.unregister()
     hard_eardrum_offset_cut.unregister()
-    # pymesh.unregister()
+    hard_eardrum_bottom_fill.unregister()
+    pymesh.unregister()
     circle_smooth.unregister()
     step_smooth.unregister()
     offset_cut.unregister()
     soft_eardrum_offset_cut.unregister()
     cut_mould.unregister()
+    frame_eardrum_offset_cut.unregister()
 
 
 if __name__ == "__main__":

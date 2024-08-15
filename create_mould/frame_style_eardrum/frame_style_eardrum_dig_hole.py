@@ -3,30 +3,11 @@ import bmesh
 import math
 import re
 
-from ...tool import moveToRight, convert_to_mesh, subdivide, newColor, set_vert_group, delete_vert_group, \
-    extrude_border_by_vertex_groups
+from ...tool import moveToRight, moveToLeft, convert_to_mesh, subdivide, newColor, set_vert_group, delete_vert_group, \
+    extrude_border_by_vertex_groups, getOverride
+from ...utils.utils import resample_curve
 
 from ..parameters_for_create_mould import get_right_frame_style_hole_border, get_left_frame_style_hole_border
-
-template_highest_point = (-10.3681, 2.2440, 12.1771)
-
-
-# 获取VIEW_3D区域的上下文
-def getOverride():
-    area_type = 'VIEW_3D'  # change this to use the correct Area Type context you want to process in
-    areas = [area for area in bpy.context.window.screen.areas if area.type == area_type]
-
-    if len(areas) <= 0:
-        raise Exception(f"Make sure an Area of type {area_type} is open or visible in your screen!")
-
-    override = {
-        'window': bpy.context.window,
-        'screen': bpy.context.window.screen,
-        'area': areas[0],
-        'region': [region for region in areas[0].regions if region.type == 'WINDOW'][0],
-    }
-
-    return override
 
 
 def calculate_angle(x, y):
@@ -98,7 +79,10 @@ def draw_border_curve(order_border_co, name, depth):
     override = getOverride()
     with bpy.context.temp_override(**override):
         bpy.context.active_object.data.bevel_depth = depth
-        moveToRight(bpy.context.active_object)
+        if bpy.context.scene.leftWindowObj == '右耳':
+            moveToRight(bpy.context.active_object)
+        elif bpy.context.scene.leftWindowObj == '左耳':
+            moveToLeft(bpy.context.active_object)
 
         # 为圆环上色
         newColor('blue', 0, 0, 1, 1, 1)
@@ -107,7 +91,7 @@ def draw_border_curve(order_border_co, name, depth):
         bpy.context.view_layer.objects.active = active_obj
 
 
-def darw_cylinder(outer_dig_border, inner_dig_border):
+def draw_cylinder(outer_dig_border, inner_dig_border):
     order_outer_dig_border = get_order_border_vert(outer_dig_border)
     order_inner_dig_border = get_order_border_vert(inner_dig_border)
     order_outer_top = []
@@ -351,14 +335,13 @@ def boolean_dig():
 
 
 # 获取洞边界顶点
-def get_hole_border(template_highest_point, template_hole_border, number):
+def get_hole_border(template_hole_border, number):
     name = bpy.context.scene.leftWindowObj
     active_obj = bpy.context.active_object
     if active_obj.type == 'MESH':
         dig_border = []  # 被选择的挖孔顶点
 
         for template_hole_border_point in template_hole_border:  # 通过向z负方向投射找到边界
-            # 根据模板旋转的角度，边界顶点也做相应的旋转
             xx = template_hole_border_point[0]
             yy = template_hole_border_point[1]
             origin = (xx, yy, 10)
@@ -369,24 +352,168 @@ def get_hole_border(template_highest_point, template_hole_border, number):
 
         order_hole_border_vert = get_order_border_vert(dig_border)
 
-        curve_name = 'HoleBorderCurve' + str(number)
+        curve_name = name + 'HoleBorderCurve' + str(number)
         draw_border_curve(order_hole_border_vert, curve_name, 0.18)
-        darw_cylinder_bottom(order_hole_border_vert)
+        draw_cylinder_bottom(order_hole_border_vert)
 
         bpy.ops.object.mode_set(mode='OBJECT')
 
 
+# def dig_hole():
+#     name = bpy.context.scene.leftWindowObj
+#
+#     template_hole_border_list = []
+#     if (name == "右耳"):
+#         template_hole_border_list = get_right_frame_style_hole_border()
+#     elif (name == "左耳"):
+#         template_hole_border_list = get_left_frame_style_hole_border()
+#     # 复制切割补面完成后的物体
+#     cur_obj = bpy.data.objects[name]
+#     duplicate_obj = cur_obj.copy()
+#     duplicate_obj.data = cur_obj.data.copy()
+#     duplicate_obj.animation_data_clear()
+#     duplicate_obj.name = cur_obj.name + "OriginForDigHole"
+#     bpy.context.collection.objects.link(duplicate_obj)
+#     duplicate_obj.hide_set(True)
+#     moveToRight(duplicate_obj)
+#
+#     number = len(template_hole_border_list)
+#     for template_hole_border in template_hole_border_list:
+#         get_hole_border(template_hole_border, number)
+#         translate_circle_to_cylinder()
+#         # 创建布尔修改器
+#         boolean_cut(number)
+#         local_curve_name = name + 'HoleBorderCurve' + str(number)
+#         local_mesh_name = name + 'meshHoleBorderCurve' + str(number)
+#         # subdivide(local_curve_name, 1)  # 细分曲线，防止曲线的点太少移动时穿模
+#         convert_to_mesh(local_curve_name, local_mesh_name, 0.18)  # 重新生成网格
+#         number -= 1
+#
+#     bpy.context.view_layer.objects.active = bpy.data.objects[name]
+
+
 def dig_hole():
+    name = bpy.context.scene.leftWindowObj
+    # 复制切割补面完成后的物体
+    cur_obj = bpy.data.objects[name]
+    duplicate_obj = cur_obj.copy()
+    duplicate_obj.data = cur_obj.data.copy()
+    duplicate_obj.animation_data_clear()
+    duplicate_obj.name = cur_obj.name + "OriginForDigHole"
+    bpy.context.collection.objects.link(duplicate_obj)
+    duplicate_obj.hide_set(True)
+    moveToRight(duplicate_obj)
+
+    active_obj = bpy.data.objects[name + 'BottomRingBorderR']
+    duplicate_obj = active_obj.copy()
+    duplicate_obj.data = active_obj.data.copy()
+    duplicate_obj.name = name + "HoleCutCylinderBottom"
+    duplicate_obj.animation_data_clear()
+    # 将复制的物体加入到场景集合中
+    bpy.context.collection.objects.link(duplicate_obj)
+    if name == '右耳':
+        moveToRight(duplicate_obj)
+    elif name == '左耳':
+        moveToLeft(duplicate_obj)
+
+    duplicate_obj.data.bevel_depth = 0
+    bpy.ops.object.select_all(action='DESELECT')
+
+    bpy.context.view_layer.objects.active = duplicate_obj
+    duplicate_obj.select_set(state=True)
+    bpy.ops.object.convert(target='MESH')
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    duplicate_obj.vertex_groups.new(name='FrameEardrumBorderVertex')
+    bpy.ops.object.vertex_group_assign()
+    bpy.ops.mesh.offset_edges(geometry_mode='offset', width=-2, caches_valid=False)
+    bpy.ops.object.vertex_group_remove_from()
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.delete(type='VERT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.remove_doubles(threshold=0.5)
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bm = bmesh.from_edit_mesh(duplicate_obj.data)
+    for v in bm.verts:
+        if len(v.link_edges) == 1:
+            v.select_set(True)
+    bpy.ops.mesh.delete(type='VERT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    # bpy.ops.object.vertex_group_assign()
+    bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='25', regular=True)
+
+    bm = bmesh.from_edit_mesh(duplicate_obj.data)
+    verts = [v for v in bm.verts if v.select]
+    verts.sort(key=lambda v: v.co.y, reverse=True)
+    y_min_vert_index = verts[-1].index
+    scale_around_active_vertex(duplicate_obj, y_min_vert_index, 0.6)
+
+    bpy.ops.mesh.extrude_region_move(TRANSFORM_OT_translate={"value": (0, 0, 20)})
+    bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = bpy.data.objects[name]
+    bpy.data.objects[name].select_set(True)
+    bpy.data.objects[name + 'HoleCutCylinderBottom'].select_set(True)
+    bpy.ops.object.booltool_auto_difference()
+
+    bpy.ops.object.mode_set(mode='EDIT')
+    bm = bmesh.from_edit_mesh(bpy.data.objects[name].data)
+    up_outer_border_index = [v.index for v in bm.verts if v.select]
+    bpy.ops.object.mode_set(mode='OBJECT')
+    # 用于平滑的顶点组，包含所有孔边界顶点
+    set_vert_group("UpOuterBorderVertex", up_outer_border_index)
+    # 用于上下桥接的顶点组，只包含当前孔边界
+    set_vert_group("HoleBorderVertex1", up_outer_border_index)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.delete(type='FACE')
+    bpy.ops.object.vertex_group_set_active(group='HoleBorderVertex1')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.separate(type='SELECTED')
+    for obj in bpy.data.objects:
+        if obj.select_get() and obj != bpy.data.objects[name]:
+            curve_obj = obj
+            break
+    bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = curve_obj
+    curve_obj.name = name + 'HoleBorderCurve1'
+    curve_obj.select_set(True)
+    bpy.ops.object.convert(target='CURVE')
+    bpy.context.object.data.bevel_depth = 0.18
+    bpy.context.object.data.materials.append(bpy.data.materials['blue'])
+    resample_curve(80, curve_obj.name)
+    convert_to_mesh(name + 'HoleBorderCurve1', name + 'meshHoleBorderCurve1', 0.18)  # 重新生成网格
+
+    extrude_and_set_vert_group()
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='UpInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.object.vertex_group_set_active(group='UpOuterBorderVertex')
+    bpy.ops.object.vertex_group_remove_from()
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def get_hole_border_by_curve(number):
+    name = bpy.context.scene.leftWindowObj
+    curve_obj = bpy.data.objects[name + 'HoleBorderCurve' + str(number)]
+    dig_border = []
+    for point in curve_obj.data.splines[0].points:
+        dig_border.append((point.co[0], point.co[1], point.co[2]))
+
+    order_hole_border_vert = get_order_border_vert(dig_border)
+    draw_cylinder_bottom(order_hole_border_vert)
+
+
+def re_dig_hole():
     name = bpy.context.scene.leftWindowObj
 
     template_hole_border_list = []
-    template_highest_point = None
     if (name == "右耳"):
         template_hole_border_list = get_right_frame_style_hole_border()
-        template_highest_point = (11.867500305175781, -8.64398193359375, 15.000337600708008)
     elif (name == "左耳"):
         template_hole_border_list = get_left_frame_style_hole_border()
-        template_highest_point = (2.7108917236328125, -9.098304748535156, 16.62348747253418)
     # 复制切割补面完成后的物体
     cur_obj = bpy.data.objects[name]
     duplicate_obj = cur_obj.copy()
@@ -398,45 +525,36 @@ def dig_hole():
     moveToRight(duplicate_obj)
 
     number = len(template_hole_border_list)
-    for template_hole_border in template_hole_border_list:
-        get_hole_border(template_highest_point, template_hole_border, number)
+
+    for i in range(1, number + 1):
+        get_hole_border_by_curve(i)
         translate_circle_to_cylinder()
         # 创建布尔修改器
-        boolean_cut()
-        local_curve_name = 'HoleBorderCurve' + str(number)
-        local_mesh_name = 'mesh' + local_curve_name
-        subdivide(local_curve_name, 1)  # 细分曲线，防止曲线的点太少移动时穿模
+        boolean_cut(i)
+        local_curve_name = name + 'HoleBorderCurve' + str(i)
+        local_mesh_name = name + 'meshHoleBorderCurve' + str(i)
+        # subdivide(local_curve_name, 1)  # 细分曲线，防止曲线的点太少移动时穿模
         convert_to_mesh(local_curve_name, local_mesh_name, 0.18)  # 重新生成网格
-        number -= 1
 
-    # for obj in bpy.data.objects:
-    #     if obj.name == 'HoleBorderCurve':
-    #         obj.name = 'HoleBorderCurve1'
-    #         subdivide('HoleBorderCurve1', 3)
-    #         convert_to_mesh('HoleBorderCurve1', 'meshHoleBorderCurve1', 0.18)
-    #
-    #     if obj.name == 'HoleBorderCurve.001':
-    #         obj.name = 'HoleBorderCurve2'
-    #         subdivide('HoleBorderCurve2', 3)
-    #         convert_to_mesh('HoleBorderCurve2', 'meshHoleBorderCurve2', 0.18)
-
-    bpy.context.view_layer.objects.active = bpy.data.objects["右耳"]
+    bpy.context.view_layer.objects.active = bpy.data.objects[name]
 
 
-def darw_cylinder_bottom(order_hole_border_vert):
+def draw_cylinder_bottom(order_hole_border_vert):
+    name = bpy.context.scene.leftWindowObj
     # 该变量存储布尔切割的圆柱体的底部
     cut_cylinder_buttom_co = []
     for vert in order_hole_border_vert:
         # 先直接用原坐标，后续尝试法向向外走一段
         co = vert
-        cut_cylinder_buttom_co.append([co[0], co[1], co[2] - 1])
-    draw_border_curve(cut_cylinder_buttom_co, "HoleCutCylinderBottom", 0)
+        cut_cylinder_buttom_co.append([co[0], co[1], co[2] - 2])
+    draw_border_curve(cut_cylinder_buttom_co, name + "HoleCutCylinderBottom", 0)
 
 
 def translate_circle_to_cylinder():
+    name = bpy.context.scene.leftWindowObj
     for obj in bpy.data.objects:
         obj.select_set(False)
-        if obj.name == "HoleCutCylinderBottom":
+        if obj.name == name + "HoleCutCylinderBottom":
             obj.select_set(True)
             bpy.context.view_layer.objects.active = obj
 
@@ -446,7 +564,6 @@ def translate_circle_to_cylinder():
     bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.mesh.remove_doubles(threshold=0.2)
     bpy.ops.mesh.extrude_region_move(
-        # todo 50为挤出高度，先写死，后续根据边界最高最低点调整
         TRANSFORM_OT_translate={"value": (0, 0, 12)}
     )
     bpy.ops.mesh.select_all(action='SELECT')
@@ -456,7 +573,7 @@ def translate_circle_to_cylinder():
 
 
 # 使用布尔修改器
-def boolean_cut():
+def boolean_cut(number):
     name = bpy.context.scene.leftWindowObj
     bpy.ops.object.select_all(action='DESELECT')
     obj = bpy.data.objects[name]
@@ -471,8 +588,8 @@ def boolean_cut():
     bpy.ops.object.mode_set(mode='OBJECT')
 
     # 使用布尔插件
-    bpy.data.objects["HoleCutCylinderBottom"].hide_set(False)
-    bpy.data.objects["HoleCutCylinderBottom"].select_set(True)
+    bpy.data.objects[name + "HoleCutCylinderBottom"].hide_set(False)
+    bpy.data.objects[name + "HoleCutCylinderBottom"].select_set(True)
     bpy.ops.object.booltool_auto_difference()
 
     # 删除多余部分
@@ -502,10 +619,6 @@ def boolean_cut():
     # 用于平滑的顶点组，包含所有孔边界顶点
     set_vert_group("UpOuterBorderVertex", up_outer_border_index)
 
-    number = 0
-    for obj in bpy.data.objects:
-        if re.match('HoleBorderCurve', obj.name) != None:
-            number += 1
 
     # 用于上下桥接的顶点组，只包含当前孔边界
     set_vert_group("HoleBorderVertex" + str(number), up_outer_border_index)
@@ -519,3 +632,40 @@ def boolean_cut():
     inside_border_index = extrude_border_by_vertex_groups("HoleBorderVertex" + str(number), "UpInnerBorderVertex")
     # 单个孔的内外边界也留一下
     set_vert_group("HoleInnerBorderVertex" + str(number), inside_border_index)
+
+
+def extrude_and_set_vert_group():
+    extrude_border_by_vertex_groups("BottomOuterBorderVertex", "BottomInnerBorderVertex")
+
+    number = 0
+    name = bpy.context.scene.leftWindowObj
+    for obj in bpy.data.objects:
+        if re.match(name + 'HoleBorderCurve', obj.name) != None:
+            number += 1
+
+    for i in range(1, number + 1):
+        inside_border_index = extrude_border_by_vertex_groups("HoleBorderVertex" + str(number), "UpInnerBorderVertex")
+        # 单个孔的内外边界也留一下
+        set_vert_group("HoleInnerBorderVertex" + str(number), inside_border_index)
+
+
+def scale_around_active_vertex(obj, vertex_index, scale_factor):
+    # 获取 BMesh
+    bm = bmesh.from_edit_mesh(obj.data)
+
+    # 确保顶点索引表可用
+    bm.verts.ensure_lookup_table()
+
+    # 获取活动顶点的位置
+    active_vertex = bm.verts[vertex_index]
+    active_location = active_vertex.co
+
+    # 缩放每个顶点
+    for v in bm.verts:
+        # 计算相对于活动顶点的位置
+        direction = v.co - active_location
+        # 根据缩放因子调整位置
+        v.co = active_location + direction * scale_factor
+
+    # 更新 BMesh
+    bmesh.update_edit_mesh(obj.data)

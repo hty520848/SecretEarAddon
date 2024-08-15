@@ -17,6 +17,11 @@ def newColor(id, r, g, b, is_transparency, transparency_degree):
     output = nodes.new(type='ShaderNodeOutputMaterial')
     shader = nodes.new(type='ShaderNodeBsdfPrincipled')
     shader.inputs[0].default_value = (r, g, b, 1)
+    shader.inputs[6].default_value = 0.46
+    shader.inputs[7].default_value = 0
+    shader.inputs[9].default_value = 0.472
+    shader.inputs[14].default_value = 1
+    shader.inputs[15].default_value = 0.105
     links.new(shader.outputs[0], output.inputs[0])
     if is_transparency:
         mat.blend_method = "BLEND"
@@ -151,6 +156,12 @@ def backToCasting():
         bpy.data.objects.remove(sprue_reset, do_unlink=True)
     if (sprue_last != None):
         bpy.data.objects.remove(sprue_last, do_unlink=True)
+    support_casting_reset = bpy.data.objects.get(name + "CastingCompareSupportReset")
+    support_casting_last = bpy.data.objects.get(name + "CastingCompareSupportLast")
+    if (support_casting_reset != None):
+        bpy.data.objects.remove(support_casting_reset, do_unlink=True)
+    if (support_casting_last != None):
+        bpy.data.objects.remove(support_casting_last, do_unlink=True)
 
     # 删除支撑和排气孔中可能存在的对比物体
     soft_support_compare_obj = bpy.data.objects.get(name + "SoftSupportCompare")
@@ -505,8 +516,7 @@ def castingInitial():
     cur_obj.select_set(False)
     duplicate_obj.select_set(True)
     bpy.context.view_layer.objects.active = duplicate_obj
-    red_material = bpy.data.materials.new(name="Red")
-    red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+    red_material = newColor("Red", 1, 0, 0, 0, 1)  # 创建材质
     duplicate_obj.data.materials.clear()
     duplicate_obj.data.materials.append(red_material)
 
@@ -711,24 +721,27 @@ def castingSubmit():
                     bpy.ops.object.modifier_apply(modifier="HandleCastingModifier", single_user=True)
 
 
-                #将铸造法之后的右耳和附件合并并删除附件
-                handle_obj.select_set(False)
+                #将铸造法之后的右耳和附件合并并删除附件(使用Bool Tool将字体铸造法和模型合并之后,字体铸造法模型会被自动删除)
+                bpy.ops.object.select_all(action='DESELECT')
+                handle_obj.select_set(True)
                 cur_obj.select_set(True)
                 bpy.context.view_layer.objects.active = cur_obj
-                EarAndHandleUnionForCasting = cur_obj.modifiers.new(name="EarAndHandleUnionForCasting", type='BOOLEAN')
-                EarAndHandleUnionForCasting.object = handle_obj
-                EarAndHandleUnionForCasting.operation = 'UNION'
-                EarAndHandleUnionForCasting.solver = 'EXACT'
-                bpy.ops.object.modifier_apply(modifier="EarAndHandleUnionForCasting", single_user=True)
-                bpy.data.objects.remove(handle_obj, do_unlink=True)
+                bpy.ops.object.booltool_auto_union()
+                # EarAndHandleUnionForCasting = cur_obj.modifiers.new(name="EarAndHandleUnionForCasting", type='BOOLEAN')
+                # EarAndHandleUnionForCasting.object = handle_obj
+                # EarAndHandleUnionForCasting.operation = 'UNION'
+                # EarAndHandleUnionForCasting.solver = 'EXACT'
+                # bpy.ops.object.modifier_apply(modifier="EarAndHandleUnionForCasting", single_user=True)
+                # bpy.data.objects.remove(handle_obj, do_unlink=True)
 
 
                 #布尔合并后连接区域可能无颜色,因此需要重新着色
-                bpy.ops.object.mode_set(mode='VERTEX_PAINT')
-                bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
-                bpy.data.brushes["Draw"].color = (1, 0.6, 0.4)
-                bpy.ops.paint.vertex_color_set()
-                bpy.ops.object.mode_set(mode='OBJECT')
+                utils_re_color(name, (1, 0.319, 0.133))
+                # bpy.ops.object.mode_set(mode='VERTEX_PAINT')
+                # bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
+                # bpy.data.brushes["Draw"].color = (1, 0.6, 0.4)
+                # bpy.ops.paint.vertex_color_set()
+                # bpy.ops.object.mode_set(mode='OBJECT')
 
         #将上述生成的软耳膜附件CastingReplace更名为软耳膜附件Casting
         for obj in bpy.data.objects:
@@ -747,23 +760,39 @@ def castingSubmit():
             patternL = r'左耳LabelPlaneForCasting'
             if re.match(patternR, obj.name) or re.match(patternL, obj.name):
                 label_obj = obj
+                #将字体铸造法显示出来
                 label_obj.hide_set(False)
+                #根据字体铸造法复制出一份物体(使用Bool Tool将字体铸造法和模型合并之后,字体铸造法模型会被自动删除)
+                label_name = label_obj.name
+                label_obj_temp = label_obj.copy()
+                label_obj_temp.data = label_obj.data.copy()
+                label_obj_temp.animation_data_clear()
+                bpy.context.collection.objects.link(label_obj_temp)
+                if (name == "右耳"):
+                    moveToRight(label_obj_temp)
+                elif (name == "左耳"):
+                    moveToLeft(label_obj_temp)
+                #使用BoolTool工具将字体铸造法和模型合并
                 bpy.ops.object.select_all(action='DESELECT')
+                label_obj.select_set(True)
                 cur_obj.select_set(True)
                 bpy.context.view_layer.objects.active = cur_obj
-                EarAndHandleUnionForCasting = cur_obj.modifiers.new(name="EarAndLabelUnionForCasting",type='BOOLEAN')
-                EarAndHandleUnionForCasting.object = label_obj
-                EarAndHandleUnionForCasting.operation = 'UNION'
-                EarAndHandleUnionForCasting.solver = 'EXACT'
-                bpy.ops.object.modifier_apply(modifier="EarAndLabelUnionForCasting", single_user=True)
-                label_obj.hide_set(True)
+                bpy.ops.object.booltool_auto_union()
+                # EarAndHandleUnionForCasting = cur_obj.modifiers.new(name="EarAndLabelUnionForCasting",type='BOOLEAN')
+                # EarAndHandleUnionForCasting.object = label_obj
+                # EarAndHandleUnionForCasting.operation = 'UNION'
+                # EarAndHandleUnionForCasting.solver = 'EXACT'
+                # bpy.ops.object.modifier_apply(modifier="EarAndLabelUnionForCasting", single_user=True)
+                label_obj_temp.name = label_name
+                label_obj_temp.hide_set(True)
 
                 # 布尔合并后连接区域可能无颜色,因此需要重新着色
-                bpy.ops.object.mode_set(mode='VERTEX_PAINT')
-                bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
-                bpy.data.brushes["Draw"].color = (1, 0.6, 0.4)
-                bpy.ops.paint.vertex_color_set()
-                bpy.ops.object.mode_set(mode='OBJECT')
+                utils_re_color(name, (1, 0.319, 0.133))
+                # bpy.ops.object.mode_set(mode='VERTEX_PAINT')
+                # bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
+                # bpy.data.brushes["Draw"].color = (1, 0.6, 0.4)
+                # bpy.ops.paint.vertex_color_set()
+                # bpy.ops.object.mode_set(mode='OBJECT')
 
 
 
@@ -887,12 +916,18 @@ _classes = [
 ]
 
 
-def register():
-    for cls in _classes:
-        bpy.utils.register_class(cls)
+def register_casting_tools():
     bpy.utils.register_tool(MyTool_Casting1, separator=True, group=False)
     bpy.utils.register_tool(MyTool_Casting2, separator=True, group=False, after={MyTool_Casting1.bl_idname})
     bpy.utils.register_tool(MyTool_Casting3, separator=True, group=False, after={MyTool_Casting2.bl_idname})
+
+
+def register():
+    for cls in _classes:
+        bpy.utils.register_class(cls)
+    # bpy.utils.register_tool(MyTool_Casting1, separator=True, group=False)
+    # bpy.utils.register_tool(MyTool_Casting2, separator=True, group=False, after={MyTool_Casting1.bl_idname})
+    # bpy.utils.register_tool(MyTool_Casting3, separator=True, group=False, after={MyTool_Casting2.bl_idname})
 
 
 def unregister():

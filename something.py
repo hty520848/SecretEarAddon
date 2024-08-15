@@ -1021,3 +1021,186 @@ new_obj.data.bevel_depth = 0.1
 new_obj.data.bevel_resolution = 10
 newColor('localthick_border_red', 1, 0, 0, 0, 1)
 new_obj.data.materials.append(bpy.data.materials["localthick_border_red"])
+
+import bpy
+import bmesh
+import mathutils
+
+# 创建平面
+bpy.ops.mesh.primitive_plane_add(size=2, enter_editmode=False, align='WORLD', location=(0, 0, 0))
+plane = bpy.context.object
+
+# 获取目标物体
+target_object = bpy.data.objects['右耳底部边界']
+
+# 计算目标物体的边界框
+bbox = [target_object.matrix_world @ mathutils.Vector(corner) for corner in target_object.bound_box]
+min_corner = mathutils.Vector((min([v[i] for v in bbox]) for i in range(3)))
+max_corner = mathutils.Vector((max([v[i] for v in bbox]) for i in range(3)))
+
+# 设置平面的位置和大小
+plane.scale = (max_corner.x - min_corner.x, max_corner.y - min_corner.y, 1)
+plane.location = (target_object.location.x, target_object.location.y, max_corner.z + 0.1)
+
+# 获取当前视图区域
+area = next(area for area in bpy.context.screen.areas if area.type == 'VIEW_3D')
+space = next(space for space in area.spaces if space.type == 'VIEW_3D')
+
+# 记住当前视图角度和视图类型
+current_region_3d = space.region_3d
+view_matrix = current_region_3d.view_matrix.copy()
+view_perspective = current_region_3d.view_perspective
+view_location = current_region_3d.view_location.copy()
+view_rotation = current_region_3d.view_rotation.copy()
+
+# 切换到正交视图
+for area in bpy.context.screen.areas:
+    if area.type == 'VIEW_3D':
+        for space in area.spaces:
+            if space.type == 'VIEW_3D':
+                space.region_3d.view_perspective = 'ORTHO'
+                override = {'area': area, 'region': area.regions[-1]}
+                bpy.ops.view3d.view_axis(override, type='TOP')
+                break
+            
+# 进入编辑模式
+bpy.ops.object.mode_set(mode='EDIT')
+
+# 细分平面
+bpy.ops.mesh.subdivide(number_cuts=10)
+bpy.ops.mesh.select_all(action='SELECT')
+bpy.ops.mesh.subdivide(number_cuts=3)
+bpy.ops.mesh.select_all(action='SELECT')
+bpy.ops.mesh.delete(type='ONLY_FACE')
+bpy.ops.object.mode_set(mode='OBJECT')
+
+# 选择目标物体和平面
+bpy.ops.object.select_all(action='DESELECT')
+target_object.select_set(True)
+bpy.context.view_layer.objects.active = target_object
+
+# 进入编辑模式
+bpy.ops.object.mode_set(mode='EDIT')
+
+# 选择所有的顶点
+bpy.ops.mesh.select_all(action='SELECT')
+bpy.ops.mesh.edge_face_add()
+plane.select_set(True)
+
+# 使用Knife Project进行切割
+bpy.ops.mesh.knife_project()
+
+# 返回对象模式
+bpy.ops.object.mode_set(mode='OBJECT')
+
+# 恢复之前的视图角度和视图类型
+current_region_3d.view_matrix = view_matrix
+current_region_3d.view_perspective = view_perspective
+current_region_3d.view_location = view_location
+current_region_3d.view_rotation = view_rotation
+
+# 删除平面
+bpy.data.objects.remove(plane, do_unlink=True)
+
+
+import bpy
+import bmesh
+from mathutils import Vector
+
+def smooth_inset(obj, max_distance=1.0):
+    # 确保物体在编辑模式
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    
+    # 创建BMesh
+    bm = bmesh.from_edit_mesh(obj.data)
+    inner_verts = [v for v in bm.verts if v.select]
+
+    # 计算物体的中心点
+    center = Vector((0, 0, 0))
+    for vert in inner_verts:
+        center += vert.co
+    center /= len(inner_verts)
+    
+    # 计算所有顶点到中心点的最大距离
+    max_dist = max((vert.co - center).length for vert in inner_verts)
+    
+    # 计算每个顶点的移动距离并移动顶点
+    for vert in inner_verts:
+        distance = (vert.co - center).length
+        move_distance = (max_dist - distance) / max_dist * max_distance
+        vert.co += vert.normal * move_distance
+    
+    # 更新BMesh到对象
+    bmesh.update_edit_mesh(obj.data)
+    
+    # 回到对象模式
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+obj = bpy.context.object  # 确保你已经选中了一个对象
+smooth_inset(obj, max_distance=0.1)  # 向内凹陷
+
+import bpy
+import bmesh 
+
+bm = bmesh.from_edit_mesh(bpy.context.object.data)
+verts = [v for v in bm.verts if v.select]
+co_list = [v.co[0:3] for v in verts]
+print(co_list)
+
+
+obj = bpy.context.object
+bpy.ops.object.mode_set(mode='EDIT')
+bm = bmesh.from_edit_mesh(obj.data)
+result = []
+for v in bm.verts:
+    result.append(v)
+
+result.sort(key=lambda vert: vert.co[1], reverse=True)
+high = result[0].co[0:3]
+low = result[-1].co[0:3]
+print(high, low)
+
+
+def get_target_x_high_and_low():
+    name = bpy.context.scene.leftWindowObj
+    obj = bpy.data.objects[name + "OriginForFitPlace"]
+    verts = [vert for vert in obj.data.vertices]
+    verts.sort(key=lambda vert: vert.co[0], reverse=True)
+    x_min = verts[-1].co[0:3]
+    x_max = verts[0].co[0:3]
+    return x_min, x_max
+
+
+def get_target_y_high_and_low():
+    name = bpy.context.scene.leftWindowObj
+    obj = bpy.data.objects[name + "OriginForFitPlace"]
+    verts = [vert for vert in obj.data.vertices]
+    verts.sort(key=lambda vert: vert.co[1], reverse=True)
+    y_min = verts[-1].co[0:3]
+    y_max = verts[0].co[0:3]
+    return y_min, y_max
+
+
+def get_actual_co_x(origin_co, target_high, target_low):
+    template_high_x = (17.133798599243164, -11.830062866210938, 7.630766868591309)
+    template_low_x = (-18.0744686126709, 4.0141730308532715, -11.661688804626465)
+
+    name = bpy.context.scene.leftWindowObj
+    
+    high_percent_x = (origin_co[0] - template_low_x[0]) / (template_high_x[0] - template_low_x[0]) - 0.03
+    xx_co = (target_high[0] - target_low[0]) * high_percent_x + target_low[0]
+
+    return xx_co
+
+
+def get_actual_co_y(origin_co, target_high, target_low):
+    template_high_y = (1.979130744934082, 21.116729736328125, -5.374090194702148)
+    template_low_y =  (-6.583621978759766, -14.7842378616333, -5.247776508331299)
+
+    name = bpy.context.scene.leftWindowObj
+
+    high_percent_y = (origin_co[1] - template_low_y[1]) / (template_high_y[1] - template_low_y[1]) - 0.03
+    yy_co = (target_high[1] - target_low[1]) * high_percent_y + target_low[1]
+
+    return yy_co

@@ -8,9 +8,11 @@ import bpy_extras
 from bpy_extras import view3d_utils
 import math
 from pynput import mouse
+from .log_file import initial_log_file
 
 # 控制台输出重定向
 # output_redirect()
+# initial_log_file()
 
 prev_on_object = False  # 全局变量,保存之前的鼠标状态,用于判断鼠标状态是否改变(如从物体上移动到公共区域或从公共区域移动到物体上)
 
@@ -177,6 +179,12 @@ def backToDamo():
         bpy.data.objects.remove(sprue_reset, do_unlink=True)
     if (sprue_last != None):
         bpy.data.objects.remove(sprue_last, do_unlink=True)
+    support_casting_reset = bpy.data.objects.get(name + "CastingCompareSupportReset")
+    support_casting_last = bpy.data.objects.get(name + "CastingCompareSupportLast")
+    if (support_casting_reset != None):
+        bpy.data.objects.remove(support_casting_reset, do_unlink=True)
+    if (support_casting_last != None):
+        bpy.data.objects.remove(support_casting_last, do_unlink=True)
 
     # 删除支撑和排气孔中可能存在的对比物体
     soft_support_compare_obj = bpy.data.objects.get(name + "SoftSupportCompare")
@@ -197,7 +205,6 @@ def backToDamo():
 
     # 根据保存的DamoCopy,复制一份用来替换当前激活物体
     name = bpy.context.scene.leftWindowObj
-    # print('name',name)
     active_obj = bpy.data.objects.get(name)
     collections = None
     if name == '右耳':
@@ -276,7 +283,6 @@ def backFromDamo():
     # 根据当前激活物体,复制出来一份作为DamoCopy,用于后面模块返回到当前模块时恢复
     name = bpy.context.scene.leftWindowObj
     active_obj = bpy.data.objects.get(name)
-    # print('active',name)
     all_objs = bpy.data.objects
     collections = None
     if name == '右耳':
@@ -364,48 +370,109 @@ def backFromDamo():
     # 激活右耳或左耳为当前活动物体
     bpy.context.view_layer.objects.active = bpy.data.objects[bpy.context.scene.leftWindowObj]
     bpy.ops.object.select_all(action='DESELECT')
-    bpy.data.objects[bpy.context.scene.leftWindowObj].select_set(state=True)
+    bpy.data.objects[bpy.context.scene.leftWindowObj].select_set(True)
     # 调用公共鼠标行为
     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
 
 def frontFromDamo():
+    set_modal_start_false()
+    name = bpy.context.scene.leftWindowObj
+    active_obj = bpy.data.objects.get(name)
+    all_objs = bpy.data.objects
+    collections = None
+    if name == '右耳':
+        # 删除已经存在的右耳DamoCopy
+        for selected_obj in all_objs:
+            if (selected_obj.name == "右耳DamoCopy"):
+                bpy.data.objects.remove(selected_obj, do_unlink=True)
+        duplicate_obj = active_obj.copy()
+        duplicate_obj.data = active_obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = name + "DamoCopy"
+        bpy.context.collection.objects.link(duplicate_obj)
+        moveToRight(duplicate_obj)
+
+        # bpy.context.scene.transparent2R = False
+        # bpy.context.scene.transparent3R = True
+        duplicate_obj.hide_set(True)
+        duplicate_obj2 = active_obj.copy()
+        duplicate_obj2.data = active_obj.data.copy()
+        duplicate_obj2.animation_data_clear()
+        duplicate_obj2.name = name + "WaxForShow"
+        bpy.context.collection.objects.link(duplicate_obj2)
+        duplicate_obj2.data.materials.append(bpy.data.materials.get("tran_blue_r"))
+        moveToRight(duplicate_obj2)
+        duplicate_obj2.hide_set(True)
+        active_obj = bpy.data.objects[name]
+        bpy.context.view_layer.objects.active = active_obj
+        collections = bpy.data.collections['Right']
+
+    elif name == '左耳':
+        # 删除已经存在的左耳DamoCopy
+        for selected_obj in all_objs:
+            if (selected_obj.name == "左耳DamoCopy"):
+                bpy.data.objects.remove(selected_obj, do_unlink=True)
+        duplicate_obj = active_obj.copy()
+        duplicate_obj.data = active_obj.data.copy()
+        duplicate_obj.animation_data_clear()
+        duplicate_obj.name = name + "DamoCopy"
+        bpy.context.collection.objects.link(duplicate_obj)
+        moveToLeft(duplicate_obj)
+
+        # bpy.context.scene.transparent2L = False
+        # bpy.context.scene.transparent3L = True
+        duplicate_obj.hide_set(True)
+        duplicate_obj2 = active_obj.copy()
+        duplicate_obj2.data = active_obj.data.copy()
+        duplicate_obj2.animation_data_clear()
+        duplicate_obj2.name = name + "WaxForShow"
+        bpy.context.collection.objects.link(duplicate_obj2)
+        duplicate_obj2.data.materials.append(bpy.data.materials.get("tran_blue_l"))
+        moveToLeft(duplicate_obj2)
+        duplicate_obj2.hide_set(True)
+        active_obj = bpy.data.objects[name]
+        bpy.context.view_layer.objects.active = active_obj
+        collections = bpy.data.collections['Left']
+
     # 将添加的鼠标监听删除
     global damo_mouse_listener
     if (damo_mouse_listener != None):
         damo_mouse_listener.stop()
         damo_mouse_listener = None
 
-    # name = bpy.context.scene.leftWindowObj
-    # bpy.data.objects.remove(bpy.data.objects[name], do_unlink=True)
-    # reset_name = name + "DamoReset"
-    # ori_obj = bpy.data.objects[reset_name]
-    # # 根据重置的物体复制出一份新的物体并替换原有的物体
-    # duplicate_obj = ori_obj.copy()
-    # duplicate_obj.data = ori_obj.data.copy()
-    # duplicate_obj.name = name
-    # duplicate_obj.animation_data_clear()
-    # # 将复制的物体加入到场景集合中
-    # scene = bpy.context.scene
-    # scene.collection.objects.link(duplicate_obj)
-    # if name == '右耳':
-    #     moveToRight(duplicate_obj)
-    # elif name == '左耳':
-    #     moveToLeft(duplicate_obj)
-    # duplicate_obj.hide_set(False)
-
     if bpy.context.mode == 'SCULPT':
         bpy.ops.object.mode_set(mode='OBJECT')
+
+    # 获取网格数据
+    # for obj in collections.objects:
+    #     if obj.type == 'MESH':
+    #         me = obj.data
+    #         # 创建bmesh对象
+    #         bm = bmesh.new()
+    #         # 将网格数据复制到bmesh对象
+    #         bm.from_mesh(me)
+    #         if len(bm.verts.layers.float_color) > 0:
+    #             color_lay = bm.verts.layers.float_color["Color"]
+    #             for vert in bm.verts:
+    #                 colvert = vert[color_lay]
+    #                 colvert.x = 1
+    #                 colvert.y = 0.319
+    #                 colvert.z = 0.133
+    #
+    #         bm.to_mesh(me)
+    #         bm.free()
 
     # 激活右耳或左耳为当前活动物体
     bpy.context.view_layer.objects.active = bpy.data.objects[bpy.context.scene.leftWindowObj]
     bpy.ops.object.select_all(action='DESELECT')
-    bpy.data.objects[bpy.context.scene.leftWindowObj].select_set(state=True)
+    bpy.data.objects[bpy.context.scene.leftWindowObj].select_set(True)
     # 调用公共鼠标行为
     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
 
 def frontToDamo():
+    set_modal_start_false()
     # 从切割模具模块回来，根据切割后的结果重新复制出一份用于对比的物体
     name = bpy.context.scene.leftWindowObj
     compare_name = name + 'DamoCompare'
@@ -431,6 +498,34 @@ def frontToDamo():
             mesh = duplicate_obj.data
             for idx, vert in enumerate(mesh.vertices):
                 vert.co = vert.co - mesh.vertices[idx].normal.normalized() * thickness
+
+    collections = None
+    if name == '右耳':
+        collections = bpy.data.collections['Right']
+        bpy.context.scene.transparent2R = True
+        bpy.context.scene.transparent3R = False
+    elif name == '左耳':
+        collections = bpy.data.collections['Left']
+        bpy.context.scene.transparent2R = True
+        bpy.context.scene.transparent3R = False
+    for obj in collections.objects:
+        if obj.type == 'MESH':
+            # 获取网格数据
+            me = obj.data
+            # 创建bmesh对象
+            bm = bmesh.new()
+            # 将网格数据复制到bmesh对象
+            bm.from_mesh(me)
+            if len(bm.verts.layers.float_color) > 0:
+                color_lay = bm.verts.layers.float_color["Color"]
+                for vert in bm.verts:
+                    colvert = vert[color_lay]
+                    colvert.x = 0
+                    colvert.y = 0.25
+                    colvert.z = 1
+
+            bm.to_mesh(me)
+            bm.free()
 
 
 def on_click(x, y, button, pressed):
@@ -483,7 +578,7 @@ class Thickening(bpy.types.Operator):
         thinning_modal_start = False
         op_cls = Thickening
         bpy.context.scene.var = 1
-        print("thicking_invoke")
+        # print("thicking_invoke")
         bpy.ops.object.mode_set(mode='SCULPT')
         bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")  # 调用加厚笔刷
         bpy.data.brushes["SculptDraw"].direction = "ADD"
@@ -960,11 +1055,6 @@ class Thickening(bpy.types.Operator):
             if op_cls.__timer:
                 context.window_manager.event_timer_remove(op_cls.__timer)
                 op_cls.__timer = None
-            bpy.context.view_layer.objects.active = bpy.data.objects[context.scene.leftWindowObj]
-            bpy.ops.object.mode_set(mode='OBJECT')
-            bpy.ops.object.select_all(action='DESELECT')
-            bpy.data.objects[context.scene.leftWindowObj].select_set(True)
-            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             return {'FINISHED'}
 
         # 鼠标在区域外
@@ -1022,7 +1112,7 @@ class Thinning(bpy.types.Operator):
 
         op_cls = Thinning
         bpy.context.scene.var = 2
-        print("thinning_invoke")
+        # print("thinning_invoke")
         bpy.ops.object.mode_set(mode='SCULPT')
         bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")  # 调用加厚笔刷
         bpy.data.brushes["SculptDraw"].direction = "SUBTRACT"
@@ -1495,11 +1585,6 @@ class Thinning(bpy.types.Operator):
             if op_cls.__timer:
                 context.window_manager.event_timer_remove(op_cls.__timer)
                 op_cls.__timer = None
-            bpy.context.view_layer.objects.active = bpy.data.objects[context.scene.leftWindowObj]
-            bpy.ops.object.mode_set(mode='OBJECT')
-            bpy.ops.object.select_all(action='DESELECT')
-            bpy.data.objects[context.scene.leftWindowObj].select_set(True)
-            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             return {'FINISHED'}
 
         # 鼠标在区域外
@@ -1560,7 +1645,7 @@ class Smooth(bpy.types.Operator):
 
         op_cls = Smooth
         bpy.context.scene.var = 3
-        print("smooth_invoke")
+        # print("smooth_invoke")
         bpy.ops.object.mode_set(mode='SCULPT')
         bpy.ops.wm.tool_set_by_id(name="builtin_brush.Smooth")  # 调用光滑笔刷
         bpy.data.brushes["Smooth"].direction = 'SMOOTH'
@@ -1977,11 +2062,6 @@ class Smooth(bpy.types.Operator):
             if op_cls.__timer:
                 context.window_manager.event_timer_remove(op_cls.__timer)
                 op_cls.__timer = None
-            bpy.context.view_layer.objects.active = bpy.data.objects[context.scene.leftWindowObj]
-            bpy.ops.object.mode_set(mode='OBJECT')
-            bpy.ops.object.select_all(action='DESELECT')
-            bpy.data.objects[context.scene.leftWindowObj].select_set(True)
-            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             return {'FINISHED'}
 
         # 鼠标在区域外
@@ -2287,9 +2367,7 @@ _classes = [
 ]
 
 
-def register():
-    for cls in _classes:
-        bpy.utils.register_class(cls)
+def register_damo_tools():
     bpy.utils.register_tool(MyTool, separator=True, group=False)
     bpy.utils.register_tool(MyTool3, separator=True,
                             group=False, after={MyTool.bl_idname})
@@ -2305,6 +2383,26 @@ def register():
                             group=False, after={MyTool4.bl_idname})
     bpy.utils.register_tool(MyTool8, separator=True,
                             group=False, after={MyTool6.bl_idname})
+
+
+def register():
+    for cls in _classes:
+        bpy.utils.register_class(cls)
+    # bpy.utils.register_tool(MyTool, separator=True, group=False)
+    # bpy.utils.register_tool(MyTool3, separator=True,
+    #                         group=False, after={MyTool.bl_idname})
+    # bpy.utils.register_tool(MyTool5, separator=True,
+    #                         group=False, after={MyTool3.bl_idname})
+    # bpy.utils.register_tool(MyTool7, separator=True,
+    #                         group=False, after={MyTool5.bl_idname})
+    #
+    # bpy.utils.register_tool(MyTool2, separator=True, group=False)
+    # bpy.utils.register_tool(MyTool4, separator=True,
+    #                         group=False, after={MyTool2.bl_idname})
+    # bpy.utils.register_tool(MyTool6, separator=True,
+    #                         group=False, after={MyTool4.bl_idname})
+    # bpy.utils.register_tool(MyTool8, separator=True,
+    #                         group=False, after={MyTool6.bl_idname})
 
 
 def unregister():

@@ -45,15 +45,16 @@ def frontToLastDamo():
     if (soft_support_compare_obj != None):
         soft_support_compare_obj.hide_set(True)
 
-    # 根据保存的DamoCopy,复制一份用来替换当前激活物体
-    all_objs = bpy.data.objects
-    for selected_obj in all_objs:
-        name = bpy.context.scene.leftWindowObj
-        if (selected_obj.name == name + "LastDamoReset" or selected_obj.name == name + "LastDamoForShow"):
-            bpy.data.objects.remove(selected_obj, do_unlink=True)
+    # 删除可能存在的LastDamoReset和LastDamoForShow
+    lastdamo_reset_obj = bpy.data.objects.get(name + "LastDamoReset")
+    lastdamo_show_obj = bpy.data.objects.get(name + "LastDamoForShow")
+    if(lastdamo_reset_obj != None):
+        bpy.data.objects.remove(lastdamo_reset_obj, do_unlink=True)
+    if (lastdamo_show_obj != None):
+        bpy.data.objects.remove(lastdamo_show_obj, do_unlink=True)
+    #根据当前操作的左右耳模型复制两份物体作为重置和厚度显示的物体
     name = bpy.context.scene.leftWindowObj
-    obj = bpy.data.objects[name]
-    #复制一份用于重置的物体
+    obj = bpy.data.objects.get(name)
     duplicate_obj1 = obj.copy()
     duplicate_obj1.data = obj.data.copy()
     duplicate_obj1.animation_data_clear()
@@ -113,12 +114,11 @@ def frontFromLastDamo():
 
     last_set_modal_start_false()
     name = bpy.context.scene.leftWindowObj
-    obj = bpy.data.objects[name]
-    # 切换到物体模式
+    obj = bpy.data.objects.get(name)
     bpy.ops.object.mode_set(mode='OBJECT')
-    #将后期打磨操作后的物体删除
+    #使用LastDamoReset将操作物体还原
     resetname = name + "LastDamoReset"
-    ori_obj = bpy.data.objects[resetname]
+    ori_obj = bpy.data.objects.get(resetname)
     bpy.data.objects.remove(obj, do_unlink=True)
     duplicate_obj = ori_obj.copy()
     duplicate_obj.data = ori_obj.data.copy()
@@ -133,10 +133,13 @@ def frontFromLastDamo():
     duplicate_obj.select_set(True)
     bpy.context.view_layer.objects.active = duplicate_obj
 
-    all_objs = bpy.data.objects
-    for selected_obj in all_objs:
-        if (selected_obj.name == name + "LastDamoReset" or selected_obj.name == name + "LastDamoForShow"):
-            bpy.data.objects.remove(selected_obj, do_unlink=True)
+    # 删除可能存在的LastDamoReset和LastDamoForShow
+    lastdamo_reset_obj = bpy.data.objects.get(name + "LastDamoReset")
+    lastdamo_show_obj = bpy.data.objects.get(name + "LastDamoForShow")
+    if (lastdamo_reset_obj != None):
+        bpy.data.objects.remove(lastdamo_reset_obj, do_unlink=True)
+    if (lastdamo_show_obj != None):
+        bpy.data.objects.remove(lastdamo_show_obj, do_unlink=True)
 
     # 调用公共鼠标行为
     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
@@ -156,8 +159,7 @@ def frontFromLastDamo():
         damo_mouse_listener.stop()
         damo_mouse_listener = None
 
-    if bpy.context.mode == 'SCULPT':
-        bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
 
     # 激活右耳或左耳为当前活动物体
     bpy.context.view_layer.objects.active = bpy.data.objects[bpy.context.scene.leftWindowObj]
@@ -1649,21 +1651,25 @@ class LastDamo_Reset(bpy.types.Operator):
 
     def excute(self, context, event):
         bpy.context.scene.var = 4
-        active_obj = bpy.context.active_object
-        name = bpy.context.object.name
-        reset_name = name + "LastDamoReset"
-        if bpy.data.objects.get(reset_name):
-            ori_obj = bpy.data.objects[reset_name]
-            bpy.data.objects.remove(active_obj, do_unlink=True)
-            ori_obj.name = name
-            ori_obj.hide_set(False)
-        bpy.context.view_layer.objects.active = bpy.data.objects[context.scene.leftWindowObj]
-        bpy.ops.object.mode_set(mode='OBJECT')
-        bpy.ops.object.select_all(action='DESELECT')
-        for i in bpy.context.visible_objects:  # 迭代所有可见物体,激活当前物体
-            if i.name == name:
-                bpy.context.view_layer.objects.active = i
-                i.select_set(state=True)
+        name = bpy.context.scene.leftWindowObj
+        # 使用LastDamoReset将操作物体还原
+        resetname = name + "LastDamoReset"
+        cur_obj = bpy.data.objects.get(name)
+        ori_obj = bpy.data.objects.get(resetname)
+        if(ori_obj != None):
+            bpy.data.objects.remove(cur_obj, do_unlink=True)
+            duplicate_obj = ori_obj.copy()
+            duplicate_obj.data = ori_obj.data.copy()
+            duplicate_obj.animation_data_clear()
+            duplicate_obj.name = name
+            bpy.context.scene.collection.objects.link(duplicate_obj)
+            if (name == "右耳"):
+                moveToRight(duplicate_obj)
+            elif (name == "左耳"):
+                moveToLeft(duplicate_obj)
+            bpy.ops.object.select_all(action='DESELECT')
+            duplicate_obj.select_set(True)
+            bpy.context.view_layer.objects.active = duplicate_obj
 
 
 class MyToolLastDamo(WorkSpaceTool):
@@ -1760,7 +1766,7 @@ class MyToolLastDamo5(WorkSpaceTool):
     bl_description = (
         "使用鼠标拖动圆滑耳模"
     )
-    bl_icon = "ops.sequencer.retime"
+    bl_icon = "brush.paint_weight.blur"
     bl_widget = None
     bl_keymap = (
         ("object.last_smooth", {"type": 'MOUSEMOVE', "value": 'ANY'},
@@ -1781,7 +1787,7 @@ class MyToolLastDamo6(WorkSpaceTool):
     bl_description = (
         "使用鼠标拖动圆滑耳模"
     )
-    bl_icon = "ops.sequencer.retime"
+    bl_icon = "brush.paint_weight.blur"
     bl_widget = None
     bl_keymap = (
         ("object.last_smooth", {"type": 'MOUSEMOVE', "value": 'ANY'},
@@ -1843,9 +1849,7 @@ _classes = [
 ]
 
 
-def register():
-    for cls in _classes:
-        bpy.utils.register_class(cls)
+def register_lastdamo_tools():
     bpy.utils.register_tool(MyToolLastDamo, separator=True, group=False)
     bpy.utils.register_tool(MyToolLastDamo3, separator=True,
                             group=False, after={MyToolLastDamo.bl_idname})
@@ -1861,6 +1865,26 @@ def register():
                             group=False, after={MyToolLastDamo4.bl_idname})
     bpy.utils.register_tool(MyToolLastDamo8, separator=True,
                             group=False, after={MyToolLastDamo6.bl_idname})
+
+
+def register():
+    for cls in _classes:
+        bpy.utils.register_class(cls)
+    # bpy.utils.register_tool(MyToolLastDamo, separator=True, group=False)
+    # bpy.utils.register_tool(MyToolLastDamo3, separator=True,
+    #                         group=False, after={MyToolLastDamo.bl_idname})
+    # bpy.utils.register_tool(MyToolLastDamo5, separator=True,
+    #                         group=False, after={MyToolLastDamo3.bl_idname})
+    # bpy.utils.register_tool(MyToolLastDamo7, separator=True,
+    #                         group=False, after={MyToolLastDamo5.bl_idname})
+    #
+    # bpy.utils.register_tool(MyToolLastDamo2, separator=True, group=False)
+    # bpy.utils.register_tool(MyToolLastDamo4, separator=True,
+    #                         group=False, after={MyToolLastDamo2.bl_idname})
+    # bpy.utils.register_tool(MyToolLastDamo6, separator=True,
+    #                         group=False, after={MyToolLastDamo4.bl_idname})
+    # bpy.utils.register_tool(MyToolLastDamo8, separator=True,
+    #                         group=False, after={MyToolLastDamo6.bl_idname})
 
 
 def unregister():

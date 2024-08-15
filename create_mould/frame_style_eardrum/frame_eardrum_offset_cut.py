@@ -10,8 +10,8 @@ import math
 
 
 class OffsetCut(bpy.types.Operator):
-    bl_idname = "hardeardrum.smooth"
-    bl_label = "Hardeardrum: Smooth"
+    bl_idname = "frameeardrum.smooth"
+    bl_label = "Frameeardrum: Smooth"
     bl_description = "description"
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -125,7 +125,6 @@ class OffsetCut(bpy.types.Operator):
             self.boolean_pipe(bm, face_layer, idx)
 
         pipe_cut()
-
         bpy.ops.mesh.select_all(action='DESELECT')
 
         active = context.active_object
@@ -160,14 +159,14 @@ class OffsetCut(bpy.types.Operator):
             self.mark_end_sweep_edges_sharp(self.mark_sharp, cyclic, has_caps, border_edges, merge_verts)
 
         bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.vertex_group_set_active(group='HardEardrumOuter')
+        bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
         bpy.ops.object.vertex_group_select()
+
         bpy.ops.mesh.delete(type='FACE')
         bpy.ops.object.vertex_group_select()
+
         bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
         bpy.ops.mesh.select_all(action='DESELECT')
-
-        get_outer_and_inner_vert_group()
 
         # 添加每个环的圆心
         bpy.ops.mesh.select_all(action='DESELECT')
@@ -194,6 +193,7 @@ class OffsetCut(bpy.types.Operator):
         bpy.ops.object.vertex_group_assign()
 
         bridge_border(self.width, self.center_border_group_name)
+
         bm = bmesh.new()
         bm.from_mesh(active.data)
         bm.select_flush(True)
@@ -212,14 +212,9 @@ class OffsetCut(bpy.types.Operator):
         bm.free()
 
         # 删除顶点组
-        delete_vert_group("HardEardrumOuter")
-        delete_vert_group(self.center_border_group_name)
-        delete_vert_group("HardEardrumInner")
-        # delete_vert_group("BevelSmooth")
-        # delete_vert_group("BevelBorder")
-        delete_vert_group('BorderVertex')
-        delete_vert_group('SeparateVertex')
-        delete_vert_group('TransformBorder')
+        delete_vert_group("StepCutOuter")
+        delete_vert_group("all")
+
         return {'FINISHED'}
 
         # bmesh.ops.dissolve_edges(bm, edges=junk_edges, use_verts=True)
@@ -1006,25 +1001,56 @@ def pipe_cut():
     bpy.ops.mesh.delete(type='FACE')
     bpy.ops.mesh.select_mode(type='VERT')
     bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.normals_make_consistent(inside=False)  # 让物体法线向内
+
+    # 让物体法线向外，保证union的效果
+    bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.ops.object.select_all(action='DESELECT')
+    active_obj.select_set(True)
+    bpy.context.view_layer.objects.active = active_obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.mesh.select_all(action='DESELECT')
 
     # 切割
     bpy.ops.object.mode_set(mode='OBJECT')
-    pipe_obj.select_set(True)
+
     active_obj.select_set(True)
     bpy.context.view_layer.objects.active = active_obj
 
-    # 使用布尔插件
-    bpy.ops.object.booltool_auto_difference()
+    # 添加布尔修改器
+    bpy.ops.object.modifier_add(type='BOOLEAN')
+    bpy.context.object.modifiers["Boolean"].operation = 'UNION'
+    bpy.context.object.modifiers["Boolean"].object = pipe_obj
+    bpy.context.object.modifiers["Boolean"].solver = 'FAST'
+    bpy.ops.object.modifier_apply(modifier="Boolean")
+    bpy.data.objects.remove(pipe_obj, do_unlink=True)
+
     bpy.ops.object.mode_set(mode='EDIT')
-    active_obj.vertex_groups.new(name="HardEardrumOuter")
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='all')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.select_all(action='INVERT')
+    # 2024/7/17 这里会有两种情况，1.完全切掉了 2.管道合并进去了
+    # 所以利用之前存的all顶点组反选来确定边界
+    # 情况1直接反选即可，情况2反选后，只选中了管道了两边，所以要选择循环边内区域，且情况1绝对不能选择循环边内区域，所以这里assign两次
+    active_obj.vertex_groups.new(name="StepCutOuter")
     bpy.ops.object.vertex_group_assign()
+    bpy.ops.mesh.loop_to_region()
+    bm = bmesh.from_edit_mesh(active_obj.data)
+    select_vert = [v.index for v in bm.verts if v.select]
+    if len(select_vert) < len(bm.verts) * 0.2:
+        bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
+        bpy.ops.object.vertex_group_assign()
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.mesh.select_all(action='DESELECT')
 
 
 def get_outer_and_inner_vert_group():
     main_obj = bpy.context.active_object
     bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='HardEardrumOuter')
+    bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
     bpy.ops.object.vertex_group_select()
 
     bm = bmesh.from_edit_mesh(main_obj.data)
@@ -1048,9 +1074,9 @@ def get_outer_and_inner_vert_group():
         if v.is_boundary and v.index in inner_part_set:
             v.select_set(True)
 
-    main_obj.vertex_groups.new(name="HardEardrumInner")
+    main_obj.vertex_groups.new(name="StepCutInner")
     bpy.ops.object.vertex_group_assign()
-    bpy.ops.object.vertex_group_set_active(group='HardEardrumOuter')
+    bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
     bpy.ops.object.vertex_group_remove_from()
 
 
@@ -1059,9 +1085,7 @@ def bridge_border(width, center_border_group_name):
 
     # 分离出桥接边
     bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='HardEardrumOuter')
-    bpy.ops.object.vertex_group_select()
-    bpy.ops.object.vertex_group_set_active(group='HardEardrumInner')
+    bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
     bpy.ops.object.vertex_group_select()
     bpy.ops.object.vertex_group_set_active(group=center_border_group_name)
     bpy.ops.object.vertex_group_select()
@@ -1071,10 +1095,10 @@ def bridge_border(width, center_border_group_name):
         if obj.select_get():
             if obj.name != main_obj.name:
                 bridge_border_obj = obj
+    bridge_border_obj.name = "RetopoPart"
     bridge_border_obj.select_set(False)
     bpy.ops.object.select_all(action='DESELECT')
     bridge_border_obj.select_set(True)
-    bridge_border_obj.name = main_obj.name + "BridgeBorder"
     bpy.context.view_layer.objects.active = bridge_border_obj
 
     # 对需要作为桥接点的顶点进行分组
@@ -1093,25 +1117,20 @@ def bridge_border(width, center_border_group_name):
             v_layer_value_set.add(v.index)
             v_index_layer_value_dict[v_layer_value] = v_layer_value_set
 
-
     # 区分上下边界index
     bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='HardEardrumOuter')
+    bpy.ops.object.vertex_group_set_active(group='StepCutOuter')
     bpy.ops.object.vertex_group_select()
+
     outer_border_index_set = set([v.index for v in bm.verts if v.select])
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='HardEardrumInner')
-    bpy.ops.object.vertex_group_select()
-    inner_border_index_set = set([v.index for v in bm.verts if v.select])
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.vertex_group_set_active(group=center_border_group_name)
     bpy.ops.object.vertex_group_select()
     center_border_index_set = set([v.index for v in bm.verts if v.select])
     bpy.ops.mesh.select_all(action='DESELECT')
 
-    filter_error_data(v_index_layer_value_dict, outer_border_index_set, inner_border_index_set, center_border_index_set)
+    filter_error_data(v_index_layer_value_dict, outer_border_index_set, center_border_index_set)
     bridge_ring_by_ring(v_index_layer_value_dict, outer_border_index_set, center_border_index_set)
-    bridge_ring_by_ring(v_index_layer_value_dict, inner_border_index_set, center_border_index_set)
 
     # 将边界合并回原物体
     bpy.ops.object.mode_set(mode='OBJECT')
@@ -1124,109 +1143,18 @@ def bridge_border(width, center_border_group_name):
     bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.mesh.remove_doubles()
 
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group=center_border_group_name)
-    bpy.ops.object.vertex_group_select()
-    # 进行倒角
-    bpy.ops.mesh.bevel(offset=width * 0.8, segments=int(width / 0.1))
-    # bpy.ops.mesh.select_more()
-    # bpy.ops.object.vertex_group_set_active(group='SeprateVertex')
-    # bpy.ops.object.vertex_group_select()
-    # bpy.ops.mesh.average_normals(average_type='CORNER_ANGLE')
-    # bpy.ops.object.mode_set(mode='OBJECT')
-
-    bpy.ops.mesh.select_more()
-    bpy.ops.mesh.region_to_loop()
-    bpy.ops.mesh.select_more()
-    main_obj.vertex_groups.new(name="TransformBorder")
-    bpy.ops.object.vertex_group_assign()
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.mode_set(mode='OBJECT')
-    bpy.ops.object.shade_smooth()
-    bpy.context.active_object.data.use_auto_smooth = True
-    bpy.context.object.data.auto_smooth_angle = 3.14159
-    bpy.ops.object.modifier_add(type='DATA_TRANSFER')
-    bpy.context.object.modifiers["DataTransfer"].object = bpy.data.objects[
-        bpy.context.scene.leftWindowObj + "HardEarDrumForSmooth"]
-    bpy.context.object.modifiers["DataTransfer"].vertex_group = "TransformBorder"
-    bpy.context.object.modifiers["DataTransfer"].use_loop_data = True
-    bpy.context.object.modifiers["DataTransfer"].data_types_loops = {'CUSTOM_NORMAL'}
-    bpy.context.object.modifiers["DataTransfer"].loop_mapping = 'POLYINTERP_LNORPROJ'
-    bpy.ops.object.modifier_apply(modifier="DataTransfer", single_user=True)
-    return
-
-    # 细分
-    bpy.ops.mesh.subdivide(number_cuts=2)
-    # 新建顶点组
-    main_obj.vertex_groups.new(name="BevelSmooth")
-    bpy.ops.object.vertex_group_assign()
-    main_obj.vertex_groups.new(name="BevelBorder")
-    bpy.ops.object.vertex_group_assign()
-    # 更新顶点组HardEardrumOuter和HardEardrumInner
-    bpy.ops.object.vertex_group_set_active(group='HardEardrumOuter')
-    bpy.ops.object.vertex_group_remove_from()
-    bpy.ops.object.vertex_group_set_active(group='HardEardrumInner')
-    bpy.ops.object.vertex_group_remove_from()
-
-    # 获取倒角的边界
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='BevelBorder')
-    bpy.ops.object.vertex_group_select()
-    bpy.ops.mesh.select_less()
-    bpy.ops.object.vertex_group_remove_from()
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_select()
-    # 细分后，和切割边界相连的面转为三角面
-    bpy.ops.mesh.subdivide(number_cuts=3)
-    bpy.ops.object.vertex_group_set_active(group='HardEardrumOuter')
-    bpy.ops.object.vertex_group_select()
-    bpy.ops.object.vertex_group_set_active(group='HardEardrumInner')
-    bpy.ops.object.vertex_group_select()
-    bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
-
-    # 获取HardEardrumOuter和HardEardrumInner顶点index用于平滑
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='HardEardrumOuter')
-    bpy.ops.object.vertex_group_select()
-    bpy.ops.mesh.select_more()
-    bpy.ops.mesh.select_more()
-    bpy.ops.object.vertex_group_set_active(group='BevelSmooth')
-    bpy.ops.object.vertex_group_deselect()
-    bpy.ops.object.vertex_group_set_active(group='HardEardrumInner')
-    bpy.ops.object.vertex_group_select()
-    bm = bmesh.from_edit_mesh(main_obj.data)
-    smooth_index = [v.index for v in bm.verts if v.select]
-    bpy.ops.mesh.select_all(action='DESELECT')
-
-
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    # 对切割边界进行平滑
-    laplacian_smooth(smooth_index, 0.5, 10)
-    # 平滑矢量来光滑倒角边缘
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_set_active(group='BevelSmooth')
-    bpy.ops.object.vertex_group_select()
-    bpy.ops.mesh.smooth_normals(factor=1)
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.mark_sharp(clear=True)
-    bpy.ops.mesh.normals_make_consistent(inside=False)
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.mode_set(mode='OBJECT')
-    bpy.ops.object.shade_smooth(auto_smooth_angle=3.14159)
 
-
-def filter_error_data(v_index_layer_value_dict, outer_border_index_set, inner_border_index_set, center_border_index_set):
+def filter_error_data(v_index_layer_value_dict, outer_border_index_set, center_border_index_set):
     for key in range(1, len(v_index_layer_value_dict) + 1):
         layer_value_set = v_index_layer_value_dict[key]
-        if len(layer_value_set) != 3:
+        if len(layer_value_set) != 2:
             for item in layer_value_set:
                 if item in center_border_index_set:
                     center_border_index = item
                     up_border_index = get_closest_index(center_border_index, outer_border_index_set)
-                    down_border_index = get_closest_index(center_border_index, inner_border_index_set)
-                    layer_value_set = set([up_border_index, center_border_index, down_border_index])
+                    layer_value_set = set([up_border_index, center_border_index])
                     v_index_layer_value_dict[key] = layer_value_set
 
 
@@ -1357,8 +1285,10 @@ def resample_mesh(obj, resample_num):
 
     bpy.data.node_groups.remove(node_tree)
 
+
 def register():
     bpy.utils.register_class(OffsetCut)
+
 
 def unregister():
     bpy.utils.unregister_class(OffsetCut)

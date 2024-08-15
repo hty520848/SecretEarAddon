@@ -12,8 +12,6 @@ from ...utils.utils import *
 import math
 from math import *
 
-from ..local_retop import retopo
-
 # 当前的context
 gcontext = ''
 
@@ -40,6 +38,14 @@ is_saved = False  # 记录圆球的位置是否被保存
 
 
 bottom_outer_border_co_for_reset = []              #将原本reset_and_refill()函数中的fill()函数拆分到了两个函数中,该数组用于保存中间结果
+
+
+def soft_fill():
+    name = bpy.context.scene.leftWindowObj
+    soft_eardrum()
+    utils_re_color(name, (1, 0.319, 0.133))
+    set_finish(False)
+
 
 # 判断鼠标是否在物体上
 def is_mouse_on_object(context, event):
@@ -449,10 +455,58 @@ def judge_fill_plane_normals():
         sum += v.normal[2]
     return sum > 0
 
+def save_outer_and_inner_origin():
+    name = bpy.context.scene.leftWindowObj
+    outer_obj = bpy.data.objects[name]
+    inner_obj = bpy.data.objects[name + "Inner"]
+
+    if bpy.data.objects.get(name + "OuterOrigin") is not None:
+        bpy.data.objects.remove(bpy.data.objects["OuterOrigin"], do_unlink=True)
+    if bpy.data.objects.get(name + "InnerOrigin") is not None:
+        bpy.data.objects.remove(bpy.data.objects["InnerOrigin"], do_unlink=True)
+
+    outer_obj_copy = outer_obj.copy()
+    outer_obj_copy.data = outer_obj.data.copy()
+    outer_obj_copy.name = name + "OuterOrigin"
+    bpy.context.collection.objects.link(outer_obj_copy)
+    outer_obj_copy.hide_set(True)
+    moveToRight(outer_obj_copy)
+
+    inner_obj_copy = inner_obj.copy()
+    inner_obj_copy.data = inner_obj.data.copy()
+    inner_obj_copy.name = name + "InnerOrigin"
+    bpy.context.collection.objects.link(inner_obj_copy)
+    inner_obj_copy.hide_set(True)
+    moveToRight(inner_obj_copy)
+
+
+def save_outer_and_inner_retopo():
+    name = bpy.context.scene.leftWindowObj
+    outer_obj = bpy.data.objects[name]
+    inner_obj = bpy.data.objects[name + "Inner"]
+
+    if bpy.data.objects.get(name + "OuterRetopo") is not None:
+        bpy.data.objects.remove(bpy.data.objects["OuterRetopo"], do_unlink=True)
+    if bpy.data.objects.get(name + "InnerRetopo") is not None:
+        bpy.data.objects.remove(bpy.data.objects["InnerRetopo"], do_unlink=True)
+
+    outer_obj_copy = outer_obj.copy()
+    outer_obj_copy.data = outer_obj.data.copy()
+    outer_obj_copy.name = name + "OuterRetopo"
+    bpy.context.collection.objects.link(outer_obj_copy)
+    outer_obj_copy.hide_set(True)
+    moveToRight(outer_obj_copy)
+
+    inner_obj_copy = inner_obj.copy()
+    inner_obj_copy.data = inner_obj.data.copy()
+    inner_obj_copy.name = name + "InnerRetopo"
+    bpy.context.collection.objects.link(inner_obj_copy)
+    inner_obj_copy.hide_set(True)
+    moveToRight(inner_obj_copy)
 
 def fill():
     name = bpy.context.scene.leftWindowObj
-    obj = bpy.data.objects["右耳"]
+    obj = bpy.data.objects[name]
     bpy.context.view_layer.objects.active = obj
     # 局部重拓扑
     # retopo(obj.name, "BottomOuterBorderVertex", 0.5)
@@ -502,7 +556,7 @@ def fill():
         if o.select_get():
             if o.name != name:
                 inner_obj = o
-    inner_obj.name = "右耳" + "Inner"
+    inner_obj.name = name + "Inner"
     # 重新设置内外壁顶点组
     bpy.ops.object.select_all(action='DESELECT')
     obj.select_set(True)
@@ -545,6 +599,8 @@ def fill():
     bpy.context.object.modifiers["Smooth"].iterations = 30
     bpy.ops.object.modifier_apply(modifier="Smooth", single_user=True)
 
+    # 重拓扑前保存初始的内外壁
+    save_outer_and_inner_origin()
     # 重拓扑内外壁
     outer_offset = bpy.context.scene.waiBianYuanSheRuPianYi
     inner_offset = bpy.context.scene.neiBianYuanSheRuPianYi
@@ -563,6 +619,8 @@ def fill():
     bpy.ops.object.mode_set(mode='OBJECT')
     set_vert_group("CutBorderVertex", cut_border_index)
 
+    save_outer_and_inner_retopo()
+
     # 最后，合并内外壁并桥接底边
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
@@ -576,70 +634,117 @@ def fill():
     bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.bridge_edge_loops()
 
-    # 分离出内外壁桥接部分，细分以便倒角
-    bpy.ops.mesh.separate(type='SELECTED')
-    bpy.ops.object.mode_set(mode='OBJECT')
-    for o in bpy.data.objects:
-        if o.select_get():
-            if o.name != name:
-                link_obj = o
-    bpy.ops.object.select_all(action='DESELECT')
-    link_obj.select_set(True)
-    bpy.context.view_layer.objects.active = link_obj
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_mode(type='EDGE')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.region_to_loop()
-    bpy.ops.mesh.select_all(action='INVERT')
-    bpy.ops.mesh.subdivide(number_cuts=1)
-    bpy.ops.mesh.select_mode(type='VERT')
+    bevel_soft_border()
 
-    # 选出中线调整顶点组
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.region_to_loop()
-    bpy.ops.mesh.select_all(action='INVERT')
-    bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
-    bpy.ops.object.vertex_group_remove_from()
-    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
-    bpy.ops.object.vertex_group_remove_from()
-    bpy.ops.object.mode_set(mode='OBJECT')
 
-    # 合并回去
+def re_smooth(origin_obj_name, update_retopo_obj_name, retopo_obj_name, retopo_border_name, width):
+    '''
+    origin_obj_name: 需要重新重拓扑还原用物体名称
+    update_retopo_obj_name: 需要更新的重拓扑后的物体名称
+    retopo_obj_name: 不需要重拓扑的物体
+    retopo_border_name: 重拓扑物体的边缘顶点组名称
+    width: 重拓扑物体的边缘宽度
+    '''
+    origin_obj = bpy.data.objects[origin_obj_name]
+    retopo_obj = bpy.data.objects[retopo_obj_name]
+    update_retopo_obj = bpy.data.objects[update_retopo_obj_name]
+
+    # 删除右耳物体与需要更新的重拓扑物体
+    bpy.data.objects.remove(bpy.data.objects["右耳"], do_unlink=True)
+    bpy.data.objects.remove(update_retopo_obj, do_unlink=True)
+
+    # 复制一份origin_obj并重拓扑
+    new_origin_obj = origin_obj.copy()
+    new_origin_obj.data = origin_obj.data.copy()
+    new_origin_obj.name = "右耳"
+    bpy.context.collection.objects.link(new_origin_obj)
+    new_origin_obj.hide_set(False)
+    moveToRight(new_origin_obj)
+
     bpy.ops.object.select_all(action='DESELECT')
-    obj.select_set(True)
-    link_obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
+    new_origin_obj.select_set(True)
+    bpy.context.view_layer.objects.active = new_origin_obj
+    if width != 0:
+        soft_retopo_offset_cut(new_origin_obj.name, retopo_border_name, width)
+    # 更新重拓扑物体
+    new_retopo_obj = new_origin_obj.copy()
+    new_retopo_obj.data = new_origin_obj.data.copy()
+    new_retopo_obj.name = update_retopo_obj_name
+    bpy.context.collection.objects.link(new_retopo_obj)
+    new_retopo_obj.hide_set(True)
+    moveToRight(new_retopo_obj)
+
+    # 复制不需要重拓扑的物体，进行桥接
+    new_retopo_obj = retopo_obj.copy()
+    new_retopo_obj.data = retopo_obj.data.copy()
+    bpy.context.collection.objects.link(new_retopo_obj)
+    new_retopo_obj.hide_set(False)
+
+    # 桥接
+    bpy.ops.object.select_all(action='DESELECT')
+    new_retopo_obj.select_set(True)
+    new_origin_obj.select_set(True)
+    bpy.context.view_layer.objects.active = new_origin_obj
     bpy.ops.object.join()
     bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.remove_doubles()
-    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.bridge_edge_loops()
 
+    bevel_soft_border()
+
+
+def bevel_soft_border():
+    outer_offset = bpy.context.scene.waiBianYuanSheRuPianYi
+    inner_offset = bpy.context.scene.neiBianYuanSheRuPianYi
+
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
     # 分别对内外倒角进行重拓扑
     if outer_offset != 0:
         bpy.ops.mesh.select_all(action='DESELECT')
         bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
         bpy.ops.object.vertex_group_select()
-        bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0, offset_pct=95, segments=16, profile=1, affect='EDGES')
+        bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0, offset_pct=95, segments=16, affect='EDGES')
         # 更新顶点组
         bpy.ops.mesh.select_all(action='DESELECT')
         bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
         bpy.ops.object.vertex_group_select()
         bpy.ops.object.vertex_group_remove_from()
-        for _ in range(int(16/2)):  # 16是bevel的segments
+        for _ in range(int(16 / 2)):  # 16是bevel的segments
             bpy.ops.mesh.select_less()
         bpy.ops.object.vertex_group_assign()
+
+    # 删除内外壁之间的面，重新桥接
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.delete(type='FACE')
+    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.bridge_edge_loops()
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+
     if inner_offset != 0:
         bpy.ops.mesh.select_all(action='DESELECT')
         bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
         bpy.ops.object.vertex_group_select()
-        bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0, offset_pct=95, segments=16, profile=1, affect='EDGES')
+        bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0, offset_pct=95, segments=16, affect='EDGES')
         # 更新顶点组
         bpy.ops.mesh.select_all(action='DESELECT')
         bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
         bpy.ops.object.vertex_group_select()
         bpy.ops.object.vertex_group_remove_from()
-        for _ in range(int(16/2)):  # 16是bevel的segments
+        for _ in range(int(16 / 2)):  # 16是bevel的segments
             bpy.ops.mesh.select_less()
         bpy.ops.object.vertex_group_assign()
         bpy.ops.mesh.select_all(action='DESELECT')
@@ -648,10 +753,6 @@ def fill():
     # 平滑着色
     bpy.ops.object.shade_smooth(use_auto_smooth=True, auto_smooth_angle=3.14159)
 
-
-def smooth_border(obj, smooth_border_vert_group_name, limit_border_vert_group_name, width):
-
-    pass
 
 
 def soft_retopo_offset_cut(obj_name, border_vert_group_name, width):
@@ -753,7 +854,8 @@ def delete_top_part(obj):
 
 
 def soft_eardrum():
-    draw_cut_plane("右耳")
+    name = bpy.context.scene.leftWindowObj
+    draw_cut_plane(name)
     override = getOverride()
     with bpy.context.temp_override(**override):
         bpy.ops.object.softeardrumcirclecut('INVOKE_DEFAULT')
@@ -813,7 +915,10 @@ def getModelZ(obj_name):
 
 # 重置回到底部切割完成
 def reset_to_after_cut():
-    need_to_delete_model_name_list = ["右耳", "FillPlane", "右耳ForGetFillPlane", "右耳Inner", "RetopoPart"]
+    name = bpy.context.scene.leftWindowObj
+    # todo: 左右耳适配
+    need_to_delete_model_name_list = [name, name + "FillPlane", name + "ForGetFillPlane", name + "Inner", "RetopoPart",
+                                      name + "OuterOrigin", name + "InnerOrigin", name + "OuterRetopo", name + "InnerRetopo"]
     for obj in bpy.context.view_layer.objects:
         if obj.name in need_to_delete_model_name_list:
             bpy.data.objects.remove(obj, do_unlink=True)

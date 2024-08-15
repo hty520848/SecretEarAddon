@@ -424,8 +424,7 @@ def resample_curve(point_num, curve_name):
     bpy.ops.object.convert(target='MESH')
     bpy.ops.object.convert(target='CURVE')
     bpy.context.object.data.bevel_depth = 0.18
-    bpy.ops.object.shade_smooth(use_auto_smooth=True)
-    blue_mat = bpy.data.materials.get('blue')
+    # bpy.ops.object.shade_smooth(use_auto_smooth=True)
     newColor('blue', 0, 0, 1, 1, 1)
     bpy.data.objects[curve_name].data.materials.append(bpy.data.materials['blue'])
 

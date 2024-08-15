@@ -216,6 +216,8 @@ class StepSmooth(bpy.types.Operator):
         delete_vert_group(self.center_border_group_name)
         delete_vert_group("StepCutInner")
 
+        bpy.ops.object.shade_smooth()
+
         return {'FINISHED'}
 
         # bmesh.ops.dissolve_edges(bm, edges=junk_edges, use_verts=True)
@@ -1030,6 +1032,7 @@ def pipe_cut():
     bpy.ops.mesh.delete(type='FACE')
     # bpy.ops.mesh.select_mode(type='VERT')
     bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)  # 让物体法线向内
 
     # 切割
     bpy.ops.object.mode_set(mode='OBJECT')
@@ -1149,6 +1152,7 @@ def bridge_border(width, center_border_group_name):
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.vertex_group_set_active(group=center_border_group_name)
     bpy.ops.object.vertex_group_select()
+
     # 进行倒角
     bpy.ops.mesh.bevel(offset=width * 0.8, segments=int(width / 0.1))
     bpy.ops.mesh.select_all(action='SELECT')

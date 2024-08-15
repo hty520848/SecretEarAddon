@@ -53,6 +53,11 @@ def newColor(id, r, g, b, is_transparency, transparency_degree):
     output = nodes.new(type='ShaderNodeOutputMaterial')
     shader = nodes.new(type='ShaderNodeBsdfPrincipled')
     shader.inputs[0].default_value = (r, g, b, 1)
+    shader.inputs[6].default_value = 0.46
+    shader.inputs[7].default_value = 0
+    shader.inputs[9].default_value = 0.472
+    shader.inputs[14].default_value = 1
+    shader.inputs[15].default_value = 0.105
     links.new(shader.outputs[0], output.inputs[0])
     if is_transparency:
         mat.blend_method = "BLEND"
@@ -313,124 +318,51 @@ def is_changed_soft_support(context, event):
 
     return False
 
-# 判断鼠标是否在附件圆球上
+# 判断鼠标是否在支撑旋转圆球上
 def is_mouse_on_sphere(context, event):
-    name = bpy.context.scene.leftWindowObj + "SupportSphere"
-    obj = bpy.data.objects.get(name)
-    if (obj != None):
-        is_on_object = False  # 初始化变量
-
-        if context.area:
-            context.area.tag_redraw()
-
-        # 获取鼠标光标的区域坐标
-        mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
-
-        # 获取信息和空间信息
+    name = bpy.context.scene.leftWindowObj
+    plane_name = name + 'Plane'
+    plane_obj = bpy.data.objects.get(plane_name)
+    if (plane_obj != None):
+        mouse_x = event.mouse_region_x
+        mouse_y = event.mouse_region_y
         region, space = get_region_and_space(
             context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
         )
-
-        ray_dir = view3d_utils.region_2d_to_vector_3d(
-            region,
-            space.region_3d,
-            mv
-        )
-        ray_orig = view3d_utils.region_2d_to_origin_3d(
-            region,
-            space.region_3d,
-            mv
-        )
-
-        start = ray_orig
-        end = ray_orig + ray_dir
-
-        # 确定光线和对象的相交
-        mwi = obj.matrix_world.inverted()
-        mwi_start = mwi @ start
-        mwi_end = mwi @ end
-        mwi_dir = mwi_end - mwi_start
-
-        if obj.type == 'MESH':
-            if (obj.mode == 'OBJECT' or obj.mode == "SCULPT"):
-                mesh = obj.data
-                bm = bmesh.new()
-                bm.from_mesh(mesh)
-                tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
-
-                _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
-
-                if fidx is not None:
-                    is_on_object = True  # 如果发生交叉，将变量设为True
-        return is_on_object
+        rv3d = space.region_3d
+        coord_3d = plane_obj.location
+        # 将三维坐标转换为二维坐标
+        coord_2d = view3d_utils.location_3d_to_region_2d(region, rv3d, coord_3d)
+        if (coord_2d != None):
+            plane_x, plane_y = coord_2d
+            dis = math.sqrt(math.fabs(plane_x - mouse_x) ** 2 + math.fabs(plane_y - mouse_y) ** 2)
+            if (dis <= 372):
+                return True
+            else:
+                return False
     return False
 
 
 # 判断鼠标状态是否发生改变,圆球
 def is_changed_sphere(context, event):
-    ori_name = bpy.context.scene.leftWindowObj
-    name = bpy.context.scene.leftWindowObj + "SupportSphere"
-    obj = bpy.data.objects.get(name)
-    if (obj != None):
-        curr_on_object = False  # 当前鼠标是否在物体上,初始化为False
-        global prev_on_sphere   # 之前鼠标是否在物体上
-        global prev_on_sphereL  # 之前鼠标是否在物体上
+    global prev_on_sphere   # 之前鼠标是否在物体上
+    global prev_on_sphereL  # 之前鼠标是否在物体上
 
-        if context.area:
-            context.area.tag_redraw()
+    name = bpy.context.scene.leftWindowObj
+    curr_on_object = is_mouse_on_sphere(context, event)
 
-        # 获取鼠标光标的区域坐标
-        mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
-
-        # 获取信息和空间信息
-        region, space = get_region_and_space(
-            context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
-        )
-
-        ray_dir = view3d_utils.region_2d_to_vector_3d(
-            region,
-            space.region_3d,
-            mv
-        )
-        ray_orig = view3d_utils.region_2d_to_origin_3d(
-            region,
-            space.region_3d,
-            mv
-        )
-
-        start = ray_orig
-        end = ray_orig + ray_dir
-
-        # 确定光线和对象的相交
-        mwi = obj.matrix_world.inverted()
-        mwi_start = mwi @ start
-        mwi_end = mwi @ end
-        mwi_dir = mwi_end - mwi_start
-
-        if obj.type == 'MESH':
-            if (obj.mode == 'OBJECT' or obj.mode == "SCULPT"):
-                mesh = obj.data
-                bm = bmesh.new()
-                bm.from_mesh(mesh)
-                tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
-
-                _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
-
-                if fidx is not None:
-                    curr_on_object = True  # 如果发生交叉，将变量设为True
-        if ori_name == '右耳':
-            if (curr_on_object != prev_on_sphere):
-                prev_on_sphere = curr_on_object
-                return True
-            else:
-                return False
-        elif ori_name == '左耳':
-            if (curr_on_object != prev_on_sphereL):
-                prev_on_sphereL = curr_on_object
-                return True
-            else:
-                return False
-    return False
+    if name == '右耳':
+        if (curr_on_object != prev_on_sphere):
+            prev_on_sphere = curr_on_object
+            return True
+        else:
+            return False
+    elif name == '左耳':
+        if (curr_on_object != prev_on_sphereL):
+            prev_on_sphereL = curr_on_object
+            return True
+        else:
+            return False
 
 # 判断鼠标是否在物体上,模型
 def is_mouse_on_object(context, event):
@@ -637,6 +569,14 @@ def initialSupportTransparency():
     # mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 0.01
 
 def frontToSupport():
+    global is_on_rotate
+    global is_on_rotateL
+    name = bpy.context.scene.leftWindowObj
+    if (name == "右耳"):
+        is_on_rotate = False
+    elif (name == "左耳"):
+        is_on_rotateL = False
+
     all_objs = bpy.data.objects
     for selected_obj in all_objs:
         name = bpy.context.scene.leftWindowObj
@@ -693,8 +633,6 @@ def frontFromSupport():
     soft_support_compare_obj = bpy.data.objects.get(name + "SoftSupportCompare")
     planename = name + "Plane"
     plane_obj = bpy.data.objects.get(planename)
-    spherename = bpy.context.scene.leftWindowObj + "SupportSphere"
-    sphere_obj = bpy.data.objects.get(spherename)
     if (hard_support_obj != None):
         bpy.data.objects.remove(hard_support_obj, do_unlink=True)
     if (hard_support_offset_compare_obj != None):
@@ -717,8 +655,6 @@ def frontFromSupport():
         bpy.data.objects.remove(soft_support_compare_obj, do_unlink=True)
     if (plane_obj != None):
         bpy.data.objects.remove(plane_obj, do_unlink=True)
-    if (sphere_obj != None):
-        bpy.data.objects.remove(sphere_obj, do_unlink=True)
     name = bpy.context.scene.leftWindowObj
     obj = bpy.data.objects[name]
     resetname = name + "SupportReset"
@@ -758,7 +694,8 @@ def frontFromSupport():
 
         all_objs = bpy.data.objects
         for selected_obj in all_objs:
-            if (selected_obj.name == name + "SupportReset" or selected_obj.name == name + "SupportLast" or selected_obj.name == castingname + "SupportReset"):
+            if (selected_obj.name == name + "SupportReset" or selected_obj.name == name + "SupportLast"
+                    or selected_obj.name == castingname + "SupportReset" or selected_obj.name == castingname + "SupportLast"):
                 bpy.data.objects.remove(selected_obj, do_unlink=True)
 
     # 调用公共鼠标行为
@@ -772,6 +709,13 @@ def frontFromSupport():
     bpy.context.view_layer.objects.active = cur_obj
 
 def backToSupport():
+    global is_on_rotate
+    global is_on_rotateL
+    name = bpy.context.scene.leftWindowObj
+    if (name == "右耳"):
+        is_on_rotate = False
+    elif (name == "左耳"):
+        is_on_rotateL = False
     # 将后续模块中的reset和last都删除
     name = bpy.context.scene.leftWindowObj
     sprue_reset = bpy.data.objects.get(name + "SprueReset")
@@ -993,11 +937,11 @@ def backFromSupport():
             softSupportSubmit()
 
 
-    all_objs = bpy.data.objects
+    #根据当前物体复制一份用于生成SupportLast
     name = bpy.context.scene.leftWindowObj
-    for selected_obj in all_objs:
-        if (selected_obj.name == name + "SupportLast"):
-            bpy.data.objects.remove(selected_obj, do_unlink=True)
+    support_last_obj = bpy.data.objects.get(name + "SupportLast")
+    if(support_last_obj != None):
+        bpy.data.objects.remove(support_last_obj, do_unlink=True)
     name = bpy.context.scene.leftWindowObj
     obj = bpy.data.objects[name]
     duplicate_obj1 = obj.copy()
@@ -1010,6 +954,26 @@ def backFromSupport():
     elif (name == "左耳"):
         moveToLeft(duplicate_obj1)
     duplicate_obj1.hide_set(True)
+
+    # 根据当前物体复制一份用于生成CastingCompareSupportLast
+    name = bpy.context.scene.leftWindowObj
+    casting_compare_name = name + "CastingCompare"
+    casting_obj = bpy.data.objects.get(casting_compare_name)
+    if(casting_obj != None):
+        casting_last_obj = bpy.data.objects.get(name + "CastingCompareSupportLast")
+        if (casting_last_obj != None):
+            bpy.data.objects.remove(casting_last_obj, do_unlink=True)
+        name = bpy.context.scene.leftWindowObj
+        duplicate_obj1 = casting_obj.copy()
+        duplicate_obj1.data = casting_obj.data.copy()
+        duplicate_obj1.animation_data_clear()
+        duplicate_obj1.name = casting_compare_name + "SupportLast"
+        bpy.context.collection.objects.link(duplicate_obj1)
+        if (name == "右耳"):
+            moveToRight(duplicate_obj1)
+        elif (name == "左耳"):
+            moveToLeft(duplicate_obj1)
+        duplicate_obj1.hide_set(True)
 
     # 调用公共鼠标行为
     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
@@ -1038,9 +1002,6 @@ def createHardMouldSupport():
     bpy.context.object.scale[1] = 3
     bpy.context.object.scale[2] = 3
 
-    # 导入支撑模块中的圆球,主要用于鼠标模式切换,当三维旋转状态开启的时候,鼠标在圆球上的时候,调用三维旋转鼠标行为,否则调用公共鼠标行为
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=30, ring_count=30, radius=10, enter_editmode=False, align='WORLD',
-                                         location=(0, 0, 0), scale=(1, 1, 1))
 
     name = bpy.context.scene.leftWindowObj
     planename = name + "Plane"
@@ -1049,30 +1010,64 @@ def createHardMouldSupport():
     conename = name + "Cone"
     cone_obj = bpy.data.objects.get("Cone")
     cone_obj.name = conename
-    spherename = "Sphere"
-    sphere_obj = bpy.data.objects[spherename]
-    sphere_obj.name = name + "SupportSphere"
 
     #反转平面的法线方向
+    bpy.ops.object.select_all(action='DESELECT')
+    plane_obj.select_set(True)
     bpy.context.view_layer.objects.active = plane_obj
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.flip_normals()
     bpy.ops.object.mode_set(mode='OBJECT')
-    #添加修改器,使用平面将圆锥切割成支撑
-    bpy.context.view_layer.objects.active = cone_obj
-    bpy.ops.object.modifier_add(type='BOOLEAN')
-    bpy.context.object.modifiers["Boolean"].operation = 'DIFFERENCE'
-    bpy.context.object.modifiers["Boolean"].object = plane_obj
-    bpy.ops.object.modifier_apply(modifier="Boolean")
 
+    #将平面复制出一份用于后续操作(使用Bool Tool将字体铸造法和模型合并之后,字体铸造法模型会被自动删除)
+    plane_name = plane_obj.name
+    plane_obj_temp = plane_obj.copy()
+    plane_obj_temp.data = plane_obj.data.copy()
+    plane_obj_temp.animation_data_clear()
+    bpy.context.collection.objects.link(plane_obj_temp)
+    if (name == "右耳"):
+        moveToRight(plane_obj_temp)
+    elif (name == "左耳"):
+        moveToLeft(plane_obj_temp)
+    #添加修改器,使用平面将圆锥切割成支撑
+    bpy.ops.object.select_all(action='DESELECT')
+    plane_obj.select_set(True)
+    cone_obj.select_set(True)
+    bpy.context.view_layer.objects.active = cone_obj
+    bpy.ops.object.booltool_auto_difference()
+    plane_obj_temp.name = plane_name
+    plane_obj = plane_obj_temp
+    # bpy.ops.object.modifier_add(type='BOOLEAN')
+    # bpy.context.object.modifiers["Boolean"].operation = 'DIFFERENCE'
+    # bpy.context.object.modifiers["Boolean"].object = plane_obj
+    # bpy.ops.object.modifier_apply(modifier="Boolean")
+
+    # 将硬耳膜支撑复制出一份用于后续操作(使用Bool Tool将字体铸造法和模型合并之后,字体铸造法模型会被自动删除)
+    cone_name = cone_obj.name
+    cone_obj_temp = cone_obj.copy()
+    cone_obj_temp.data = cone_obj.data.copy()
+    cone_obj_temp.animation_data_clear()
+    bpy.context.collection.objects.link(cone_obj_temp)
+    if (name == "右耳"):
+        moveToRight(cone_obj_temp)
+    elif (name == "左耳"):
+        moveToLeft(cone_obj_temp)
     #减去平面多余的部分
+    bpy.ops.object.select_all(action='DESELECT')
+    cone_obj.select_set(True)
+    plane_obj.select_set(True)
     bpy.context.view_layer.objects.active = plane_obj
-    bpy.ops.object.modifier_add(type='BOOLEAN')
-    bpy.context.object.modifiers["Boolean"].operation = 'INTERSECT'
-    bpy.context.object.modifiers["Boolean"].object = cone_obj
-    bpy.ops.object.modifier_apply(modifier="Boolean")
+    bpy.ops.object.booltool_auto_intersect()
+    cone_obj_temp.name = cone_name
+    cone_obj = cone_obj_temp
+    # bpy.ops.object.modifier_add(type='BOOLEAN')
+    # bpy.context.object.modifiers["Boolean"].operation = 'INTERSECT'
+    # bpy.context.object.modifiers["Boolean"].object = cone_obj
+    # bpy.ops.object.modifier_apply(modifier="Boolean")
 
     #将支撑上下翻转，防止其吸附到内壁上
+    bpy.ops.object.select_all(action='DESELECT')
+    cone_obj.select_set(True)
     bpy.context.view_layer.objects.active = cone_obj
     bpy.context.object.rotation_euler[1] = 3.14159
     bpy.context.object.location[2] = 2
@@ -1086,12 +1081,10 @@ def createHardMouldSupport():
         moveToRight(plane_obj)
         moveToRight(cone_obj)
         moveToRight(cone_compare_offset_obj)
-        moveToRight(sphere_obj)
     elif (name == "左耳"):
         moveToLeft(plane_obj)
         moveToLeft(cone_obj)
         moveToLeft(cone_compare_offset_obj)
-        moveToLeft(sphere_obj)
 
     # 为硬耳膜支撑添加红色材质
     red_material = newColor("Red", 1, 0, 0, 0, 1)
@@ -1105,23 +1098,15 @@ def createHardMouldSupport():
     initialSupportTransparency()
     plane_obj.data.materials.clear()
     plane_obj.data.materials.append(bpy.data.materials['SupportTransparency'])
-    # 为圆球添加透明效果
-    sphere_obj.select_set(True)
-    bpy.context.view_layer.objects.active = sphere_obj
-    initialSupportTransparency()
-    sphere_obj.data.materials.clear()
-    sphere_obj.data.materials.append(bpy.data.materials['SupportTransparency'])
 
     # 将硬耳膜支撑和硬耳膜支撑对比物绑定到平面上
     plane_obj.select_set(True)
     bpy.context.view_layer.objects.active = plane_obj
     cone_obj.select_set(True)
     cone_compare_offset_obj.select_set(True)
-    sphere_obj.select_set(True)
     bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
     cone_obj.select_set(False)
     cone_compare_offset_obj.select_set(False)
-    sphere_obj.select_set(False)
 
     #将硬耳膜对比物隐藏
     cone_compare_offset_obj.hide_set(True)
@@ -1141,9 +1126,6 @@ def createSoftMouldSupport():
     bpy.ops.wm.stl_import(filepath=relative_path3)
     # 添加支撑的父物体平面
     bpy.ops.mesh.primitive_plane_add(enter_editmode=False, align='WORLD', scale=(4, 4, 1))
-    # 导入支撑模块中的圆球,主要用于鼠标模式切换,当三维旋转状态开启的时候,鼠标在圆球上的时候,调用三维旋转鼠标行为,否则调用公共鼠标行为
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=30, ring_count=30, radius=10, enter_editmode=False, align='WORLD',
-                                         location=(-100, -100, 0), scale=(1, 1, 1))
 
     name = bpy.context.scene.leftWindowObj
     obj = bpy.data.objects[name]
@@ -1181,13 +1163,6 @@ def createSoftMouldSupport():
         moveToRight(plane_obj)
     elif (name == "左耳"):
         moveToLeft(plane_obj)
-    spherename = "Sphere"
-    sphere_obj = bpy.data.objects[spherename]
-    sphere_obj.name = name + "SupportSphere"
-    if (name == "右耳"):
-        moveToRight(sphere_obj)
-    elif (name == "左耳"):
-        moveToLeft(sphere_obj)
 
     plane_obj.location[2] = 1                                    # 设置平面初始位置
     plane_obj.location[0] = -100
@@ -1195,14 +1170,29 @@ def createSoftMouldSupport():
     plane_obj.scale[0] = 4
     plane_obj.scale[1] = 4
 
+    # 将软耳膜支撑外壁复制出一份用于后续操作(使用Bool Tool将字体铸造法和模型合并之后,字体铸造法模型会被自动删除)
+    support_outer_name = support_outer_obj.name
+    support_outer_obj_temp = support_outer_obj.copy()
+    support_outer_obj_temp.data = support_outer_obj.data.copy()
+    support_outer_obj_temp.animation_data_clear()
+    bpy.context.collection.objects.link(support_outer_obj_temp)
+    if (name == "右耳"):
+        moveToRight(support_outer_obj_temp)
+    elif (name == "左耳"):
+        moveToLeft(support_outer_obj_temp)
     # 将平面切割为与圆柱截面相同的圆形
+    bpy.ops.object.select_all(action='DESELECT')
+    support_outer_obj.select_set(True)
     plane_obj.select_set(True)
     bpy.context.view_layer.objects.active = plane_obj
-    modifierPlaneCreate = plane_obj.modifiers.new(name="PlaneCreate", type='BOOLEAN')
-    modifierPlaneCreate.object = support_outer_obj
-    modifierPlaneCreate.operation = 'INTERSECT'
-    modifierPlaneCreate.solver = 'FAST'
-    bpy.ops.object.modifier_apply(modifier="PlaneCreate")
+    bpy.ops.object.booltool_auto_intersect()
+    support_outer_obj_temp.name = support_outer_name
+    support_outer_obj = support_outer_obj_temp
+    # modifierPlaneCreate = plane_obj.modifiers.new(name="PlaneCreate", type='BOOLEAN')
+    # modifierPlaneCreate.object = support_outer_obj
+    # modifierPlaneCreate.operation = 'INTERSECT'
+    # modifierPlaneCreate.solver = 'FAST'
+    # bpy.ops.object.modifier_apply(modifier="PlaneCreate")
 
 
 
@@ -1228,12 +1218,6 @@ def createSoftMouldSupport():
     plane_obj.data.materials.clear()
     plane_obj.data.materials.append(bpy.data.materials['SupportTransparency'])
 
-    # 为圆球添加透明效果
-    sphere_obj.select_set(True)
-    bpy.context.view_layer.objects.active = sphere_obj
-    initialSupportTransparency()
-    sphere_obj.data.materials.clear()
-    sphere_obj.data.materials.append(bpy.data.materials['SupportTransparency'])
 
     # 将内外壁复制出来一份作为参数offset偏移的对比物
     support_outer_compare_offset_obj = support_outer_obj.copy()
@@ -1282,12 +1266,10 @@ def createSoftMouldSupport():
     support_inner_compare_offset_obj.select_set(True)
     support_inside_compare_offset_obj.select_set(True)
     support_outer_obj.select_set(True)
-    sphere_obj.select_set(True)
     plane_obj.select_set(True)
     bpy.context.view_layer.objects.active = plane_obj
     bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
     support_outer_obj.select_set(False)
-    sphere_obj.select_set(False)
     # 内外壁对比物隐藏
     support_outer_compare_offset_obj.hide_set(True)
     support_inner_compare_offset_obj.hide_set(True)
@@ -1407,12 +1389,6 @@ def supportInitial():
     #将旋转中心设置为左右耳模型
     cur_obj = bpy.data.objects.get(name)
     bpy.ops.object.select_all(action='DESELECT')
-    spherename = name + "SupportSphere"
-    sphere_obj = bpy.data.objects.get(spherename)
-    if (sphere_obj != None and name == '右耳' and is_on_rotate):
-        sphere_obj.select_set(True)
-    if (sphere_obj != None and name == '左耳' and is_on_rotateL):
-        sphere_obj.select_set(True)
     cur_obj.select_set(True)
     bpy.context.view_layer.objects.active = cur_obj
 
@@ -1423,6 +1399,13 @@ def supportInitial():
 
 
 def supportReset():
+    global is_on_rotate
+    global is_on_rotateL
+    name = bpy.context.scene.leftWindowObj
+    if (name == "右耳"):
+        is_on_rotate = False
+    elif (name == "左耳"):
+        is_on_rotateL = False
     # 存在未提交支撑时,删除支撑相关物体
     name = bpy.context.scene.leftWindowObj
     hard_support_obj = bpy.data.objects.get(name + "Cone")
@@ -1437,8 +1420,6 @@ def supportReset():
     soft_support_compare_obj = bpy.data.objects.get(name + "SoftSupportCompare")
     planename = name + "Plane"
     plane_obj = bpy.data.objects.get(planename)
-    spherename = name + "SupportSphere"
-    sphere_obj = bpy.data.objects.get(spherename)
     if (hard_support_obj != None):
         bpy.data.objects.remove(hard_support_obj, do_unlink=True)
     if (hard_support_offset_compare_obj != None):
@@ -1461,8 +1442,6 @@ def supportReset():
         bpy.data.objects.remove(soft_support_compare_obj, do_unlink=True)
     if (plane_obj != None):
         bpy.data.objects.remove(plane_obj, do_unlink=True)
-    if (sphere_obj != None):
-        bpy.data.objects.remove(sphere_obj, do_unlink=True)
     # 将SupportReset复制并替代当前操作模型
     name  = bpy.context.scene.leftWindowObj
     oriname = bpy.context.scene.leftWindowObj
@@ -1512,8 +1491,6 @@ def hardSupportSubmit():
     support_offset_compare_obj = bpy.data.objects.get(support_offset_compare_name)
     planename = name + "Plane"
     plane_obj = bpy.data.objects.get(planename)
-    spherename = name + "SupportSphere"
-    sphere_obj = bpy.data.objects.get(spherename)
 
     #提交前保存参数
     supportSaveInfo()
@@ -1521,57 +1498,116 @@ def hardSupportSubmit():
     # 存在未提交的Support,SupportCompare和Plane时
     if (support_obj != None and plane_obj != None and support_offset_compare_obj != None):
 
-        bpy.context.view_layer.objects.active = obj
+        # bpy.context.view_layer.objects.active = obj
 
-        #由于支撑之前的模块存在布尔操作,会有其他顶点被选中,因此先将模型上选中顶点给取消选中
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
+        # #由于支撑之前的模块存在布尔操作,会有其他顶点被选中,因此先将模型上选中顶点给取消选中
+        # bpy.ops.object.mode_set(mode='EDIT')
+        # bpy.ops.mesh.select_all(action='DESELECT')
+        # bpy.ops.object.mode_set(mode='OBJECT')
+
+        # 将硬耳膜支撑与右耳模型做差集,得到硬耳膜支撑的对比物体。 # 由于硬耳膜支撑物体和透明的右耳外壳合并后变为透明,因此需要设置一个不透明的参照物,与合并后的右耳对比
+        # 将硬耳膜支撑复制一份用于布尔生成对比物
+        support_compare_name = name + "ConeCompare"
+        support_compare_obj = support_obj.copy()
+        support_compare_obj.data = support_obj.data.copy()
+        support_compare_obj.animation_data_clear()
+        bpy.context.collection.objects.link(support_compare_obj)
+        support_compare_obj.name = support_compare_name
+        if (name == "右耳"):
+            moveToRight(support_compare_obj)
+        elif (name == "左耳"):
+            moveToLeft(support_compare_obj)
+        # 将软耳膜支撑对比物的位置移动到与排气孔外壁的位置相同(由于排气孔相关物体都在父物体平面下随着父物体的位置改变而改变,因此其位置信息仍为导入时的为位置,不能直接通过location设置其位置)
+        me = support_compare_obj.data
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bm.verts.ensure_lookup_table()
+        ori_sprue_me = support_obj.data
+        ori_sprue_bm = bmesh.new()
+        ori_sprue_bm.from_mesh(ori_sprue_me)
+        ori_sprue_bm.verts.ensure_lookup_table()
+        for vert in bm.verts:
+            vert.co = ori_sprue_bm.verts[vert.index].co
+        bm.to_mesh(me)
+        bm.free()
+        ori_sprue_bm.free()
+        # 将复制出来的软耳膜支撑外壁对比物与右耳做布尔差集,将其切割为所需的形状
+        bpy.ops.object.select_all(action='DESELECT')
+        support_obj.select_set(True)
+        bpy.context.view_layer.objects.active = support_obj
+        modifierSprueCompareDifference = support_obj.modifiers.new(name="SupportCompareDifference",type='BOOLEAN')
+        modifierSprueCompareDifference.object = obj
+        modifierSprueCompareDifference.operation = 'DIFFERENCE'
+        modifierSprueCompareDifference.solver = 'FAST'
+        bpy.ops.object.modifier_apply(modifier="SupportCompareDifference")
+
+
 
         #将支撑与当前模型合并
-        bpy.ops.object.modifier_add(type='BOOLEAN')
-        bpy.context.object.modifiers["Boolean"].solver = 'FAST'
-        bpy.context.object.modifiers["Boolean"].operation = 'UNION'
-        bpy.context.object.modifiers["Boolean"].object = support_obj
-        bpy.ops.object.modifier_apply(modifier="Boolean", single_user=True)
+        bpy.ops.object.select_all(action='DESELECT')
+        support_obj.select_set(True)
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.booltool_auto_union()
+        # bpy.ops.object.modifier_add(type='BOOLEAN')
+        # bpy.context.object.modifiers["Boolean"].solver = 'FAST'
+        # bpy.context.object.modifiers["Boolean"].operation = 'UNION'
+        # bpy.context.object.modifiers["Boolean"].object = support_obj
+        # bpy.ops.object.modifier_apply(modifier="Boolean", single_user=True)
 
+        # bpy.data.objects.remove(plane_obj, do_unlink=True)
+        # bpy.data.objects.remove(sphere_obj, do_unlink=True)
+        # bpy.data.objects.remove(support_obj, do_unlink=True)
+
+        # # 由于支撑物体和透明的右耳合并后变为透明,因此需要设置一个不透明的参照物,与合并后的右耳对比
+        # bpy.ops.object.mode_set(mode='EDIT')
+        # #布尔合并后的顶点会被选中,将这些顶点复制一份并分离为独立的物体
+        # bpy.ops.mesh.duplicate()
+        # bpy.ops.mesh.separate(type='SELECTED')
+        # bpy.ops.object.mode_set(mode='OBJECT')
+        # support_compare_obj = bpy.data.objects.get(name + ".001")
+        # if(support_compare_obj != None):
+        #     support_compare_obj.name = name + "ConeCompare"
+        #     yellow_material = newColor("SupportCompare", 1, 0.319, 0.133, 0, 1)
+        #     support_compare_obj.data.materials.clear()
+        #     support_compare_obj.data.materials.append(yellow_material)
+        #     if (name == "右耳"):
+        #         moveToRight(support_compare_obj)
+        #     elif (name == "左耳"):
+        #         moveToLeft(support_compare_obj)
+
+        # 删除父物体平面之后,硬耳膜支撑对比物体会恢复到初始位置,需要保存为位置信息
+        bpy.ops.object.select_all(action='DESELECT')
+        plane_obj.select_set(True)
+        bpy.context.view_layer.objects.active = plane_obj
+        bpy.ops.view3d.snap_cursor_to_active()                            # 将3D游标位置设置为激活物体的原点位置
+        bpy.ops.object.select_all(action='DESELECT')
+        support_compare_obj.select_set(True)
+        bpy.context.view_layer.objects.active = support_compare_obj
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='MEDIAN')  # 将硬耳膜支撑对比物的原点位置设置为游标位置,即平面的原点位置
+        support_compare_obj.location = plane_obj.location                 # 将硬耳膜支撑对比物体位置信息设置为平面位置信息
+        support_compare_obj.rotation_euler = plane_obj.rotation_euler
+        support_compare_obj.rotation_euler[0] += math.pi
+        bpy.ops.view3d.snap_cursor_to_center()                             # 将游标位置恢复为世界中心
+        support_compare_yellow_material = newColor("SupportCompareYellow", 1, 0.319, 0.133, 0,1)  # 将硬耳膜支撑对比物设置为模型的颜色
+        support_compare_obj.data.materials.clear()
+        support_compare_obj.data.materials.append(support_compare_yellow_material)
+
+
+        #删除硬耳膜支撑相关物体
         bpy.data.objects.remove(plane_obj, do_unlink=True)
-        bpy.data.objects.remove(sphere_obj, do_unlink=True)
-        bpy.data.objects.remove(support_obj, do_unlink=True)
-
-        # 由于支撑物体和透明的右耳合并后变为透明,因此需要设置一个不透明的参照物,与合并后的右耳对比
-        bpy.ops.object.mode_set(mode='EDIT')
-        #布尔合并后的顶点会被选中,将这些顶点复制一份并分离为独立的物体
-        bpy.ops.mesh.duplicate()
-        bpy.ops.mesh.separate(type='SELECTED')
-        bpy.ops.object.mode_set(mode='OBJECT')
-        support_compare_obj = bpy.data.objects.get(name + ".001")
-        if(support_compare_obj != None):
-            support_compare_obj.name = name + "ConeCompare"
-            yellow_material = newColor("SupportCompare", 1, 0.319, 0.133, 0, 1)
-            support_compare_obj.data.materials.clear()
-            support_compare_obj.data.materials.append(yellow_material)
-            if (name == "右耳"):
-                moveToRight(support_compare_obj)
-            elif (name == "左耳"):
-                moveToLeft(support_compare_obj)
-
         bpy.data.objects.remove(support_offset_compare_obj, do_unlink=True)
 
-        # 合并后Support会被去除材质,因此需要重置一下模型颜色为黄色
-        bpy.ops.object.mode_set(mode='VERTEX_PAINT')
-        bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
-        bpy.data.brushes["Draw"].color = (1, 0.6, 0.4)
-        bpy.ops.paint.vertex_color_set()
-        bpy.ops.object.mode_set(mode='OBJECT')
+        # 将旋转中心设置为右耳
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
 
-        #将当前激活物体设置为右耳,并将其他物体取消选中
-        for selected_obj in  bpy.data.objects:
-            if (selected_obj.name == name ):
-                bpy.context.view_layer.objects.active = selected_obj
-                selected_obj.select_set(True)
-            else:
-                selected_obj.select_set(False)
+        # 合并后Support会被去除材质,因此需要重置一下模型颜色为黄色
+        utils_re_color(name, (1, 0.319, 0.133))
+
+
+
 
 def softSupportSubmit():
     #  support_obj为排气孔物体,  support_offset_compare为隐藏的排气孔物体,用于偏移量参照,创建排气孔时一同创建   support_compare则作为对比,因为sprue_obj在提交后会变透明
@@ -1585,8 +1621,6 @@ def softSupportSubmit():
     support_inside_offset_compare_obj = bpy.data.objects.get(name + "SoftSupportInsideOffsetCompare")
     planename = name + "Plane"
     plane_obj = bpy.data.objects.get(planename)
-    spherename = name + "SupportSphere"
-    sphere_obj = bpy.data.objects.get(spherename)
 
     obj_outer = bpy.data.objects.get(name)
     obj_inner = bpy.data.objects.get(name + "CastingCompare")
@@ -1597,78 +1631,41 @@ def softSupportSubmit():
             and  support_inner_offset_compare_obj != None and support_outer_offset_compare_obj != None
             and support_inside_offset_compare_obj != None and  obj_outer != None and obj_inner != None):
 
-        #将软耳膜支撑的内芯选中与右耳做布尔的差集,内芯插入模型的部分会和右耳合并形成一块内凹的区域,这块顶点处于选中的状态,直接将其删除在右耳上得到一个孔
-        #将铸造法内部物体顶点取消选中
-        obj_outer.select_set(False)
+
+        # 1.将软耳膜支撑的内壁选中与右耳CastingCompare做布尔的并集
+        # 将软耳膜支撑内壁复制出一份用于后续操作(使用Bool Tool将软耳膜内壁和模型作并集之后,软耳膜内芯会被自动删除)
+        support_inner_name = support_inner_obj.name
+        support_inner_obj_temp = support_inner_obj.copy()
+        support_inner_obj_temp.data = support_inner_obj.data.copy()
+        support_inner_obj_temp.animation_data_clear()
+        bpy.context.collection.objects.link(support_inner_obj_temp)
+        if (name == "右耳"):
+            moveToRight(support_inner_obj_temp)
+        elif (name == "左耳"):
+            moveToLeft(support_inner_obj_temp)
+        # 为铸造法内壁选中并重新计算法线,提高切割的成功率
+        bpy.ops.object.select_all(action='DESELECT')
         obj_inner.select_set(True)
         bpy.context.view_layer.objects.active = obj_inner
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-        obj_inner.select_set(False)
-        #将软耳膜支撑内芯尺寸缩小一些并将顶点选中
-        support_inside_obj.select_set(True)
-        bpy.context.view_layer.objects.active = support_inside_obj
-        support_inside_obj.scale[0] = 0.9
-        support_inside_obj.scale[1] = 0.9
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.normals_make_consistent(inside=False)
         bpy.ops.object.mode_set(mode='OBJECT')
-        support_inside_obj.select_set(False)
-        # 为铸造法内壁添加布尔修改器,与软耳膜支撑内芯做差集
+        # 为铸造法内壁添加布尔修改器,与软耳膜支撑内壁做并集
+        bpy.ops.object.select_all(action='DESELECT')
+        support_inner_obj.select_set(True)
         obj_inner.select_set(True)
         bpy.context.view_layer.objects.active = obj_inner
-        modifierSupportDifferenceInside = obj_inner.modifiers.new(name="SupportDifferenceInside", type='BOOLEAN')
-        modifierSupportDifferenceInside.object = support_inside_obj
-        modifierSupportDifferenceInside.operation = 'DIFFERENCE'
-        modifierSupportDifferenceInside.solver = 'FAST'
-        bpy.ops.object.modifier_apply(modifier="SupportDifferenceInside")
-        # 将选中的顶点直接删除在模型上得到软耳膜支撑的孔洞
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_less()
-        bpy.ops.mesh.delete(type='VERT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-        obj_inner.select_set(False)
-        obj_outer.select_set(True)
-        bpy.context.view_layer.objects.active = obj_outer
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-        obj_outer.select_set(False)
-        # 将软耳膜支撑内芯尺寸缩小一些并将顶点选中
-        support_inside_obj.select_set(True)
-        bpy.context.view_layer.objects.active = support_inside_obj
-        support_inside_obj.scale[0] = 1
-        support_inside_obj.scale[1] = 1
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-        support_inside_obj.select_set(False)
-        # 为铸造法内壁添加布尔修改器,与软耳膜支撑内芯做差集
-        obj_outer.select_set(True)
-        bpy.context.view_layer.objects.active = obj_outer
-        modifierSupportDifferenceInside = obj_outer.modifiers.new(name="SupportDifferenceInside", type='BOOLEAN')
-        modifierSupportDifferenceInside.object = support_inside_obj
-        modifierSupportDifferenceInside.operation = 'DIFFERENCE'
-        modifierSupportDifferenceInside.solver = 'FAST'
-        bpy.ops.object.modifier_apply(modifier="SupportDifferenceInside")
-        # 将选中的顶点直接删除在模型上得到软耳膜支撑的孔洞
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_less()
-        bpy.ops.mesh.delete(type='VERT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-
-        obj_inner.select_set(True)
-        bpy.context.view_layer.objects.active = obj_inner
-        # 为铸造法内壁添加布尔修改器,与排气孔内壁合并
-        modifierSupportUnionInner = obj_inner.modifiers.new(name="SupportUnionInner", type='BOOLEAN')
-        modifierSupportUnionInner.object = support_inner_obj
-        modifierSupportUnionInner.operation = 'UNION'
-        modifierSupportUnionInner.solver = 'FAST'
-        bpy.ops.object.modifier_apply(modifier="SupportUnionInner")
-
+        bpy.ops.object.booltool_auto_union()
+        support_inner_obj_temp.name = support_inner_name
+        support_inner_obj = support_inner_obj_temp
+        # # 为铸造法内壁添加布尔修改器,与排气孔内壁合并
+        # modifierSupportUnionInner = obj_inner.modifiers.new(name="SupportUnionInner", type='BOOLEAN')
+        # modifierSupportUnionInner.object = support_inner_obj
+        # modifierSupportUnionInner.operation = 'UNION'
+        # modifierSupportUnionInner.solver = 'FAST'
+        # bpy.ops.object.modifier_apply(modifier="SupportUnionInner")
+        bpy.ops.object.select_all(action='DESELECT')
         support_outer_obj.select_set(True)
         bpy.context.view_layer.objects.active = support_outer_obj
         # 先将排气孔外壁选中,使得其与铸造法外壳合并后被选中分离
@@ -1677,36 +1674,226 @@ def softSupportSubmit():
         bpy.ops.object.mode_set(mode='OBJECT')
         support_outer_obj.select_set(False)
 
-        obj_outer.select_set(True)
-        bpy.context.view_layer.objects.active = obj_outer
-        # 由于排气孔之前的模块存在布尔操作,会有其他顶点被选中,因此先将模型上选中顶点给取消选中
+
+
+        #2.将软耳膜支撑的内芯选中与右耳CastingCompare做布尔的差集,内芯插入模型的部分会和右耳内壁合并形成一块内凹的区域,这块顶点处于选中的状态,直接将其删除在右耳上得到一个孔
+        #将铸造法内部物体顶点取消选中
+        bpy.ops.object.select_all(action='DESELECT')
+        obj_inner.select_set(True)
+        bpy.context.view_layer.objects.active = obj_inner
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='DESELECT')
         bpy.ops.object.mode_set(mode='OBJECT')
-        #为铸造法外壳添加布尔修改器,与排气孔外壳合并
-        modifierSupportUnionOuter = obj_outer.modifiers.new(name="SupportUnionOuter", type='BOOLEAN')
-        modifierSupportUnionOuter.object = support_outer_obj
-        modifierSupportUnionOuter.operation = 'UNION'
-        modifierSupportUnionOuter.solver = 'FAST'
-        bpy.ops.object.modifier_apply(modifier="SupportUnionOuter")
-        # 由于排气孔物体和透明的右耳外壳合并后变为透明,因此需要设置一个不透明的参照物,与合并后的右耳对比,布尔合并后的顶点会被选中,将这些顶点复制一份并分离为独立的物体
+        #将软耳膜支撑内芯尺寸缩小一些并将顶点选中
+        bpy.ops.object.select_all(action='DESELECT')
+        support_inside_obj.select_set(True)
+        bpy.context.view_layer.objects.active = support_inside_obj
+        support_inside_obj.scale[0] = 0.8
+        support_inside_obj.scale[1] = 0.8
         bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.duplicate()
-        bpy.ops.mesh.separate(type='SELECTED')
+        bpy.ops.mesh.select_all(action='SELECT')
         bpy.ops.object.mode_set(mode='OBJECT')
-        sprue_compare_obj = bpy.data.objects.get(name + ".001")
-        if (sprue_compare_obj != None):
-            sprue_compare_obj.name = name + "SoftSupportCompare"
-            if (name == "右耳"):
-                moveToRight(sprue_compare_obj)
-            elif (name == "左耳"):
-                moveToLeft(sprue_compare_obj)
-            yellow_material = newColor("SupportCompare", 1, 0.319, 0.133, 0, 1)
-            sprue_compare_obj.data.materials.clear()
-            sprue_compare_obj.data.materials.append(yellow_material)
+        # 将软耳膜支撑内芯复制出一份用于后续操作(使用Bool Tool将软耳膜内芯和模型作差集之后,软耳膜内芯会被自动删除)
+        support_inside_name = support_inside_obj.name
+        support_inside_obj_temp = support_inside_obj.copy()
+        support_inside_obj_temp.data = support_inside_obj.data.copy()
+        support_inside_obj_temp.animation_data_clear()
+        bpy.context.collection.objects.link(support_inside_obj_temp)
+        if (name == "右耳"):
+            moveToRight(support_inside_obj_temp)
+        elif (name == "左耳"):
+            moveToLeft(support_inside_obj_temp)
+        # 为铸造法内壁添加布尔修改器,与软耳膜支撑内芯做差集
+        bpy.ops.object.select_all(action='DESELECT')
+        support_inside_obj.select_set(True)
+        obj_inner.select_set(True)
+        bpy.context.view_layer.objects.active = obj_inner
+        bpy.ops.object.booltool_auto_difference()
+        support_inside_obj_temp.name = support_inside_name
+        support_inside_obj = support_inside_obj_temp
+        # modifierSupportDifferenceInside = obj_inner.modifiers.new(name="SupportDifferenceInside", type='BOOLEAN')
+        # modifierSupportDifferenceInside.object = support_inside_obj
+        # modifierSupportDifferenceInside.operation = 'DIFFERENCE'
+        # modifierSupportDifferenceInside.solver = 'FAST'
+        # bpy.ops.object.modifier_apply(modifier="SupportDifferenceInside")
+        # 将选中的顶点直接删除在模型上得到软耳膜支撑的孔洞
+        bpy.ops.object.select_all(action='DESELECT')
+        obj_inner.select_set(True)
+        bpy.context.view_layer.objects.active = obj_inner
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_less()
+        bpy.ops.mesh.delete(type='VERT')
+        bpy.ops.object.mode_set(mode='OBJECT')
 
+
+        # 3.将软耳膜支撑的内芯选中与右耳做布尔的差集,内芯插入模型的部分会和右耳合并形成一块内凹的区域,这块顶点处于选中的状态,直接将其删除在右耳上得到一个孔
+        bpy.ops.object.select_all(action='DESELECT')
+        obj_outer.select_set(True)
+        bpy.context.view_layer.objects.active = obj_outer
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        # 将软耳膜支撑内芯尺寸缩小一些并将顶点选中
+        bpy.ops.object.select_all(action='DESELECT')
+        support_inside_obj.select_set(True)
+        bpy.context.view_layer.objects.active = support_inside_obj
+        support_inside_obj.scale[0] = 1
+        support_inside_obj.scale[1] = 1
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        # 将软耳膜支撑内芯复制出一份用于后续操作(使用Bool Tool将软耳膜内芯和模型作差集之后,软耳膜内芯会被自动删除)
+        support_inside_name = support_inside_obj.name
+        support_inside_obj_temp = support_inside_obj.copy()
+        support_inside_obj_temp.data = support_inside_obj.data.copy()
+        support_inside_obj_temp.animation_data_clear()
+        bpy.context.collection.objects.link(support_inside_obj_temp)
+        if (name == "右耳"):
+            moveToRight(support_inside_obj_temp)
+        elif (name == "左耳"):
+            moveToLeft(support_inside_obj_temp)
+        # 为铸造法内壁添加布尔修改器,与软耳膜支撑内芯做差集
+        bpy.ops.object.select_all(action='DESELECT')
+        support_inside_obj.select_set(True)
+        obj_outer.select_set(True)
+        bpy.context.view_layer.objects.active = obj_outer
+        bpy.ops.object.booltool_auto_difference()
+        support_inside_obj_temp.name = support_inside_name
+        support_inside_obj = support_inside_obj_temp
+        # modifierSupportDifferenceInside = obj_outer.modifiers.new(name="SupportDifferenceInside", type='BOOLEAN')
+        # modifierSupportDifferenceInside.object = support_inside_obj
+        # modifierSupportDifferenceInside.operation = 'DIFFERENCE'
+        # modifierSupportDifferenceInside.solver = 'FAST'
+        # bpy.ops.object.modifier_apply(modifier="SupportDifferenceInside")
+        # 将选中的顶点直接删除在模型上得到软耳膜支撑的孔洞
+        bpy.ops.object.select_all(action='DESELECT')
+        obj_outer.select_set(True)
+        bpy.context.view_layer.objects.active = obj_outer
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_less()
+        bpy.ops.mesh.delete(type='VERT')
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        # 4.将软耳膜支撑外壁与右耳模型做差集,得到软耳膜支撑的对比物体。 # 由于软耳膜支撑物体和透明的右耳外壳合并后变为透明,因此需要设置一个不透明的参照物,与合并后的右耳对比
+        # 将软耳膜支撑外壁复制一份用于布尔生成对比物
+        support_outer_compare_name = name + "SoftSupportCompare"
+        support_outer_compare_obj = support_outer_obj.copy()
+        support_outer_compare_obj.data = support_outer_obj.data.copy()
+        support_outer_compare_obj.animation_data_clear()
+        bpy.context.collection.objects.link(support_outer_compare_obj)
+        support_outer_compare_obj.name = support_outer_compare_name
+        if (name == "右耳"):
+            moveToRight(support_outer_compare_obj)
+        elif (name == "左耳"):
+            moveToLeft(support_outer_compare_obj)
+        # 将软耳膜支撑对比物的位置移动到与排气孔外壁的位置相同(由于排气孔相关物体都在父物体平面下随着父物体的位置改变而改变,因此其位置信息仍为导入时的为位置,不能直接通过location设置其位置)
+        me = support_outer_compare_obj.data
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bm.verts.ensure_lookup_table()
+        ori_sprue_me = support_outer_obj.data
+        ori_sprue_bm = bmesh.new()
+        ori_sprue_bm.from_mesh(ori_sprue_me)
+        ori_sprue_bm.verts.ensure_lookup_table()
+        for vert in bm.verts:
+            vert.co = ori_sprue_bm.verts[vert.index].co
+        bm.to_mesh(me)
+        bm.free()
+        ori_sprue_bm.free()
+        # 为铸造法外壁选中并重新计算法线,提高切割的成功率
+        bpy.ops.object.select_all(action='DESELECT')
+        obj_outer.select_set(True)
+        bpy.context.view_layer.objects.active = obj_outer
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.normals_make_consistent(inside=False)
+        bpy.ops.object.mode_set(mode='OBJECT')
+        # 将复制出来的软耳膜支撑外壁对比物与右耳做布尔差集,将其切割为所需的形状
+        bpy.ops.object.select_all(action='DESELECT')
+        support_outer_compare_obj.select_set(True)
+        bpy.context.view_layer.objects.active = support_outer_compare_obj
+        modifierSprueCompareDifference = support_outer_compare_obj.modifiers.new(name="SupportCompareDifference",type='BOOLEAN')
+        modifierSprueCompareDifference.object = obj_outer
+        modifierSprueCompareDifference.operation = 'DIFFERENCE'
+        modifierSprueCompareDifference.solver = 'FAST'
+        bpy.ops.object.modifier_apply(modifier="SupportCompareDifference")
+
+
+
+
+
+        # 5.将软耳膜支撑的外壁选中与右耳做布尔的并集
+        # 将软耳膜支撑外壁复制出一份用于后续操作(使用Bool Tool将软耳膜外壁和模型作并集之后,软耳膜内芯会被自动删除)
+        support_outer_name = support_outer_obj.name
+        support_outer_obj_temp = support_outer_obj.copy()
+        support_outer_obj_temp.data = support_outer_obj.data.copy()
+        support_outer_obj_temp.animation_data_clear()
+        bpy.context.collection.objects.link(support_outer_obj_temp)
+        if (name == "右耳"):
+            moveToRight(support_outer_obj_temp)
+        elif (name == "左耳"):
+            moveToLeft(support_outer_obj_temp)
+        # 为铸造法外壁选中并重新计算法线,提高切割的成功率
+        bpy.ops.object.select_all(action='DESELECT')
+        obj_outer.select_set(True)
+        bpy.context.view_layer.objects.active = obj_outer
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.normals_make_consistent(inside=False)
+        bpy.ops.object.mode_set(mode='OBJECT')
+        # 为铸造法外壁添加布尔修改器,与软耳膜支撑内壁做并集
+        bpy.ops.object.select_all(action='DESELECT')
+        support_outer_obj.select_set(True)
+        obj_outer.select_set(True)
+        bpy.context.view_layer.objects.active = obj_outer
+        # # 由于支撑之前的模块存在布尔操作,会有其他顶点被选中,因此先将模型上选中顶点给取消选中
+        # bpy.ops.object.mode_set(mode='EDIT')
+        # bpy.ops.mesh.select_all(action='DESELECT')
+        # bpy.ops.object.mode_set(mode='OBJECT')
+        #BoolTool 执行合并操作
+        bpy.ops.object.booltool_auto_union()
+        support_outer_obj_temp.name = support_outer_name
+        support_outer_obj = support_outer_obj_temp
+        # modifierSupportUnionOuter = obj_outer.modifiers.new(name="SupportUnionOuter", type='BOOLEAN')
+        # modifierSupportUnionOuter.object = support_outer_obj
+        # modifierSupportUnionOuter.operation = 'UNION'
+        # modifierSupportUnionOuter.solver = 'FAST'
+        # bpy.ops.object.modifier_apply(modifier="SupportUnionOuter")
+        # # 由于排气孔物体和透明的右耳外壳合并后变为透明,因此需要设置一个不透明的参照物,与合并后的右耳对比,布尔合并后的顶点会被选中,将这些顶点复制一份并分离为独立的物体
+        # bpy.ops.object.mode_set(mode='EDIT')
+        # bpy.ops.mesh.duplicate()
+        # bpy.ops.mesh.separate(type='SELECTED')
+        # bpy.ops.object.mode_set(mode='OBJECT')
+        # sprue_compare_obj = bpy.data.objects.get(name + ".001")
+        # if (sprue_compare_obj != None):
+        #     sprue_compare_obj.name = name + "SoftSupportCompare"
+        #     if (name == "右耳"):
+        #         moveToRight(sprue_compare_obj)
+        #     elif (name == "左耳"):
+        #         moveToLeft(sprue_compare_obj)
+        #     yellow_material = newColor("SupportCompare", 1, 0.319, 0.133, 0, 1)
+        #     sprue_compare_obj.data.materials.clear()
+        #     sprue_compare_obj.data.materials.append(yellow_material)
+
+
+        # 删除父物体平面之后,软耳膜支撑对比物体会恢复到初始位置,需要保存为位置信息
+        bpy.ops.object.select_all(action='DESELECT')
+        plane_obj.select_set(True)
+        bpy.context.view_layer.objects.active = plane_obj
+        bpy.ops.view3d.snap_cursor_to_active()                            # 将3D游标位置设置为激活物体的原点位置
+        bpy.ops.object.select_all(action='DESELECT')
+        support_outer_compare_obj.select_set(True)
+        bpy.context.view_layer.objects.active = support_outer_compare_obj
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='MEDIAN')   # 将软耳膜支撑对比物的原点位置设置为游标位置,即平面的原点位置
+        support_outer_compare_obj.location = plane_obj.location              # 将软耳膜支撑对比物体位置信息设置为平面位置信息
+        support_outer_compare_obj.rotation_euler = plane_obj.rotation_euler
+        bpy.ops.view3d.snap_cursor_to_center()                             # 将游标位置恢复为世界中心
+        support_compare_yellow_material = newColor("SupportCompareYellow", 1, 0.319, 0.133, 0, 1)  # 将软耳膜支撑对比物设置为模型的颜色
+        support_outer_compare_obj.data.materials.clear()
+        support_outer_compare_obj.data.materials.append(support_compare_yellow_material)
+
+        # 删除软耳膜支撑相关物体
         bpy.data.objects.remove(plane_obj, do_unlink=True)
-        bpy.data.objects.remove(sphere_obj, do_unlink=True)
         bpy.data.objects.remove(support_inner_obj, do_unlink=True)
         bpy.data.objects.remove(support_outer_obj, do_unlink=True)
         bpy.data.objects.remove(support_inside_obj, do_unlink=True)
@@ -1714,22 +1901,15 @@ def softSupportSubmit():
         bpy.data.objects.remove(support_outer_offset_compare_obj, do_unlink=True)
         bpy.data.objects.remove(support_inside_offset_compare_obj, do_unlink=True)
 
+
+        #将旋转中心设置为右耳
+        bpy.ops.object.select_all(action='DESELECT')
+        obj_outer.select_set(True)
         bpy.context.view_layer.objects.active = obj_outer
 
         # 合并后Support会被去除材质,因此需要重置一下模型颜色为黄色
-        bpy.ops.object.mode_set(mode='VERTEX_PAINT')
-        bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
-        bpy.data.brushes["Draw"].color = (1, 0.6, 0.4)
-        bpy.ops.paint.vertex_color_set()
-        bpy.ops.object.mode_set(mode='OBJECT')
+        utils_re_color(name, (1, 0.319, 0.133))
 
-        # 将当前激活物体设置为右耳,并将其他物体取消选中
-        for selected_obj in bpy.data.objects:
-            if (selected_obj.name == name ):
-                bpy.context.view_layer.objects.active = selected_obj
-                selected_obj.select_set(True)
-            else:
-                selected_obj.select_set(False)
 
 
 def addSupport():
@@ -2103,6 +2283,13 @@ class SupportSubmit(bpy.types.Operator):
     bl_label = "支撑提交"
 
     def invoke(self, context, event):
+        global is_on_rotate
+        global is_on_rotateL
+        name = bpy.context.scene.leftWindowObj
+        if (name == "右耳"):
+            is_on_rotate = False
+        elif (name == "左耳"):
+            is_on_rotateL = False
         bpy.context.scene.var = 18
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
@@ -2143,22 +2330,11 @@ class SupportRotate(bpy.types.Operator):
         name = bpy.context.scene.leftWindowObj
         planename = name + "Plane"
         plane_obj = bpy.data.objects.get(planename)
-        spherename = name + "SupportSphere"
-        sphere_obj = bpy.data.objects.get(spherename)
-        if (plane_obj != None and sphere_obj != None):
+        if (plane_obj != None ):
             if(name == '右耳'):
                 is_on_rotate = not is_on_rotate
-                if(is_on_rotate == True):
-                    sphere_obj.select_set(True)
-                else:
-                    sphere_obj.select_set(False)
             elif(name == '左耳'):
                 is_on_rotateL = not is_on_rotateL
-                if (is_on_rotateL == True):
-                    sphere_obj.select_set(True)
-                else:
-                    sphere_obj.select_set(False)
-            print("旋转按钮:",is_on_rotate)
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         return {'FINISHED'}
 
@@ -2324,15 +2500,24 @@ _classes = [
 ]
 
 
-def register():
-    for cls in _classes:
-        bpy.utils.register_class(cls)
+def register_support_tools():
     bpy.utils.register_tool(MyTool_Support1, separator=True, group=False)
     bpy.utils.register_tool(MyTool_Support2, separator=True, group=False, after={MyTool_Support1.bl_idname})
     bpy.utils.register_tool(MyTool_Support3, separator=True, group=False, after={MyTool_Support2.bl_idname})
     bpy.utils.register_tool(MyTool_Support_Rotate, separator=True, group=False, after={MyTool_Support3.bl_idname})
     bpy.utils.register_tool(MyTool_Support_Mirror, separator=True, group=False, after={MyTool_Support_Rotate.bl_idname})
     bpy.utils.register_tool(MyTool_Support_Mouse, separator=True, group=False, after={MyTool_Support_Mirror.bl_idname})
+
+
+def register():
+    for cls in _classes:
+        bpy.utils.register_class(cls)
+    # bpy.utils.register_tool(MyTool_Support1, separator=True, group=False)
+    # bpy.utils.register_tool(MyTool_Support2, separator=True, group=False, after={MyTool_Support1.bl_idname})
+    # bpy.utils.register_tool(MyTool_Support3, separator=True, group=False, after={MyTool_Support2.bl_idname})
+    # bpy.utils.register_tool(MyTool_Support_Rotate, separator=True, group=False, after={MyTool_Support3.bl_idname})
+    # bpy.utils.register_tool(MyTool_Support_Mirror, separator=True, group=False, after={MyTool_Support_Rotate.bl_idname})
+    # bpy.utils.register_tool(MyTool_Support_Mouse, separator=True, group=False, after={MyTool_Support_Mirror.bl_idname})
 
 def unregister():
     for cls in _classes:

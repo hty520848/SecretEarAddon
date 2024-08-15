@@ -1,25 +1,25 @@
 import bpy
+import bmesh
+import mathutils
+import math
+import re
+from math import *
+from pynput import mouse
 from bpy import context
 from bpy_extras import view3d_utils
-import mathutils
-import bmesh
 from mathutils import Vector
 from bpy.types import WorkSpaceTool
 from ..tool import moveToRight, moveToLeft, newMaterial, getOverride2, is_mouse_on_object, \
     is_mouse_on_which_object, is_changed_stepcut, get_cast_index, get_region_and_space, utils_re_color, \
     set_vert_group, delete_vert_group, apply_material
-import math
-from math import *
-from pynput import mouse
 
 ############ 侧切、环切公用的全局变量 ############
 qiegeenum = 1  # 当前切割的模式，1为环切，2为侧切
 operator_obj = ''  # 当前操作的物体是左耳还是右耳
 zmax = 0  # 物体z坐标的最大值，用于初始化
 zmin = 0  # 物体z坐标的最小值，用于初始化
-
+finish = False  # 是否点击了完成按钮
 ############ 环切用到的全局变量 ############
-# todo:左右耳适配
 old_radius = 8.0
 now_radius = 0
 scale_ratio = 1
@@ -35,7 +35,6 @@ left_last_loc = None
 left_last_radius = None
 left_last_ratation = None
 
-finish = False
 mouse_loc = None  # 记录鼠标在圆环上的位置
 max_radius = None  # 记录当前圆环的半径
 
@@ -52,9 +51,9 @@ l_old_loc_sphere2 = []
 l_old_loc_sphere3 = []
 l_old_loc_sphere4 = []
 
-# 用于保存侧切4个点的index,方便镜像
-loc_spheres_index = []
-is_saved = False  # 记录圆球的位置是否被保存
+loc_spheres_index = []  # 用于保存侧切4个点的index,方便镜像
+loc_saved_right = False  # 记录圆球的位置是否被保存(右耳)
+loc_saved_left = False  # 记录圆球的位置是否被保存(左耳)
 
 
 # 判断鼠标是否在物体上
@@ -518,13 +517,16 @@ def smooth_circlecut(obj_name, pianyi):
         bpy.ops.mesh.region_to_loop()
         if pianyi > 0:
             bpy.ops.circle.smooth(width=pianyi, center_border_group_name='CircleCutBorderVertex',
-                             max_smooth_width=3)
+                                  max_smooth_width=3)
         else:
             bpy.ops.mesh.select_mode(type='VERT')
         bpy.data.objects.remove(bpy.data.objects[obj_name], do_unlink=True)
         duplicate_obj.name = obj_name
         bpy.ops.object.mode_set(mode='OBJECT')
         # utils_re_color(operator_obj, (1, 0.319, 0.133))
+
+        # if bpy.data.objects.get(obj_name + 'qiegepinghuaforresetcopy.001'):
+        #     bpy.data.objects.remove(bpy.data.objects[obj_name + 'qiegepinghuaforresetcopy.001'], do_unlink=True)
 
     except:
         print('平滑失败')
@@ -545,6 +547,7 @@ def smooth_circlecut(obj_name, pianyi):
 
 
 def apply_stepcut(obj_name):
+    # step_bool_cut()
     if obj_name == '右耳':
         pianyi = bpy.context.scene.qiegewaiBianYuanR  # 获取偏移值
     elif obj_name == '左耳':
@@ -836,6 +839,11 @@ def newColor(id, r, g, b, is_transparency, transparency_degree):
     output = nodes.new(type='ShaderNodeOutputMaterial')
     shader = nodes.new(type='ShaderNodeBsdfPrincipled')
     shader.inputs[0].default_value = (r, g, b, 1)
+    shader.inputs[6].default_value = 0.46
+    shader.inputs[7].default_value = 0
+    shader.inputs[9].default_value = 0.472
+    shader.inputs[14].default_value = 1
+    shader.inputs[15].default_value = 0.105
     links.new(shader.outputs[0], output.inputs[0])
     if is_transparency:
         mat.blend_method = "BLEND"
@@ -869,7 +877,7 @@ def initCircle(obj_name):
     # obj_main.data.materials.clear()
     # newColor('yellow', 1.0, 0.319, 0.133, 0, 1)
     apply_material()
-    newColor('yellow2', 1.0, 0.319, 0.133, 1, 0.5)
+    newColor('yellow2', 1.0, 0.319, 0.133, 1, 0.3)
     obj_compare = bpy.data.objects[obj_name + 'huanqiecompare']
     obj_compare.data.materials.clear()
     obj_compare.data.materials.append(bpy.data.materials['yellow2'])
@@ -1168,7 +1176,7 @@ def initsphereloc(obj_name):
     global r_old_loc_sphere1, r_old_loc_sphere2, r_old_loc_sphere3, r_old_loc_sphere4
     global l_old_loc_sphere1, l_old_loc_sphere2, l_old_loc_sphere3, l_old_loc_sphere4
     getModelZ(obj_name)
-    initZ = round(zmax * 0.8, 2)
+    initZ = round(zmax * 0.7, 2)
     bm = bmesh.new()
     obj = bpy.data.objects[obj_name]
     objdata = bpy.data.objects[obj_name].data
@@ -1207,16 +1215,16 @@ def initPlane(obj_name):
     global r_old_loc_sphere1, r_old_loc_sphere2, r_old_loc_sphere3, r_old_loc_sphere4
     global l_old_loc_sphere1, l_old_loc_sphere2, l_old_loc_sphere3, l_old_loc_sphere4
     global operator_obj
-    global is_saved
+    global loc_saved_right, loc_saved_left
 
     operator_obj = obj_name
 
     qiegeenum = 2
 
-    if not is_saved and obj_name == '右耳':
+    if not loc_saved_right and obj_name == '右耳':
         # 初始化4个点位置
         initsphereloc(obj_name)
-    elif obj_name == '左耳':
+    elif not loc_saved_left and obj_name == '左耳':
         initsphereloc(obj_name)
 
     if obj_name == '右耳':
@@ -1252,53 +1260,98 @@ def initPlane(obj_name):
     bpy.context.scene.tool_settings.use_snap_align_rotation = True
     bpy.context.scene.tool_settings.use_snap_backface_culling = True
 
-    for i in bpy.context.visible_objects:
-        if i.name == obj_name:
-            bpy.context.view_layer.objects.active = i
-            obj = bpy.context.active_object
-            obj_copy = obj.copy()
-            obj_copy.name = obj.name + 'ceqieCompare'
-            obj_copy.data = obj.data.copy()
-            obj_copy.animation_data_clear()
-            scene = bpy.context.scene
-            scene.collection.objects.link(obj_copy)
-            if obj_name == '右耳':
-                moveToRight(obj)
-                moveToRight(obj_copy)
-            elif obj_name == '左耳':
-                moveToLeft(obj)
-                moveToLeft(obj_copy)
-            obj.hide_select = True
-            obj_copy.hide_select = True
-
-    # newColor('yellow', 1.0, 0.319, 0.133, 0, 1)
-    newColor('yellow2', 1.0, 0.319, 0.133, 1, 0.5)
-
+    obj = bpy.data.objects[obj_name]
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
     apply_material()
-    bpy.data.objects[obj_name + 'ceqieCompare'].data.materials.clear()
-    bpy.data.objects[obj_name + 'ceqieCompare'].data.materials.append(
-        bpy.data.materials['yellow2'])
-    bpy.ops.object.select_all(action='DESELECT')
 
-    plane = bpy.data.objects[obj_name + 'StepCutplane']
-    obj_main = bpy.data.objects[obj_name]
-    bpy.context.view_layer.objects.active = obj_main
-    obj_main.select_set(True)
+    # 设置顶点组
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-    bm = bmesh.from_edit_mesh(obj_main.data)
+    bm = bmesh.from_edit_mesh(obj.data)
     all_vert = [v.index for v in bm.verts if v.select]
     bpy.ops.object.mode_set(mode='OBJECT')
     set_vert_group("before_cut", all_vert)
-    bool_modifier = obj_main.modifiers.new(
+
+    if not bpy.data.objects.get(obj_name + 'ceqieCompare'):
+        obj_copy = obj.copy()
+        obj_copy.name = obj.name + 'ceqieCompare'
+        obj_copy.data = obj.data.copy()
+        obj_copy.animation_data_clear()
+        scene = bpy.context.scene
+        scene.collection.objects.link(obj_copy)
+        if obj_name == '右耳':
+            moveToRight(obj)
+            moveToRight(obj_copy)
+        elif obj_name == '左耳':
+            moveToLeft(obj)
+            moveToLeft(obj_copy)
+        obj.hide_select = True
+        obj_copy.hide_select = True
+
+    # newColor('yellow', 1.0, 0.319, 0.133, 0, 1)
+    newColor('yellow2', 1.0, 0.319, 0.133, 1, 0.3)
+
+    bpy.data.objects[obj_name + 'ceqieCompare'].data.materials.clear()
+    bpy.data.objects[obj_name + 'ceqieCompare'].data.materials.append(
+        bpy.data.materials['yellow2'])
+
+    bool_modifier = obj.modifiers.new(
         name="step cut", type='BOOLEAN')
     bool_modifier.operation = 'DIFFERENCE'
+    plane = bpy.data.objects[obj_name + 'StepCutplane']
     bool_modifier.object = plane
 
-    # 调用调整按钮
-    override = getOverride()
-    with bpy.context.temp_override(**override):
-        bpy.ops.object.stepcut('INVOKE_DEFAULT')
+    update_plane(operator_obj)
+    apply_stepcut(operator_obj)
+
+    # override = getOverride()
+    # with bpy.context.temp_override(**override):
+    bpy.ops.object.stepcut('INVOKE_DEFAULT')
+
+
+def step_bool_cut():
+    global operator_obj
+    reset_obj = bpy.data.objects[operator_obj + 'ceqieCompare']
+    duplicate_obj = reset_obj.copy()
+    duplicate_obj.data = reset_obj.data.copy()
+    duplicate_obj.animation_data_clear()
+    bpy.context.collection.objects.link(duplicate_obj)
+    duplicate_obj.data.materials.clear()
+    if operator_obj == '右耳':
+        moveToRight(duplicate_obj)
+        duplicate_obj.data.materials.append(bpy.data.materials['YellowR'])
+    elif operator_obj == '左耳':
+        moveToLeft(duplicate_obj)
+        duplicate_obj.data.materials.append(bpy.data.materials['YellowL'])
+
+    cut_obj = bpy.data.objects[operator_obj + 'StepCutplane']
+    duplicate_plane_obj = cut_obj.copy()
+    duplicate_plane_obj.data = cut_obj.data.copy()
+    duplicate_plane_obj.animation_data_clear()
+    bpy.context.collection.objects.link(duplicate_plane_obj)
+    if operator_obj == '右耳':
+        moveToRight(duplicate_plane_obj)
+    elif operator_obj == '左耳':
+        moveToLeft(duplicate_plane_obj)
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = duplicate_plane_obj
+    duplicate_plane_obj.select_set(True)
+    # bpy.ops.object.modifier_apply(modifier="smooth", single_user=True)
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.mesh.select_all(action='SELECT')
+    # bpy.ops.mesh.normals_make_consistent(inside=False)
+    # bpy.ops.object.mode_set(mode='OBJECT')
+
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = duplicate_obj
+    duplicate_obj.hide_select = False
+    duplicate_obj.select_set(True)
+    duplicate_plane_obj.select_set(True)
+    bpy.ops.object.booltool_auto_difference()
+    bpy.data.objects.remove(bpy.data.objects[operator_obj], do_unlink=True)
+    duplicate_obj.name = operator_obj
+    duplicate_obj.hide_select = True
 
 
 # 获取VIEW_3D区域的上下文
@@ -1447,14 +1500,9 @@ def saveStep(obj_name):
 # 退出操作
 def quitCut(obj_name):
     global finish, operator_obj
+
     # 切割未完成
     if finish == False:
-        # all_objs = bpy.data.objects
-        # for selected_obj in all_objs:  # 删除用于对比的未被激活的模型
-        #     print('name',selected_obj.name)
-        #     if (
-        #             selected_obj.name != "右耳huanqiecompare" and selected_obj.name != "右耳LocalThickCopy" and selected_obj.name != "右耳DamoCopy" and selected_obj.name != "DamoReset"):
-        #         bpy.data.objects.remove(selected_obj, do_unlink=True)
         print('quitcut', obj_name)
         del_objs = [obj_name + 'Circle', obj_name + 'Torus', obj_name, obj_name + 'qiegepinghuaforreset']
 
@@ -1466,21 +1514,37 @@ def quitCut(obj_name):
             do_local_ids=True, do_linked_ids=True, do_recursive=False)
         bpy.ops.object.select_all(action='DESELECT')
         obj = bpy.data.objects[obj_name + "huanqiecompare"]
-        obj.hide_set(False)
+        # obj.hide_set(False)
         bpy.context.view_layer.objects.active = obj
-        delete_vert_group("CircleCutBorderVertex")
+        # delete_vert_group("CircleCutBorderVertex")
         obj.name = obj_name
 
 
 def quitStepCut(obj_name):
     global finish
-    global is_saved
+    global loc_saved_left, loc_saved_right
 
     # 切割未完成
     if finish == False:
         saveStep(obj_name)
-        is_saved = True
-        main_obj = bpy.data.objects.get(obj_name)
+        if obj_name == '右耳':
+            loc_saved_right = True
+        elif obj_name == '左耳':
+            loc_saved_left = True
+
+        # bpy.ops.object.modifier_remove(modifier='step cut', report=False)
+        del_objs = [obj_name, obj_name + 'StepCutSphere1', obj_name + 'StepCutSphere2', obj_name + 'StepCutSphere3',
+                    obj_name + 'StepCutSphere4', obj_name + 'StepCutplane', obj_name + 'stepcutpinghua',
+                    obj_name + 'stepcutpinghuaforreset']
+        for obj in del_objs:
+            if (bpy.data.objects.get(obj)):
+                obj1 = bpy.data.objects[obj]
+                bpy.data.objects.remove(obj1, do_unlink=True)
+        bpy.ops.outliner.orphans_purge(
+            do_local_ids=True, do_linked_ids=True, do_recursive=False)
+
+        bpy.ops.object.select_all(action='DESELECT')
+        main_obj = bpy.data.objects.get(obj_name + "ceqieCompare")
         if main_obj:
             main_obj.hide_select = False
             main_obj.hide_set(False)
@@ -1490,35 +1554,12 @@ def quitStepCut(obj_name):
             step_cut_vertex_group = main_obj.vertex_groups.get("before_cut")
             if (step_cut_vertex_group != None):
                 main_obj.vertex_groups.remove(step_cut_vertex_group)
+            # step_cut_smooth_vertex_group = main_obj.vertex_groups.get("StepCutBorderVertex")
+            # if (step_cut_smooth_vertex_group != None):
+            #     main_obj.vertex_groups.remove(step_cut_smooth_vertex_group)
 
-        bpy.ops.object.modifier_remove(modifier='step cut', report=False)
-        bpy.data.objects[obj_name].data.materials.clear()
-        if (bpy.data.objects[obj_name + 'StepCutSphere1']):
-            obj = bpy.data.objects[obj_name + 'StepCutSphere1']
-            bpy.data.objects.remove(obj, do_unlink=True)
-        if (bpy.data.objects[obj_name + 'StepCutSphere2']):
-            obj = bpy.data.objects[obj_name + 'StepCutSphere2']
-            bpy.data.objects.remove(obj, do_unlink=True)
-        if (bpy.data.objects[obj_name + 'StepCutSphere3']):
-            obj = bpy.data.objects[obj_name + 'StepCutSphere3']
-            bpy.data.objects.remove(obj, do_unlink=True)
-        if (bpy.data.objects[obj_name + 'StepCutSphere4']):
-            obj = bpy.data.objects[obj_name + 'StepCutSphere4']
-            bpy.data.objects.remove(obj, do_unlink=True)
-        if (bpy.data.objects[obj_name + 'StepCutplane']):
-            obj = bpy.data.objects[obj_name + 'StepCutplane']
-            bpy.data.objects.remove(obj, do_unlink=True)
-        if (bpy.data.objects[obj_name + 'ceqieCompare']):
-            obj = bpy.data.objects[obj_name + 'ceqieCompare']
-            bpy.data.objects.remove(obj, do_unlink=True)
-        if (bpy.data.objects[obj_name + 'stepcutpinghua']):
-            obj = bpy.data.objects[obj_name + 'stepcutpinghua']
-            bpy.data.objects.remove(obj, do_unlink=True)
-        if (bpy.data.objects[obj_name + 'stepcutpinghuaforreset']):
-            obj = bpy.data.objects[obj_name + 'stepcutpinghuaforreset']
-            bpy.data.objects.remove(obj, do_unlink=True)
-        bpy.ops.outliner.orphans_purge(
-            do_local_ids=True, do_linked_ids=True, do_recursive=False)
+        bpy.context.view_layer.objects.active = main_obj
+        main_obj.name = obj_name
 
 
 class Circle_Cut(bpy.types.Operator):
@@ -1537,6 +1578,7 @@ class Circle_Cut(bpy.types.Operator):
     __is_moving = False
     __dx = 0
     __dy = 0
+    __area = None
 
     def cast_ray(self, context, event):
 
@@ -1600,56 +1642,198 @@ class Circle_Cut(bpy.types.Operator):
         global scale_ratio, zmax, zmin, on_obj, operator_obj, mouse_loc
         op_cls = Circle_Cut
 
-        if context.area:
-            context.area.tag_redraw()
+        override1 = getOverride()
+        area = override1['area']
+        override2 = getOverride2()
+        area2 = override2['area']
+
         # 未切割时起效
         if (bpy.context.scene.var == 55):
             if finish == False:
                 if qiegeenum == 1:
-                    mouse_x = event.mouse_x
-                    mouse_y = event.mouse_y
-                    override1 = getOverride()
-                    area = override1['area']
-                    override2 = getOverride2()
-                    area2 = override2['area']
-
                     workspace = bpy.context.window.workspace.name
                     # 双窗口模式下
                     if workspace == '布局.001':
                         # 根据鼠标位置判断当前操作窗口
-                        if (mouse_x > area.width and mouse_y > area2.y):
+                        if (event.mouse_x > area.width and event.mouse_y > area2.y):
                             # print('右窗口')
+                            op_cls.__area = area2
                             operator_obj = context.scene.rightWindowObj
                         else:
                             # print('左窗口')
+                            op_cls.__area = area
                             operator_obj = context.scene.leftWindowObj
+                    elif workspace == '布局':
+                        operator_obj = context.scene.leftWindowObj
+                        op_cls.__area = area
 
-                    obj_torus = bpy.data.objects[operator_obj + 'Torus']
-                    active_obj = bpy.data.objects[operator_obj + 'Circle']
+                obj_torus = bpy.data.objects.get(operator_obj + 'Torus')
+                active_obj = bpy.data.objects.get(operator_obj + 'Circle')
+
+                if obj_torus == None or active_obj == None:
+                    return {'PASS_THROUGH'}
 
                 # 鼠标是否在圆环上
-                if (qiegeenum == 1 and is_mouse_on_object(context, event)):
-                    bpy.ops.object.select_all(action='DESELECT')
-                    bpy.context.view_layer.objects.active = obj_torus
-                    obj_torus.select_set(True)
-                    if event.type == 'LEFTMOUSE':
-                        if event.value == 'PRESS':
-                            op_cls.__is_moving = True
-                            op_cls.__left_mouse_down = True
-                            op_cls.__initial_rotation_x = obj_torus.rotation_euler[0]
-                            op_cls.__initial_rotation_y = obj_torus.rotation_euler[1]
-                            op_cls.__initial_rotation_z = obj_torus.rotation_euler[2]
-                            op_cls.__initial_mouse_x = event.mouse_region_x
-                            op_cls.__initial_mouse_y = event.mouse_region_y
+                if (qiegeenum == 1 and (op_cls.__area.x < event.mouse_x < op_cls.__area.x + op_cls.__area.width
+                                           or op_cls.__area.y < event.mouse_y < op_cls.__area.y + op_cls.__area.height)):
+                    if is_mouse_on_object(context, event):
+                        bpy.ops.object.select_all(action='DESELECT')
+                        bpy.context.view_layer.objects.active = obj_torus
+                        obj_torus.select_set(True)
+                        if event.type == 'LEFTMOUSE':
+                            if event.value == 'PRESS':
+                                op_cls.__is_moving = True
+                                op_cls.__left_mouse_down = True
+                                op_cls.__initial_rotation_x = obj_torus.rotation_euler[0]
+                                op_cls.__initial_rotation_y = obj_torus.rotation_euler[1]
+                                op_cls.__initial_rotation_z = obj_torus.rotation_euler[2]
+                                op_cls.__initial_mouse_x = event.mouse_region_x
+                                op_cls.__initial_mouse_y = event.mouse_region_y
 
-                            # print('鼠标坐标',mouse_loc)
-                            op_cls.__dx = round(mouse_loc.x, 2)
-                            op_cls.__dy = round(mouse_loc.y, 2)
-                            # print('dx',op_cls.__dx)
-                            # print('dy',op_cls.__dy)
+                                # print('鼠标坐标',mouse_loc)
+                                op_cls.__dx = round(mouse_loc.x, 2)
+                                op_cls.__dy = round(mouse_loc.y, 2)
+                                # print('dx',op_cls.__dx)
+                                # print('dy',op_cls.__dy)
 
-                        # 取消
-                        elif event.value == 'RELEASE':
+                            # 取消
+                            elif event.value == 'RELEASE':
+                                normal = active_obj.matrix_world.to_3x3(
+                                ) @ active_obj.data.polygons[0].normal
+                                if normal.z > 0:
+                                    print('圆环法线', normal)
+                                    print('反转法线')
+                                    override1 = getOverride()
+                                    override2 = getOverride2()
+                                    region1 = override1['region']
+                                    region2 = override2['region']
+                                    if event.mouse_region_x > region1.width:
+                                        with bpy.context.temp_override(**override2):
+                                            active_obj.hide_set(False)
+                                            bpy.context.view_layer.objects.active = active_obj
+                                            bpy.ops.object.mode_set(mode='EDIT')
+                                            bpy.ops.mesh.select_all(action='SELECT')
+                                            # 翻转圆环法线
+                                            # bpy.ops.mesh.flip_normals(only_clnors=False)
+                                            bpy.ops.mesh.flip_normals()
+                                            # bpy.ops.mesh.normals_make_consistent(inside=True)
+                                            # 隐藏圆环
+                                            active_obj.hide_set(True)
+                                            # 返回对象模式
+                                            bpy.ops.object.mode_set(mode='OBJECT')
+                                            print('反转后法线', active_obj.matrix_world.to_3x3(
+                                            ) @ active_obj.data.polygons[0].normal)
+                                    else:
+                                        active_obj.hide_set(False)
+                                        bpy.context.view_layer.objects.active = active_obj
+                                        bpy.ops.object.mode_set(mode='EDIT')
+                                        bpy.ops.mesh.select_all(action='SELECT')
+                                        # 翻转圆环法线
+                                        # bpy.ops.mesh.flip_normals(only_clnors=False)
+                                        bpy.ops.mesh.flip_normals()
+                                        # bpy.ops.mesh.normals_make_consistent(inside=True)
+                                        # 隐藏圆环
+                                        active_obj.hide_set(True)
+                                        # 返回对象模式
+                                        bpy.ops.object.mode_set(mode='OBJECT')
+                                        print('反转后法线', active_obj.matrix_world.to_3x3(
+                                        ) @ active_obj.data.polygons[0].normal)
+                                apply_circle_cut(operator_obj)
+                                saveCir()
+                                op_cls.__is_moving = False
+                                op_cls.__left_mouse_down = False
+                                op_cls.__initial_rotation_x = None
+                                op_cls.__initial_rotation_y = None
+                                op_cls.__initial_rotation_z = None
+                                op_cls.__initial_mouse_x = None
+                                op_cls.__initial_mouse_y = None
+
+                            return {'RUNNING_MODAL'}
+
+                        elif event.type == 'RIGHTMOUSE':
+                            if event.value == 'PRESS':
+                                op_cls.__is_moving = True
+                                op_cls.__right_mouse_down = True
+                                op_cls.__initial_mouse_x = event.mouse_region_x
+                                op_cls.__initial_mouse_y = event.mouse_region_y
+                            elif event.value == 'RELEASE':
+                                apply_circle_cut(operator_obj)
+                                op_cls.__is_moving = False
+                                op_cls.__right_mouse_down = False
+                                op_cls.__initial_mouse_x = None
+                                op_cls.__initial_mouse_y = None
+
+                            return {'RUNNING_MODAL'}
+
+                        elif event.type == 'MOUSEMOVE':
+                            # 左键按住旋转
+                            if op_cls.__left_mouse_down:
+                                # 旋转角度正负号
+                                if (op_cls.__dy < 0):
+                                    symx = -1
+                                else:
+                                    symx = 1
+
+                                if (op_cls.__dx > 0):
+                                    symy = -1
+                                else:
+                                    symy = 1
+
+                                # print('symx',symx)
+                                # print('symy',symy)
+
+                                # x,y轴旋转比例
+                                px = round(abs(op_cls.__dy) / sqrt(op_cls.__dx * op_cls.__dx + op_cls.__dy * op_cls.__dy),
+                                           4)
+                                py = round(abs(op_cls.__dx) / sqrt(op_cls.__dx * op_cls.__dx + op_cls.__dy * op_cls.__dy),
+                                           4)
+                                # print('px',px)
+                                # print('py',py)
+
+                                # 旋转角度
+                                rotate_angle_x = round((event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01 * px, 4)
+                                rotate_angle_y = round((event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01 * py, 4)
+                                rotate_angle_z = round((event.mouse_region_x - op_cls.__initial_mouse_x) * 0.005, 4)
+                                active_obj.rotation_euler[0] = op_cls.__initial_rotation_x + \
+                                                               rotate_angle_x * symx
+                                active_obj.rotation_euler[1] = op_cls.__initial_rotation_y + \
+                                                               rotate_angle_y * symy
+                                active_obj.rotation_euler[2] = op_cls.__initial_rotation_z + \
+                                                               rotate_angle_z
+
+                                obj_torus.rotation_euler[0] = active_obj.rotation_euler[0]
+                                obj_torus.rotation_euler[1] = active_obj.rotation_euler[1]
+                                obj_torus.rotation_euler[2] = active_obj.rotation_euler[2]
+
+                                getRadius('rotate')
+                                return {'RUNNING_MODAL'}
+                            elif op_cls.__right_mouse_down:
+                                obj_circle = bpy.data.objects[operator_obj + 'Circle']
+                                # 平面法线方向
+                                normal = obj_circle.matrix_world.to_3x3(
+                                ) @ obj_circle.data.polygons[0].normal
+
+                                dis = event.mouse_region_y - op_cls.__initial_mouse_y
+                                op_cls.__initial_mouse_x = event.mouse_region_x
+                                op_cls.__initial_mouse_y = event.mouse_region_y
+                                # print('距离',dis)
+                                obj_circle.location -= normal * dis * 0.05
+                                obj_torus.location -= normal * dis * 0.05
+                                getRadius('move')
+                                return {'RUNNING_MODAL'}
+
+                        return {'PASS_THROUGH'}
+
+                    else:
+                        tar_obj = bpy.data.objects[operator_obj]
+                        bpy.ops.object.select_all(action='DESELECT')
+                        bpy.context.view_layer.objects.active = tar_obj
+                        tar_obj.select_set(True)
+                        # print('不在圆环上')
+                        # bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                        obj_torus = bpy.data.objects[operator_obj + 'Torus']
+                        active_obj = bpy.data.objects[operator_obj + 'Circle']
+                        if event.value == 'RELEASE' and op_cls.__is_moving:
                             normal = active_obj.matrix_world.to_3x3(
                             ) @ active_obj.data.polygons[0].normal
                             if normal.z > 0:
@@ -1659,6 +1843,7 @@ class Circle_Cut(bpy.types.Operator):
                                 override2 = getOverride2()
                                 region1 = override1['region']
                                 region2 = override2['region']
+                                # 右窗口
                                 if event.mouse_region_x > region1.width:
                                     with bpy.context.temp_override(**override2):
                                         active_obj.hide_set(False)
@@ -1694,211 +1879,77 @@ class Circle_Cut(bpy.types.Operator):
                             saveCir()
                             op_cls.__is_moving = False
                             op_cls.__left_mouse_down = False
+                            op_cls.__right_mouse_down = False
                             op_cls.__initial_rotation_x = None
                             op_cls.__initial_rotation_y = None
                             op_cls.__initial_rotation_z = None
                             op_cls.__initial_mouse_x = None
                             op_cls.__initial_mouse_y = None
 
-                        return {'RUNNING_MODAL'}
+                        if event.type == 'MOUSEMOVE':
+                            # 左键按住旋转
+                            if op_cls.__left_mouse_down:
+                                # 旋转正负号
+                                if (op_cls.__dy < 0):
+                                    symx = -1
+                                else:
+                                    symx = 1
 
-                    elif event.type == 'RIGHTMOUSE':
-                        if event.value == 'PRESS':
-                            op_cls.__is_moving = True
-                            op_cls.__right_mouse_down = True
-                            op_cls.__initial_mouse_x = event.mouse_region_x
-                            op_cls.__initial_mouse_y = event.mouse_region_y
-                        elif event.value == 'RELEASE':
-                            apply_circle_cut(operator_obj)
-                            op_cls.__is_moving = False
-                            op_cls.__right_mouse_down = False
-                            op_cls.__initial_mouse_x = None
-                            op_cls.__initial_mouse_y = None
+                                if (op_cls.__dx > 0):
+                                    symy = -1
+                                else:
+                                    symy = 1
 
-                        return {'RUNNING_MODAL'}
+                                # print('symx',symx)
+                                # print('symy',symy)
 
-                    elif event.type == 'MOUSEMOVE':
-                        # 左键按住旋转
-                        if op_cls.__left_mouse_down:
-                            # 旋转角度正负号
-                            if (op_cls.__dy < 0):
-                                symx = -1
-                            else:
-                                symx = 1
+                                #  x,y轴旋转比例
+                                px = round(abs(op_cls.__dy) / sqrt(op_cls.__dx * op_cls.__dx + op_cls.__dy * op_cls.__dy),
+                                           4)
+                                py = round(abs(op_cls.__dx) / sqrt(op_cls.__dx * op_cls.__dx + op_cls.__dy * op_cls.__dy),
+                                           4)
+                                # print('px',px)
+                                # print('py',py)
 
-                            if (op_cls.__dx > 0):
-                                symy = -1
-                            else:
-                                symy = 1
+                                # 旋转角度
+                                rotate_angle_x = round((event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01 * px, 4)
+                                rotate_angle_y = round((event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01 * py, 4)
+                                rotate_angle_z = round((event.mouse_region_x - op_cls.__initial_mouse_x) * 0.005, 4)
+                                active_obj.rotation_euler[0] = op_cls.__initial_rotation_x + \
+                                                               rotate_angle_x * symx
+                                active_obj.rotation_euler[1] = op_cls.__initial_rotation_y + \
+                                                               rotate_angle_y * symy
+                                active_obj.rotation_euler[2] = op_cls.__initial_rotation_z + \
+                                                               rotate_angle_z
+                                obj_torus.rotation_euler[0] = active_obj.rotation_euler[0]
+                                obj_torus.rotation_euler[1] = active_obj.rotation_euler[1]
+                                obj_torus.rotation_euler[2] = active_obj.rotation_euler[2]
 
-                            # print('symx',symx)
-                            # print('symy',symy)
+                                getRadius('rotate')
+                                return {'RUNNING_MODAL'}
 
-                            # x,y轴旋转比例
-                            px = round(abs(op_cls.__dy) / sqrt(op_cls.__dx * op_cls.__dx + op_cls.__dy * op_cls.__dy),
-                                       4)
-                            py = round(abs(op_cls.__dx) / sqrt(op_cls.__dx * op_cls.__dx + op_cls.__dy * op_cls.__dy),
-                                       4)
-                            # print('px',px)
-                            # print('py',py)
-
-                            # 旋转角度
-                            rotate_angle_x = round((event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01 * px, 4)
-                            rotate_angle_y = round((event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01 * py, 4)
-                            rotate_angle_z = round((event.mouse_region_x - op_cls.__initial_mouse_x) * 0.005, 4)
-                            active_obj.rotation_euler[0] = op_cls.__initial_rotation_x + \
-                                                           rotate_angle_x * symx
-                            active_obj.rotation_euler[1] = op_cls.__initial_rotation_y + \
-                                                           rotate_angle_y * symy
-                            active_obj.rotation_euler[2] = op_cls.__initial_rotation_z + \
-                                                           rotate_angle_z
-
-                            obj_torus.rotation_euler[0] = active_obj.rotation_euler[0]
-                            obj_torus.rotation_euler[1] = active_obj.rotation_euler[1]
-                            obj_torus.rotation_euler[2] = active_obj.rotation_euler[2]
-
-                            getRadius('rotate')
-                            return {'RUNNING_MODAL'}
-                        elif op_cls.__right_mouse_down:
-                            obj_circle = bpy.data.objects[operator_obj + 'Circle']
-                            # 平面法线方向
-                            normal = obj_circle.matrix_world.to_3x3(
-                            ) @ obj_circle.data.polygons[0].normal
-
-                            dis = event.mouse_region_y - op_cls.__initial_mouse_y
-                            op_cls.__initial_mouse_x = event.mouse_region_x
-                            op_cls.__initial_mouse_y = event.mouse_region_y
-                            # print('距离',dis)
-                            obj_circle.location -= normal * dis * 0.05
-                            obj_torus.location -= normal * dis * 0.05
-                            getRadius('move')
-                            return {'RUNNING_MODAL'}
-
-                    return {'PASS_THROUGH'}
-                    # return {'RUNNING_MODAL'}
+                            elif op_cls.__right_mouse_down:
+                                obj_circle = bpy.data.objects[operator_obj + 'Circle']
+                                # dis = 0.5
+                                # 平面法线方向
+                                normal = obj_circle.matrix_world.to_3x3(
+                                ) @ obj_circle.data.polygons[0].normal
+                                dis = event.mouse_region_y - op_cls.__initial_mouse_y
+                                op_cls.__initial_mouse_x = event.mouse_region_x
+                                op_cls.__initial_mouse_y = event.mouse_region_y
+                                # print('距离',dis)
+                                obj_circle.location -= normal * dis * 0.05
+                                obj_torus.location -= normal * dis * 0.05
+                                getRadius('move')
+                                return {'RUNNING_MODAL'}
+                        return {'PASS_THROUGH'}
 
                 elif (qiegeenum != 1):
                     print("退出环切", operator_obj)
                     return {'FINISHED'}
 
                 else:
-                    tar_obj = bpy.data.objects[operator_obj]
-                    bpy.ops.object.select_all(action='DESELECT')
-                    bpy.context.view_layer.objects.active = tar_obj
-                    tar_obj.select_set(True)
-                    # print('不在圆环上')
-                    # bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                    obj_torus = bpy.data.objects[operator_obj + 'Torus']
-                    active_obj = bpy.data.objects[operator_obj + 'Circle']
-                    if event.value == 'RELEASE' and op_cls.__is_moving:
-                        normal = active_obj.matrix_world.to_3x3(
-                        ) @ active_obj.data.polygons[0].normal
-                        if normal.z > 0:
-                            print('圆环法线', normal)
-                            print('反转法线')
-                            override1 = getOverride()
-                            override2 = getOverride2()
-                            region1 = override1['region']
-                            region2 = override2['region']
-                            # 右窗口
-                            if event.mouse_region_x > region1.width:
-                                with bpy.context.temp_override(**override2):
-                                    active_obj.hide_set(False)
-                                    bpy.context.view_layer.objects.active = active_obj
-                                    bpy.ops.object.mode_set(mode='EDIT')
-                                    bpy.ops.mesh.select_all(action='SELECT')
-                                    # 翻转圆环法线
-                                    # bpy.ops.mesh.flip_normals(only_clnors=False)
-                                    bpy.ops.mesh.flip_normals()
-                                    # bpy.ops.mesh.normals_make_consistent(inside=True)
-                                    # 隐藏圆环
-                                    active_obj.hide_set(True)
-                                    # 返回对象模式
-                                    bpy.ops.object.mode_set(mode='OBJECT')
-                                    print('反转后法线', active_obj.matrix_world.to_3x3(
-                                    ) @ active_obj.data.polygons[0].normal)
-                            else:
-                                active_obj.hide_set(False)
-                                bpy.context.view_layer.objects.active = active_obj
-                                bpy.ops.object.mode_set(mode='EDIT')
-                                bpy.ops.mesh.select_all(action='SELECT')
-                                # 翻转圆环法线
-                                # bpy.ops.mesh.flip_normals(only_clnors=False)
-                                bpy.ops.mesh.flip_normals()
-                                # bpy.ops.mesh.normals_make_consistent(inside=True)
-                                # 隐藏圆环
-                                active_obj.hide_set(True)
-                                # 返回对象模式
-                                bpy.ops.object.mode_set(mode='OBJECT')
-                                print('反转后法线', active_obj.matrix_world.to_3x3(
-                                ) @ active_obj.data.polygons[0].normal)
-                        apply_circle_cut(operator_obj)
-                        saveCir()
-                        op_cls.__is_moving = False
-                        op_cls.__left_mouse_down = False
-                        op_cls.__right_mouse_down = False
-                        op_cls.__initial_rotation_x = None
-                        op_cls.__initial_rotation_y = None
-                        op_cls.__initial_rotation_z = None
-                        op_cls.__initial_mouse_x = None
-                        op_cls.__initial_mouse_y = None
-
-                    if event.type == 'MOUSEMOVE':
-                        # 左键按住旋转
-                        if op_cls.__left_mouse_down:
-                            # 旋转正负号
-                            if (op_cls.__dy < 0):
-                                symx = -1
-                            else:
-                                symx = 1
-
-                            if (op_cls.__dx > 0):
-                                symy = -1
-                            else:
-                                symy = 1
-
-                            # print('symx',symx)
-                            # print('symy',symy)
-
-                            #  x,y轴旋转比例
-                            px = round(abs(op_cls.__dy) / sqrt(op_cls.__dx * op_cls.__dx + op_cls.__dy * op_cls.__dy),
-                                       4)
-                            py = round(abs(op_cls.__dx) / sqrt(op_cls.__dx * op_cls.__dx + op_cls.__dy * op_cls.__dy),
-                                       4)
-                            # print('px',px)
-                            # print('py',py)
-
-                            # 旋转角度
-                            rotate_angle_x = round((event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01 * px, 4)
-                            rotate_angle_y = round((event.mouse_region_y - op_cls.__initial_mouse_y) * 0.01 * py, 4)
-                            rotate_angle_z = round((event.mouse_region_x - op_cls.__initial_mouse_x) * 0.005, 4)
-                            active_obj.rotation_euler[0] = op_cls.__initial_rotation_x + \
-                                                           rotate_angle_x * symx
-                            active_obj.rotation_euler[1] = op_cls.__initial_rotation_y + \
-                                                           rotate_angle_y * symy
-                            active_obj.rotation_euler[2] = op_cls.__initial_rotation_z + \
-                                                           rotate_angle_z
-                            obj_torus.rotation_euler[0] = active_obj.rotation_euler[0]
-                            obj_torus.rotation_euler[1] = active_obj.rotation_euler[1]
-                            obj_torus.rotation_euler[2] = active_obj.rotation_euler[2]
-
-                            getRadius('rotate')
-                            return {'RUNNING_MODAL'}
-
-                        elif op_cls.__right_mouse_down:
-                            obj_circle = bpy.data.objects[operator_obj + 'Circle']
-                            # dis = 0.5
-                            # 平面法线方向
-                            normal = obj_circle.matrix_world.to_3x3(
-                            ) @ obj_circle.data.polygons[0].normal
-                            dis = event.mouse_region_y - op_cls.__initial_mouse_y
-                            op_cls.__initial_mouse_x = event.mouse_region_x
-                            op_cls.__initial_mouse_y = event.mouse_region_y
-                            # print('距离',dis)
-                            obj_circle.location -= normal * dis * 0.05
-                            obj_torus.location -= normal * dis * 0.05
-                            getRadius('move')
-                            return {'RUNNING_MODAL'}
+                    bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
                     return {'PASS_THROUGH'}
 
             else:
@@ -1913,9 +1964,14 @@ class Step_Cut(bpy.types.Operator):
     bl_label = "阶梯切割"
 
     __timer = None
-    __smooth = None
+    __smooth = False
     __mouse_listener = None
-    __left_mouse_press = None
+    __left_mouse_press = False
+    __mouse_x = 0  # 记录鼠标按下的位置
+    __mouse_y = 0
+    __mouse_x_y_flag = False  # 鼠标左键按下的时候,通过该标志,记录鼠标按下的位置
+    __start_update = False  # 调用旋转按钮的时候,是否开始更新切割后的模型
+    __area = None
 
     def invoke(self, context, event):
         print('invokeStep')
@@ -1924,20 +1980,16 @@ class Step_Cut(bpy.types.Operator):
         qiegeenum = 2
         if not Step_Cut.__timer:
             Step_Cut.__timer = context.window_manager.event_timer_add(
-                0.8, window=context.window)
+                0.5, window=context.window)
         if not Step_Cut.__mouse_listener:
             Step_Cut.__mouse_listener = mouse.Listener(
                 on_click=self.on_click
             )
             # 启动监听器
             Step_Cut.__mouse_listener.start()
+
         context.window_manager.modal_handler_add(self)
-        Step_Cut.__smooth = False
-        Step_Cut.__left_mouse_press = False
-        bpy.context.view_layer.objects.active = bpy.data.objects["右耳"]
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-        update_plane(operator_obj)
-        apply_stepcut(operator_obj)
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
@@ -1945,93 +1997,120 @@ class Step_Cut(bpy.types.Operator):
         global qiegeenum
         global finish
         global operator_obj, l_old_loc_sphere1
+        override1 = getOverride()
+        area = override1['area']
+        override2 = getOverride2()
+        area2 = override2['area']
+
         # 未切割时起效
-        if (bpy.context.scene.var == 56):
-            if finish == False:
+        if bpy.context.scene.var == 56:
+            if not finish:
+                if qiegeenum == 2:
+                    workspace = bpy.context.window.workspace.name
+                    # 双窗口模式下
+                    if workspace == '布局.001':
+                        # 若左耳已初始化,根据鼠标位置判断当前操作窗口
+                        if event.mouse_x > area.width and event.mouse_y > area2.y:
+                            # print('右窗口')
+                            Step_Cut.__area = area2
+                            operator_obj = context.scene.rightWindowObj
+                        else:
+                            # print('左窗口')
+                            Step_Cut.__area = area
+                            operator_obj = context.scene.leftWindowObj
+                    elif workspace == '布局':
+                        operator_obj = context.scene.leftWindowObj
+                        Step_Cut.__area = area
 
-                mouse_x = event.mouse_x
-                mouse_y = event.mouse_y
-                override1 = getOverride()
-                area = override1['area']
-                override2 = getOverride2()
-                area2 = override2['area']
+                if bpy.data.objects.get(operator_obj + 'StepCutSphere1'):
+                    # 鼠标在圆球上
+                    if qiegeenum == 2 and (Step_Cut.__area.x < event.mouse_x < Step_Cut.__area.x + Step_Cut.__area.width
+                                           or Step_Cut.__area.y < event.mouse_y < Step_Cut.__area.y + Step_Cut.__area.height):
+                        if is_mouse_on_which_object(operator_obj, context, event) != 5:
+                            if is_changed_stepcut(operator_obj, context, event):
+                                bpy.ops.wm.tool_set_by_id(name="builtin.select")
+                                Step_Cut.__smooth = False
+                                if bpy.data.objects[operator_obj].hide_get():
+                                    bpy.data.objects[operator_obj].hide_set(False)
+                                    bpy.data.objects[operator_obj + 'stepcutpinghua'].hide_set(True)
 
-                # 若左耳已初始化,根据鼠标位置判断当前操作窗口
-                if l_old_loc_sphere1:
-                    operator_obj = bpy.context.scene.leftWindowObj
+                            if self.__left_mouse_press:
+                                if self.__mouse_x_y_flag:
+                                    self.__mouse_x = event.mouse_x
+                                    self.__mouse_y = event.mouse_y
+                                    self.__mouse_x_y_flag = False
 
-                # 鼠标在圆球上
-                if (qiegeenum == 2 and is_mouse_on_which_object(operator_obj, context, event) != 5):
+                            dis = int(math.sqrt(math.fabs(self.__mouse_x - event.mouse_x) ** 2 + math.fabs(
+                                self.__mouse_y - event.mouse_y) ** 2))
 
-                    if (is_changed_stepcut(operator_obj, context, event)):
-                        bpy.ops.wm.tool_set_by_id(name="builtin.select")
-                        Step_Cut.__smooth = False
-                        if bpy.data.objects[operator_obj].hide_get():
-                            bpy.data.objects[operator_obj].hide_set(False)
-                            bpy.data.objects[operator_obj + 'stepcutpinghua'].hide_set(True)
+                            # 当鼠标左键按下并且使用调整移动一段距离之后,再进行实时切割的响应
+                            if not self.__start_update and self.__left_mouse_press and dis > 4:
+                                self.__start_update = True
 
-                    if (event.type == 'TIMER' and self.__left_mouse_press):
-                        update_plane(operator_obj)
-                        # 每次移动保存各个点坐标
-                        saveStep(operator_obj)
-                        return {'RUNNING_MODAL'}
+                            if event.type == 'TIMER' and self.__left_mouse_press and self.__start_update and dis > 2:
+                                self.__mouse_x = event.mouse_x
+                                self.__mouse_y = event.mouse_y
+                                update_plane(operator_obj)
+                                # step_bool_cut()
+                                # 每次移动保存各个点坐标
+                                saveStep(operator_obj)
 
-                    return {'PASS_THROUGH'}
+                        elif is_mouse_on_which_object(operator_obj, context, event) == 5:
+                            if is_changed_stepcut(operator_obj, context, event) and not self.__left_mouse_press:
+                                # 鼠标不在圆球上时，将右耳设置为active
+                                active_obj = bpy.data.objects[operator_obj]
+                                bpy.ops.object.select_all(action='DESELECT')
+                                bpy.context.view_layer.objects.active = active_obj
+                                active_obj.select_set(True)
+                                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                                if not Step_Cut.__smooth:
+                                    update_plane(operator_obj)
+                                    apply_stepcut(operator_obj)
+                                    Step_Cut.__smooth = True
+                                    if not bpy.data.objects[operator_obj].hide_get():
+                                        bpy.data.objects[operator_obj].hide_set(True)
+                                        bpy.data.objects[operator_obj + 'stepcutpinghua'].hide_set(False)
 
-                elif (qiegeenum != 2):
-                    if Step_Cut.__timer:
-                        context.window_manager.event_timer_remove(Step_Cut.__timer)
-                        Step_Cut.__timer = None
-                        Step_Cut.__smooth = None
-                        print('timer remove')
-                    if Step_Cut.__mouse_listener:
-                        # 关闭监听器
-                        Step_Cut.__mouse_listener.stop()
-                        Step_Cut.__mouse_listener = None
-                    return {'FINISHED'}
+                        return {'PASS_THROUGH'}
 
-                elif (is_changed_stepcut(operator_obj, context, event) and not self.__left_mouse_press):
-                    # 鼠标不在圆球上时，将右耳设置为active
-                    active_obj = bpy.data.objects[operator_obj]
-                    bpy.ops.object.select_all(action='DESELECT')
-                    bpy.context.view_layer.objects.active = active_obj
-                    active_obj.select_set(True)
-                    bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                    if not Step_Cut.__smooth:
-                        update_plane(operator_obj)
-                        apply_stepcut(operator_obj)
-                        Step_Cut.__smooth = True
-                        if not bpy.data.objects[operator_obj].hide_get():
-                            bpy.data.objects[operator_obj].hide_set(True)
-                            bpy.data.objects[operator_obj + 'stepcutpinghua'].hide_set(False)
+                    elif qiegeenum != 2:
+                        if Step_Cut.__timer:
+                            context.window_manager.event_timer_remove(Step_Cut.__timer)
+                            Step_Cut.__timer = None
+                            print('timer remove')
+                        if Step_Cut.__mouse_listener:
+                            # 关闭监听器
+                            Step_Cut.__mouse_listener.stop()
+                            Step_Cut.__mouse_listener = None
+                        return {'FINISHED'}
 
-                return {'PASS_THROUGH'}
-
-            elif (finish == True):
-                if Step_Cut.__timer:
-                    context.window_manager.event_timer_remove(Step_Cut.__timer)
-                    Step_Cut.__timer = None
-                    Step_Cut.__smooth = None
-                    print('timer remove')
-                if Step_Cut.__mouse_listener:
-                    # 关闭监听器
-                    Step_Cut.__mouse_listener.stop()
-                    Step_Cut.__mouse_listener = None
-                return {'FINISHED'}
+                    else:
+                        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                        return {'PASS_THROUGH'}
 
             else:
                 return {'PASS_THROUGH'}
+
         else:
+            if Step_Cut.__timer:
+                context.window_manager.event_timer_remove(Step_Cut.__timer)
+                Step_Cut.__timer = None
+                print('timer remove')
+            if Step_Cut.__mouse_listener:
+                # 关闭监听器
+                Step_Cut.__mouse_listener.stop()
+                Step_Cut.__mouse_listener = None
             return {'FINISHED'}
 
     def on_click(self, x, y, button, pressed):
         # 鼠标点击事件处理函数
         if button == mouse.Button.left and pressed:
-            # print('press')
             self.__left_mouse_press = True
+            self.__mouse_x_y_flag = True
         elif button == mouse.Button.left and not pressed:
-            # print('release')
             self.__left_mouse_press = False
+            self.__mouse_x_y_flag = False
+            self.__start_update = False
 
 
 class Finish_Cut(bpy.types.Operator):
@@ -2063,14 +2142,17 @@ class Finish_Cut(bpy.types.Operator):
             bpy.context.view_layer.objects.active = obj
             utils_re_color(operator_obj, (1, 0.319, 0.133))
             apply_material()
-            delete_vert_group("CircleCutBorderVertex")
+            # delete_vert_group("CircleCutBorderVertex")
 
         if (qiegeenum == 2):
             # 完成切割
             finish = True
             saveStep(operator_obj)
-            global is_saved
-            is_saved = True
+            global loc_saved_left, loc_saved_right
+            if operator_obj == '右耳':
+                loc_saved_right = True
+            elif operator_obj == '左耳':
+                loc_saved_left = True
             # for i in bpy.context.visible_objects:
             #     if i.name == operator_obj:
             #         i.hide_select = False
@@ -2081,24 +2163,19 @@ class Finish_Cut(bpy.types.Operator):
             #         i.hide_set(False)
             #         bpy.context.view_layer.objects.active = i
             #         bpy.ops.object.modifier_apply(modifier="smooth",single_user=True)
-            bpy.data.objects.remove(
-                bpy.data.objects[operator_obj + 'StepCutSphere1'], do_unlink=True)
-            bpy.data.objects.remove(
-                bpy.data.objects[operator_obj + 'StepCutSphere2'], do_unlink=True)
-            bpy.data.objects.remove(
-                bpy.data.objects[operator_obj + 'StepCutSphere3'], do_unlink=True)
-            bpy.data.objects.remove(
-                bpy.data.objects[operator_obj + 'StepCutSphere4'], do_unlink=True)
-            bpy.data.objects.remove(
-                bpy.data.objects[operator_obj + 'StepCutplane'], do_unlink=True)
-            bpy.data.objects.remove(bpy.data.objects[operator_obj + 'ceqieCompare'], do_unlink=True)
-            bpy.data.objects.remove(bpy.data.objects[operator_obj + 'stepcutpinghuaforreset'], do_unlink=True)
-            bpy.data.objects.remove(bpy.data.objects[operator_obj], do_unlink=True)
+            del_objs = [operator_obj, operator_obj + 'StepCutSphere1', operator_obj + 'StepCutSphere2',
+                        operator_obj + 'StepCutSphere3', operator_obj + 'StepCutSphere4', operator_obj + 'StepCutplane',
+                        operator_obj + 'ceqieCompare', operator_obj + 'stepcutpinghuaforreset']
+            for obj in del_objs:
+                if (bpy.data.objects.get(obj)):
+                    obj1 = bpy.data.objects[obj]
+                    bpy.data.objects.remove(obj1, do_unlink=True)
             bpy.ops.outliner.orphans_purge(
                 do_local_ids=True, do_linked_ids=True, do_recursive=False)
             replace_name = operator_obj + 'stepcutpinghua'
             replace_obj = bpy.data.objects[replace_name]
             replace_obj.name = operator_obj
+
         name = operator_obj
         obj = bpy.data.objects[name]
         obj.hide_select = False
@@ -2106,6 +2183,9 @@ class Finish_Cut(bpy.types.Operator):
         step_cut_vertex_group = obj.vertex_groups.get("before_cut")
         if (step_cut_vertex_group != None):
             obj.vertex_groups.remove(step_cut_vertex_group)
+        # step_cut_smooth_vertex_group = obj.vertex_groups.get("StepCutBorderVertex")
+        # if (step_cut_smooth_vertex_group != None):
+        #     obj.vertex_groups.remove(step_cut_smooth_vertex_group)
         bpy.context.view_layer.objects.active = obj
         utils_re_color(operator_obj, (1, 0.319, 0.133))
         apply_material()
@@ -2165,14 +2245,15 @@ class Reset_Cut(bpy.types.Operator):
             global r_old_loc_sphere1, r_old_loc_sphere2, r_old_loc_sphere3, r_old_loc_sphere4
             global l_old_loc_sphere1, l_old_loc_sphere2, l_old_loc_sphere3, l_old_loc_sphere4
             initsphereloc(operator_obj)
-            global is_saved
-            is_saved = False
+            global loc_saved_right, loc_saved_left
             if operator_obj == '右耳':
+                loc_saved_right = False
                 old_loc_sphere1 = r_old_loc_sphere1
                 old_loc_sphere2 = r_old_loc_sphere2
                 old_loc_sphere3 = r_old_loc_sphere3
                 old_loc_sphere4 = r_old_loc_sphere4
             elif operator_obj == '左耳':
+                loc_saved_left = False
                 old_loc_sphere1 = l_old_loc_sphere1
                 old_loc_sphere2 = l_old_loc_sphere2
                 old_loc_sphere3 = l_old_loc_sphere3
@@ -2208,6 +2289,7 @@ class Mirror_Cut(bpy.types.Operator):
 
         workspace = context.window.workspace.name
         # 只有在双窗口下执行镜像
+        # todo: 切割镜像
         if workspace == '布局.001':
             # print('开始镜像')
             # 目标物体
@@ -2371,12 +2453,12 @@ def frontToQieGe():
         initCircle(name)
         # workspace = bpy.context.window.workspace.name
         # if workspace == '布局.001':
-        #     initCircle('左耳')
+        #     initCircle(bpy.context.scene.rightWindowObj)
     if enum == "OP2":
         initPlane(name)
-        workspace = bpy.context.window.workspace.name
+        # workspace = bpy.context.window.workspace.name
         # if workspace == '布局.001':
-        #     initPlane('左耳')
+        #     initPlane(bpy.context.scene.rightWindowObj)
 
 
 def frontFromQieGe():
@@ -2482,6 +2564,12 @@ def backToQieGe():
         bpy.data.objects.remove(sprue_reset, do_unlink=True)
     if (sprue_last != None):
         bpy.data.objects.remove(sprue_last, do_unlink=True)
+    support_casting_reset = bpy.data.objects.get(name + "CastingCompareSupportReset")
+    support_casting_last = bpy.data.objects.get(name + "CastingCompareSupportLast")
+    if (support_casting_reset != None):
+        bpy.data.objects.remove(support_casting_reset, do_unlink=True)
+    if (support_casting_last != None):
+        bpy.data.objects.remove(support_casting_last, do_unlink=True)
 
     # 删除支撑和排气孔中可能存在的对比物体
     soft_support_compare_obj = bpy.data.objects.get(name + "SoftSupportCompare")
@@ -2574,6 +2662,7 @@ def backFromQieGe():
     elif name == '左耳':
         moveToLeft(duplicate_obj1)
     duplicate_obj1.hide_set(True)
+    utils_re_color(name, (1, 0.319, 0.133))
 
     # 激活右耳或左耳为当前活动物体
     bpy.context.view_layer.objects.active = bpy.data.objects[bpy.context.scene.leftWindowObj]
@@ -2583,6 +2672,14 @@ def backFromQieGe():
     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
 
+def register_qiege_tools():
+    bpy.utils.register_tool(qiegeTool, separator=True, group=False)
+    bpy.utils.register_tool(qiegeTool2, separator=True,
+                            group=False, after={qiegeTool.bl_idname})
+    bpy.utils.register_tool(qiegeTool3, separator=True,
+                            group=False, after={qiegeTool2.bl_idname})
+
+
 def register():
     bpy.utils.register_class(Circle_Cut)
     bpy.utils.register_class(Step_Cut)
@@ -2590,11 +2687,11 @@ def register():
     bpy.utils.register_class(Reset_Cut)
     bpy.utils.register_class(Mirror_Cut)
 
-    bpy.utils.register_tool(qiegeTool, separator=True, group=False)
-    bpy.utils.register_tool(qiegeTool2, separator=True,
-                            group=False, after={qiegeTool.bl_idname})
-    bpy.utils.register_tool(qiegeTool3, separator=True,
-                            group=False, after={qiegeTool2.bl_idname})
+    # bpy.utils.register_tool(qiegeTool, separator=True, group=False)
+    # bpy.utils.register_tool(qiegeTool2, separator=True,
+    #                         group=False, after={qiegeTool.bl_idname})
+    # bpy.utils.register_tool(qiegeTool3, separator=True,
+    #                         group=False, after={qiegeTool2.bl_idname})
 
 
 def unregister():

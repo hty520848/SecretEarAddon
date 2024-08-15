@@ -4,12 +4,11 @@ from .jiahou import frontToLocalThickening, frontFromLocalThickening, backFromLo
     backup, forward
 from .damo import backFromDamo, backToDamo, frontFromDamo, frontToDamo, set_modal_start_false
 from .create_tip.qiege import frontToQieGe, frontFromQieGe, backFromQieGe, backToQieGe
-from .label import frontToLabel, frontFromLabel, backFromLabel, backToLabel
-from .handle import frontToHandle, frontFromHandle, backFromHandle, backToHandle
+from .label import frontToLabel, frontFromLabel, backFromLabel, backToLabel, label_forward, label_backup
+from .handle import frontToHandle, frontFromHandle, backFromHandle, backToHandle, handle_forward, handle_backup
 from .support import frontToSupport, frontFromSupport, backFromSupport, backToSupport
-from .sprue import frontToSprue, frontFromSprue, backFromSprue, backToSprue
+from .sprue import frontToSprue, frontFromSprue, backFromSprue, backToSprue, sprue_forward, sprue_backup
 from .create_mould.create_mould import frontToCreateMould, frontFromCreateMould, backToCreateMould, backFromCreateMould
-from .create_mould.frame_style_eardrum.frame_style_eardrum import apply_frame_style_eardrum_template
 from .sound_canal import frontToSoundCanal, frontFromSoundCanal, backFromSoundCanal, backToSoundCanal
 from .vent_canal import frontToVentCanal, frontFromVentCanal, backFromVentCanal, backToVentCanal
 from .casting import frontToCasting, frontFromCasting, backFromCasting, backToCasting
@@ -30,8 +29,8 @@ switch_L_prev = "RENDER"                #左耳窗口    记录左耳切换到�
 
 
 is_fallback = False                     #主要用于判断模块是否需要回退  点击排气孔的按钮,检测是否存在铸造法;经过铸造法之后才能够使用排气孔,否则回退到之前的模块
-
-
+is_start = False                        #主要用于判断是否开启了模块切换的modal,防止开启多个
+is_switch = False                       #主要用于判断是否点击了左右耳切换按钮
 
 
 is_msgbus_start = False  # 模块切换操作符是否启动
@@ -84,7 +83,7 @@ Demo:
     导入文件之后初始化在右耳模块,由打磨切换到环切,再由环切切换到附件模块
     点击切换按钮切花到左耳,此时默认激活再打磨模块,  '再点击切换按钮切换到右耳'
     第二次点击切换按钮由左耳切换到右耳的时候:
-        进入切换的model中: current_tab为 MATERIAL,即左右耳切换,prev_properties_context为 RNDER ,即打磨模块
+        进入切换的model中: current_tab为 MATERIAL,即左右耳切换,prev_properties_context为 RENDER ,即打磨模块
                         进入MATERIAL的分支语句,首先交换左右耳集合中的物体,右耳集合中为经历了环切提交后,添加了附件的物体
                         再根据switchR/L将current_tab赋值为环切模块,prev_properties_context为附件模块
                         使得右耳集合中的物体从附件回退到环切
@@ -197,8 +196,18 @@ class BackUp(bpy.types.Operator):
     bl_label = "撤销"
 
     def execute(self, context):
-        # 局部加厚模式下的单步撤回
-        backup(context)
+        current_tab = bpy.context.screen.areas[0].spaces.active.context
+        submit_process = processing_stage_dict[current_tab]
+        if(submit_process == '局部加厚'):
+            backup(context)
+        elif(submit_process == '耳膜附件'):
+            handle_backup()
+        elif(submit_process == '编号'):
+            label_backup()
+        elif(submit_process == '排气孔'):
+            sprue_backup()
+
+
         return {'FINISHED'}
 
 
@@ -207,9 +216,21 @@ class Forward(bpy.types.Operator):
     bl_label = "重做"
 
     def execute(self, context):
-        # 局部加厚模式下的单步重做
-        # if(bpy.context.scene.var == 5 or bpy.context.scene.var == 6 or bpy.context.scene.var == 7 or bpy.context.scene.var == 8 or bpy.context.scene.var == 9):
-        forward(context)
+        current_tab = bpy.context.screen.areas[0].spaces.active.context
+        submit_process = processing_stage_dict[current_tab]
+        if (submit_process == '局部加厚'):
+            print("局部加厚前进")
+            forward(context)
+        elif (submit_process == '耳膜附件'):
+            print("附件前进")
+            handle_forward()
+        elif (submit_process == '编号'):
+            print("字体前进")
+            label_forward()
+        elif (submit_process == '排气孔'):
+            print("排气孔前进")
+            sprue_forward()
+
 
         return {'FINISHED'}
 
@@ -227,9 +248,8 @@ class SwitchTest(bpy.types.Operator):
         duplicate_obj.name = cur_obj.name + "OriginForCreateMouldR"
         bpy.context.collection.objects.link(duplicate_obj)
         duplicate_obj.hide_set(True)
-        apply_frame_style_eardrum_template()
         return {'FINISHED'}
-    
+
 # 标记当前切换是否结束
 flag = True
 class MsgbusCallBack(bpy.types.Operator):
@@ -238,8 +258,6 @@ class MsgbusCallBack(bpy.types.Operator):
 
     def invoke(self, context, event):
         print("模块切换invoke")
-        global is_msgbus_start
-        is_msgbus_start = True
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
 
@@ -257,14 +275,15 @@ class MsgbusCallBack(bpy.types.Operator):
         global is_fallback
         global order_processing_list
         global before_cut_mould
+        global is_switch
+        global is_start
 
         workspace = context.window.workspace.name
         current_tab = bpy.context.screen.areas[0].spaces.active.context
         name = bpy.context.scene.leftWindowObj
         obj = bpy.data.objects.get(name)
         if (obj != None):
-            if (prev_properties_context != current_tab and flag):
-                # 正在切换
+            if (prev_properties_context != current_tab and flag) or (is_switch and flag):
                 flag = False
                 # context.window.cursor_warp(context.window.width // 2, context.window.height // 2)
 
@@ -274,8 +293,8 @@ class MsgbusCallBack(bpy.types.Operator):
                 # 重新上色
                 # utils_re_color(bpy.context.scene.leftWindowObj, (1, 0.319, 0.133))
                 # 在打磨和局部加厚模块时材质展示方式为顶点颜色
-                if current_tab != 'DATA':
-                    if (current_tab == 'RENDER' or current_tab == 'OUTPUT'):
+                if not is_switch:
+                    if (current_tab == 'RENDER' or current_tab == 'OUTPUT' or current_tab == 'TEXTURE'):
                         change_mat_mould(1)
                     # 其余模块的材质展示方式为RGB颜色
                     else:
@@ -319,6 +338,13 @@ class MsgbusCallBack(bpy.types.Operator):
                         elif context.scene.leftWindowObj == '左耳':
                             bpy.context.scene.transparent3EnumL = 'OP3'
                     # 其余模块的材质展示方式为不透明
+                    elif (current_tab == 'RENDER'):
+                        mat.blend_method = 'OPAQUE'
+                        mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 1
+                        if context.scene.leftWindowObj == '右耳':
+                            bpy.context.scene.transparent2EnumR = 'OP1'
+                        elif context.scene.leftWindowObj == '左耳':
+                            bpy.context.scene.transparent2EnumL = 'OP1'
                     else:
                         mat.blend_method = 'OPAQUE'
                         mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 1
@@ -348,7 +374,9 @@ class MsgbusCallBack(bpy.types.Operator):
 
 
                 #点击左右耳切换模块的按钮
-                if (current_tab == 'DATA'):
+                if is_switch:
+                    is_switch = False
+                    # todo:切换时有些模块初始化太久了，不用退出重进
                     rightWindowObj = bpy.data.objects.get("右耳")
                     leftWindowObj = bpy.data.objects.get("左耳")
                     if leftWindowObj != None and rightWindowObj != None:
@@ -379,18 +407,18 @@ class MsgbusCallBack(bpy.types.Operator):
 
 
 
-                        #此时的name表示的是切换之前的集合物体
-                        name = context.scene.leftWindowObj
-                        if name =='右耳':
-                            right_context = prev_properties_context
-                            bpy.context.screen.areas[0].spaces.active.context = left_context
-                            bpy.context.screen.areas[0].spaces.active.context = left_context
-                        else:
-                            left_context = prev_properties_context
-                            bpy.context.screen.areas[0].spaces.active.context = right_context
-                            bpy.context.screen.areas[0].spaces.active.context = right_context
-                        print('left_context',left_context)
-                        print('right_context',right_context)
+                        # #此时的name表示的是切换之前的集合物体
+                        # name = context.scene.leftWindowObj
+                        # if name =='右耳':
+                        #     right_context = prev_properties_context
+                        #     bpy.context.screen.areas[0].spaces.active.context = left_context
+                        #     bpy.context.screen.areas[0].spaces.active.context = left_context
+                        # else:
+                        #     left_context = prev_properties_context
+                        #     bpy.context.screen.areas[0].spaces.active.context = right_context
+                        #     bpy.context.screen.areas[0].spaces.active.context = right_context
+                        # print('left_context',left_context)
+                        # print('right_context',right_context)
 
 
                         # 交换左右窗口物体(两个集合隐藏与显示的反转)
@@ -399,9 +427,11 @@ class MsgbusCallBack(bpy.types.Operator):
                         ori_obj = context.scene.rightWindowObj
                         context.scene.leftWindowObj = ori_obj
                         context.scene.rightWindowObj = tar_obj
-                        bpy.ops.object.select_all(action='DESELECT')
-                        bpy.context.view_layer.objects.active = bpy.data.objects[ori_obj]
-                        bpy.data.objects[ori_obj].select_set(True)
+                        with bpy.context.temp_override(**override2):
+                            bpy.ops.object.select_all(action='DESELECT')
+                        with bpy.context.temp_override(**override1):
+                            bpy.context.view_layer.objects.active = bpy.data.objects[ori_obj]
+                            bpy.data.objects[ori_obj].select_set(True)
 
 
                         #此时的name表示的是切换之后窗口中的集合物体
@@ -428,14 +458,14 @@ class MsgbusCallBack(bpy.types.Operator):
 
                     else:
                         if leftWindowObj == None:
-                            now_context = prev_properties_context
-                            bpy.context.screen.areas[0].spaces.active.context = now_context
-                            bpy.context.screen.areas[0].spaces.active.context = now_context
+                            # now_context = prev_properties_context
+                            # bpy.context.screen.areas[0].spaces.active.context = now_context
+                            # bpy.context.screen.areas[0].spaces.active.context = now_context
                             current_tab = prev_properties_context
                         else:
-                            now_context = prev_properties_context
-                            bpy.context.screen.areas[0].spaces.active.context = now_context
-                            bpy.context.screen.areas[0].spaces.active.context = now_context
+                            # now_context = prev_properties_context
+                            # bpy.context.screen.areas[0].spaces.active.context = now_context
+                            # bpy.context.screen.areas[0].spaces.active.context = now_context
                             current_tab = prev_properties_context
 
 
@@ -559,6 +589,10 @@ class MsgbusCallBack(bpy.types.Operator):
                 #需要回退到当前模块并且激活model
                 if(is_fallback):
                     is_fallback = False
+                    if context.scene.leftWindowObj == '右耳':
+                        mat = bpy.data.materials.get("YellowR")
+                    else:
+                        mat = bpy.data.materials.get("YellowL")
                     submit_process = processing_stage_dict[current_tab]
                     if (submit_process == '打磨'):
                         change_mat_mould(1)
@@ -1699,9 +1733,10 @@ class MsgbusCallBack(bpy.types.Operator):
                 # prev_workspace = workspace
                 # 切换结束
                 flag = True
+                is_start = False
 
 
-        return {'PASS_THROUGH'}
+        return {'FINISHED'}
 
 
 class MsgbusCallBack2(bpy.types.Operator):
@@ -1717,6 +1752,8 @@ class MsgbusCallBack2(bpy.types.Operator):
 
     def excute(self, context, event):
         draw_font()
+        # bpy.ops.object.msgbuscallback('INVOKE_DEFAULT')
+        bpy.ops.switch.init('INVOKE_DEFAULT')
         bpy.ops.object.createmouldinit('INVOKE_DEFAULT')
         bpy.ops.object.createmouldcut('INVOKE_DEFAULT')
         bpy.ops.object.createmouldfill('INVOKE_DEFAULT')
@@ -1883,38 +1920,85 @@ class SprueDialogOperator(bpy.types.Operator):
         return wm.invoke_props_dialog(self)
 
 
-def msgbus_callback(*args):
-    global is_msgbus_start
-    if (not is_msgbus_start):
-        bpy.ops.object.msgbuscallback('INVOKE_DEFAULT')
+class SwitchOperator(bpy.types.Operator):
+    bl_idname = "switch.init"
+    bl_label = "3D Model"
+
+    def modal(self, context, event):
+        global prev_properties_context
+        global left_context
+        global right_context
+        global is_switch
+        global is_start
+        global flag
+        if prev_properties_context != bpy.context.screen.areas[0].spaces.active.context and flag:
+            if bpy.context.screen.areas[0].spaces.active.context == 'DATA':
+                name = context.scene.leftWindowObj
+                rightWindowObj = bpy.data.objects.get("右耳")
+                leftWindowObj = bpy.data.objects.get("左耳")
+                if leftWindowObj != None and rightWindowObj != None:
+                    if name == '右耳':
+                        right_context = prev_properties_context
+                        bpy.context.screen.areas[0].spaces.active.context = left_context
+                        bpy.context.screen.areas[0].spaces.active.context = left_context
+                    else:
+                        left_context = prev_properties_context
+                        bpy.context.screen.areas[0].spaces.active.context = right_context
+                        bpy.context.screen.areas[0].spaces.active.context = right_context
+                    is_switch = True
+                else:
+                    if leftWindowObj:
+                        now_context = prev_properties_context
+                        bpy.context.screen.areas[0].spaces.active.context = now_context
+                        bpy.context.screen.areas[0].spaces.active.context = now_context
+                    else:
+                        now_context = prev_properties_context
+                        bpy.context.screen.areas[0].spaces.active.context = now_context
+                        bpy.context.screen.areas[0].spaces.active.context = now_context
+
+            if not is_start:
+                is_start = True
+                bpy.ops.object.msgbuscallback('INVOKE_DEFAULT')
+
+        return {'PASS_THROUGH'}
+
+    def invoke(self, context, event):
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
 
 
-# 监听属性
-subscribe_to = bpy.types.SpaceProperties, 'context'
-
-# 发布订阅，监听context变化
-bpy.msgbus.subscribe_rna(
-    key=subscribe_to,
-    owner=object(),
-    args=(1, 2, 3),
-    notify=msgbus_callback,
-)
+# def msgbus_callback(*args):
+#     global is_msgbus_start
+#     if (not is_msgbus_start):
+#         bpy.ops.object.msgbuscallback('INVOKE_DEFAULT')
 
 
-def msgbus_callback2(*args):
-    global is_msgbus_start2
-    if (not is_msgbus_start2):
-        bpy.ops.object.msgbuscallback2('INVOKE_DEFAULT')
+# # 监听属性
+# subscribe_to = bpy.types.SpaceProperties, 'context'
+#
+# # 发布订阅，监听context变化
+# bpy.msgbus.subscribe_rna(
+#     key=subscribe_to,
+#     owner=object(),
+#     args=(1, 2, 3),
+#     notify=msgbus_callback,
+# )
+#
+#
+# def msgbus_callback2(*args):
+#     global is_msgbus_start2
+#     if (not is_msgbus_start2):
+#         bpy.ops.object.msgbuscallback2('INVOKE_DEFAULT')
 
 
-subscribe_to2 = (bpy.types.Object, "name")
+# subscribe_to2 = (bpy.types.Object, "name")
 
-bpy.msgbus.subscribe_rna(
-    key=subscribe_to2,
-    owner=object(),
-    args=(1, 2, 3),
-    notify=msgbus_callback2,
-)
+# bpy.msgbus.subscribe_rna(
+#     key=subscribe_to2,
+#     owner=object(),
+#     args=(1, 2, 3),
+#     notify=msgbus_callback2,
+# )
 
 # 注册类
 _classes = [
@@ -1922,9 +2006,10 @@ _classes = [
     Forward,
     SwitchTest,
     MsgbusCallBack,
-    MsgbusCallBack2,
+    # MsgbusCallBack2,
     DialogOperator,
     SprueDialogOperator,
+    SwitchOperator
 ]
 
 

@@ -1,8 +1,24 @@
-import pymeshlab as ml
+# import pymeshlab as ml
 import os
 import shutil
 import bpy
 from ..tool import moveToRight, moveToLeft, getOverride, getOverride2
+from ..public_operation import draw_font
+from ..damo import register_damo_tools
+from ..jiahou import register_jiahou_tools
+from ..create_tip.qiege import register_qiege_tools
+from ..create_mould.point import register_createmould_tools
+from ..sound_canal import register_soundcanal_tools
+from ..vent_canal import register_ventcanal_tools
+from ..label import register_label_tools
+from ..handle import register_handle_tools
+from ..support import register_support_tools
+from ..casting import register_casting_tools
+from ..sprue import register_sprue_tools
+from ..last_damo import register_lastdamo_tools
+from ..create_tip.cut_mould import register_cutmould_tools
+
+is_initial = False
 
 
 class Huier_OT_Pymesh(bpy.types.Operator):
@@ -92,6 +108,8 @@ class Huier_OT_Pymesh(bpy.types.Operator):
                 override = getOverride()
                 with bpy.context.temp_override(**override):
                     bpy.ops.geometry.color_attribute_add(name="Color", color=(0, 0.25, 1, 1))
+                    # todo: 更改颜色
+                    # bpy.ops.geometry.color_attribute_add(name="Color", color=(0.053, 0.266, 0.436, 1))
                     active_obj.data.materials.clear()
                     active_obj.data.materials.append(bpy.data.materials['YellowR'])
 
@@ -144,12 +162,27 @@ class Huier_OT_Pymesh(bpy.types.Operator):
                 if duplicate_obj3.name in bpy.context.scene.collection.objects:
                     bpy.context.scene.collection.objects.unlink(duplicate_obj3)
 
+                # 复制一份用于打磨的重置
+                duplicate_obj4 = active_obj.copy()
+                duplicate_obj4.data = active_obj.data.copy()
+                duplicate_obj4.animation_data_clear()
+                duplicate_obj4.name = active_obj.name + "DamoReset"
+                bpy.context.collection.objects.link(duplicate_obj4)
+                duplicate_obj4.hide_set(True)
+
+                collection = bpy.data.collections['Right']
+                collection.objects.link(duplicate_obj4)
+                if duplicate_obj4.name in bpy.context.scene.collection.objects:
+                    bpy.context.scene.collection.objects.unlink(duplicate_obj4)
+
             elif active_obj.name == 'left':
                 active_obj.name = '左耳'
                 moveToLeft(active_obj)
                 override = getOverride2()
                 with bpy.context.temp_override(**override):
                     bpy.ops.geometry.color_attribute_add(name="Color", color=(0, 0.25, 1, 1))
+                    # todo: 更改颜色
+                    # bpy.ops.geometry.color_attribute_add(name="Color", color=(0.053, 0.266, 0.436, 1))
                     active_obj.data.materials.clear()
                     active_obj.data.materials.append(bpy.data.materials['YellowL'])
 
@@ -202,6 +235,19 @@ class Huier_OT_Pymesh(bpy.types.Operator):
                 if duplicate_obj3.name in bpy.context.scene.collection.objects:
                     bpy.context.scene.collection.objects.unlink(duplicate_obj3)
 
+                # 复制一份用于打磨的重置
+                duplicate_obj4 = active_obj.copy()
+                duplicate_obj4.data = active_obj.data.copy()
+                duplicate_obj4.animation_data_clear()
+                duplicate_obj4.name = active_obj.name + "DamoReset"
+                bpy.context.collection.objects.link(duplicate_obj4)
+                duplicate_obj4.hide_set(True)
+
+                collection = bpy.data.collections['Left']
+                collection.objects.link(duplicate_obj4)
+                if duplicate_obj4.name in bpy.context.scene.collection.objects:
+                    bpy.context.scene.collection.objects.unlink(duplicate_obj4)
+
         clear_folder_list = [OldFolder, InitFolder, MeanFolder]
         clear(clear_folder_list)
 
@@ -213,6 +259,34 @@ class Huier_OT_Pymesh(bpy.types.Operator):
             bpy.ops.object.select_all(action='DESELECT')
             bpy.context.view_layer.objects.active = bpy.data.objects['左耳']
             bpy.data.objects['左耳'].select_set(True)
+
+        global is_initial
+        if not is_initial:
+            is_initial = True
+            draw_font()
+            bpy.ops.object.createmouldinit('INVOKE_DEFAULT')
+            bpy.ops.object.createmouldcut('INVOKE_DEFAULT')
+            bpy.ops.object.createmouldfill('INVOKE_DEFAULT')
+            # bpy.ops.object.msgbuscallback('INVOKE_DEFAULT')
+            bpy.ops.switch.init('INVOKE_DEFAULT')
+
+            register_damo_tools()
+            register_jiahou_tools()
+            register_qiege_tools()
+            register_label_tools()
+            register_handle_tools()
+            register_support_tools()
+            register_createmould_tools()
+            register_soundcanal_tools()
+            register_ventcanal_tools()
+            register_casting_tools()
+            register_sprue_tools()
+            register_lastdamo_tools()
+            register_cutmould_tools()
+
+            override = getOverride()
+            with bpy.context.temp_override(**override):
+                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
         return {'FINISHED'}
 

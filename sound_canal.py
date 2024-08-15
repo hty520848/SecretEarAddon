@@ -30,20 +30,29 @@ soundcanal_shape = 'OP1'  # 传声孔类型
 soundcanal_shapeL = 'OP1'
 soundcanal_hornpipe_offset = 0  # 号角管偏移量
 soundcanal_hornpipe_offsetL = 0
+soundcanal_convert = False    #调整号角管offset后,实时更新mesh会发生闪退,因此在offset更新后移到主窗口后再更新mesh管道
+soundcanal_convertL = False
 
 mouse_index = 0  # 添加传声孔之后,切换其存在的鼠标行为,记录当前在切换到了哪种鼠标行为
 mouse_indexL = 0
 
-prev_sphere_number_plane = 0  # 记录鼠标在管道中间的红球间切换时,上次位于的红球
+prev_sphere_number_plane = 0  # 记录鼠标在管道中间的红球间切换时,上次位于的红球,主要用于控制点平面的切换
 prev_sphere_number_planeL = 0
 
 prev_on_rotate_sphere = False  # 判断鼠标是否在传声孔旋转球体上
 prev_on_rotate_sphereL = False
-is_on_rotate = False  # 是否处于旋转的鼠标状态,用于 附件三维旋转鼠标行为和附件平面旋转拖动鼠标行为之间的切换
+is_on_rotate = False  # 是否处于旋转的鼠标状态,用于 号角管三维旋转鼠标行为和号角管平面旋转拖动鼠标行为之间的切换
 is_on_rotateL = False
 
-middle_dis = None  # 进入三维旋转模式之后,记录管道与模型相交处到号角管的距离
-last_dis = None  # 进入三维旋转模式之后,记录管道与模型相交处的上一个圆球到号角管的距离
+is_mouseSwitch_modal_start = False         #在启动下一个modal前必须将上一个modal关闭,防止modal开启过多过于卡顿
+is_mouseSwitch_modal_startL = False
+
+rotate_middle_dis = None  # 进入三维旋转模式之后,记录管道与模型相交处到号角管的距离
+rotate_last_dis = None    # 进入三维旋转模式之后,记录管道与模型相交处的上一个圆球到号角管的距离
+rotate_offset = None      # 进入三维旋转模式之后,记录当前的面板参数offset
+rotate_middle_disL = None
+rotate_last_disL = None
+rotate_offsetL = None
 
 
 def get_is_on_rotate():
@@ -67,9 +76,9 @@ def set_is_on_rotate(value):
         is_on_rotateL = value
 
 
-def initialTransparency():
-    mat = newColor("Transparency", 1, 0.319, 0.133, 1, 0.4)  # 创建材质
-    mat.use_backface_culling = True
+def initialPlaneTransparency():
+    mat = newColor("PlaneTransparency", 1, 0.319, 0.133, 1, 0.4)  # 创建材质
+    mat.use_backface_culling = False
 
 
 def initialSoundcanalTransparency():
@@ -77,31 +86,30 @@ def initialSoundcanalTransparency():
     mat.use_backface_culling = True
 
 
-def get_object_dic_index():
-    global object_dic
-    global object_dicL
-    name = bpy.context.scene.leftWindowObj
-    if name == '右耳':
-        return object_dic
-    elif name == '左耳':
-        return object_dicL
-    return object_dic
 
 
 def on_which_shpere(context, event):
     '''
+    返回值与 判断鼠标在哪个物体上的先后顺序有关
     判断鼠标在哪个圆球上,不在圆球上则返回0
+    返回值为201的时候表示鼠标在管道上方末端的透明控制圆球上, 返回值为202的时候表示鼠标在管道下方末端的透明控制圆球上
     返回值为200的时候表示鼠标在号角管上, 返回值为100的时候表示鼠标在号角管的控制球上
+    返回值3-number的时候表示鼠标在管道中间的控制红球上
     其他情况下返回的为圆球名称的尾号索引
     '''
     global object_dic
     global object_dicL
+    global soundcanal_shape
+    global soundcanal_shapeL
     object_dic_cur = None
+    soundcanal_enum_cur = None
     name = bpy.context.scene.leftWindowObj
     if name == '右耳':
         object_dic_cur = object_dic
+        soundcanal_enum_cur = soundcanal_shape
     elif name == '左耳':
         object_dic_cur = object_dicL
+        soundcanal_enum_cur = soundcanal_shapeL
 
     if context.area:
         context.area.tag_redraw()
@@ -121,59 +129,39 @@ def on_which_shpere(context, event):
     )
     start = ray_orig
     end = ray_orig + ray_dir
-    # 鼠标是否在号角管上
-    hornpipe_name = name + 'Hornpipe'
-    hornpipe_obj = bpy.data.objects.get(hornpipe_name)
-    if (hornpipe_obj != None):
-        mwi = hornpipe_obj.matrix_world.inverted()
+    # 鼠标是否在管道两端透明控制圆球上
+    sphere_name1 = name + 'soundcanalsphere' + '201'        #传声孔管道红球soundcanalsphere1 对应的 透明控制圆球
+    sphere_obj1 = bpy.data.objects.get(sphere_name1)
+    if (sphere_obj1 != None):
+        mwi = sphere_obj1.matrix_world.inverted()
         mwi_start = mwi @ start
         mwi_end = mwi @ end
         mwi_dir = mwi_end - mwi_start
-        if hornpipe_obj.type == 'MESH':
-            if (hornpipe_obj.mode == 'OBJECT'):
-                mesh = hornpipe_obj.data
+        if sphere_obj1.type == 'MESH':
+            if (sphere_obj1.mode == 'OBJECT'):
+                mesh = sphere_obj1.data
                 bm = bmesh.new()
                 bm.from_mesh(mesh)
                 tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
                 _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
                 if fidx is not None:
-                    return 200
-    # 鼠标是否在号角管控制红球上
-    # 号角管的控制球信息没有被添加到object_dic/L中,判断鼠标是否在该红球上
-    hornpipe_sphere_name = name + 'soundcanalsphere' + '100'
-    hornpipe_sphere_obj = bpy.data.objects.get(hornpipe_sphere_name)
-    if (hornpipe_sphere_obj != None):
-        mwi = hornpipe_sphere_obj.matrix_world.inverted()
+                    return 201
+    sphere_name2 = name + 'soundcanalsphere' + '202'       # 传声孔管道红球soundcanalsphere2 对应的 透明控制圆球
+    sphere_obj2 = bpy.data.objects.get(sphere_name2)
+    if (sphere_obj2 != None):
+        mwi = sphere_obj2.matrix_world.inverted()
         mwi_start = mwi @ start
         mwi_end = mwi @ end
         mwi_dir = mwi_end - mwi_start
-        if hornpipe_sphere_obj.type == 'MESH':
-            if (hornpipe_sphere_obj.mode == 'OBJECT'):
-                mesh = hornpipe_sphere_obj.data
+        if sphere_obj2.type == 'MESH':
+            if (sphere_obj2.mode == 'OBJECT'):
+                mesh = sphere_obj2.data
                 bm = bmesh.new()
                 bm.from_mesh(mesh)
                 tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
                 _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
                 if fidx is not None:
-                    return 100
-    # 鼠标是否在号角管显示红球上
-    # 号角管的控制球信息没有被添加到object_dic/L中,判断鼠标是否在该红球上
-    hornpipe_sphere_name = name + 'soundcanalsphere' + '101'
-    hornpipe_sphere_obj = bpy.data.objects.get(hornpipe_sphere_name)
-    if (hornpipe_sphere_obj != None):
-        mwi = hornpipe_sphere_obj.matrix_world.inverted()
-        mwi_start = mwi @ start
-        mwi_end = mwi @ end
-        mwi_dir = mwi_end - mwi_start
-        if hornpipe_sphere_obj.type == 'MESH':
-            if (hornpipe_sphere_obj.mode == 'OBJECT'):
-                mesh = hornpipe_sphere_obj.data
-                bm = bmesh.new()
-                bm.from_mesh(mesh)
-                tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
-                _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
-                if fidx is not None:
-                    return 101
+                    return 202
     # 鼠标是否在管道的红球上
     for key in object_dic_cur:
         active_obj = bpy.data.objects[key]
@@ -191,6 +179,61 @@ def on_which_shpere(context, event):
                 _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
                 if fidx is not None:
                     return object_index
+    #位于号角管模式下,检测是否在号角管相关物体上
+    if(soundcanal_enum_cur == "OP2"):
+        # 鼠标是否在号角管控制红球上
+        # 号角管的控制球信息没有被添加到object_dic/L中,判断鼠标是否在该红球上
+        hornpipe_sphere_name = name + 'soundcanalsphere' + '100'
+        hornpipe_sphere_obj = bpy.data.objects.get(hornpipe_sphere_name)
+        if (hornpipe_sphere_obj != None):
+            mwi = hornpipe_sphere_obj.matrix_world.inverted()
+            mwi_start = mwi @ start
+            mwi_end = mwi @ end
+            mwi_dir = mwi_end - mwi_start
+            if hornpipe_sphere_obj.type == 'MESH':
+                if (hornpipe_sphere_obj.mode == 'OBJECT'):
+                    mesh = hornpipe_sphere_obj.data
+                    bm = bmesh.new()
+                    bm.from_mesh(mesh)
+                    tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
+                    _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
+                    if fidx is not None:
+                        return 100
+        # 鼠标是否在号角管显示红球上
+        # 号角管的控制球信息没有被添加到object_dic/L中,判断鼠标是否在该红球上
+        hornpipe_sphere_name = name + 'soundcanalsphere' + '101'
+        hornpipe_sphere_obj = bpy.data.objects.get(hornpipe_sphere_name)
+        if (hornpipe_sphere_obj != None):
+            mwi = hornpipe_sphere_obj.matrix_world.inverted()
+            mwi_start = mwi @ start
+            mwi_end = mwi @ end
+            mwi_dir = mwi_end - mwi_start
+            if hornpipe_sphere_obj.type == 'MESH':
+                if (hornpipe_sphere_obj.mode == 'OBJECT'):
+                    mesh = hornpipe_sphere_obj.data
+                    bm = bmesh.new()
+                    bm.from_mesh(mesh)
+                    tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
+                    _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
+                    if fidx is not None:
+                        return 101
+        # 鼠标是否在号角管上
+        hornpipe_name = name + 'Hornpipe'
+        hornpipe_obj = bpy.data.objects.get(hornpipe_name)
+        if (hornpipe_obj != None):
+            mwi = hornpipe_obj.matrix_world.inverted()
+            mwi_start = mwi @ start
+            mwi_end = mwi @ end
+            mwi_dir = mwi_end - mwi_start
+            if hornpipe_obj.type == 'MESH':
+                if (hornpipe_obj.mode == 'OBJECT'):
+                    mesh = hornpipe_obj.data
+                    bm = bmesh.new()
+                    bm.from_mesh(mesh)
+                    tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
+                    _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
+                    if fidx is not None:
+                        return 200
     return 0
 
 
@@ -322,120 +365,25 @@ def is_changed_shpere(context, event):
     return False
 
 
-# 判断鼠标是否在附件圆球上
-def is_mouse_on_sphere(context, event):
-    name = bpy.context.scene.leftWindowObj + "SoundcanalSphere"
-    obj = bpy.data.objects.get(name)
-    if (obj != None):
-        is_on_object = False  # 初始化变量
-
-        if context.area:
-            context.area.tag_redraw()
-
-        # 获取鼠标光标的区域坐标
-        mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
-
-        # 获取信息和空间信息
+# 判断鼠标是否在号角管旋转圆球上
+def is_mouse_on_rotate_sphere(context, event):
+    name = bpy.context.scene.leftWindowObj
+    plane_name = name + 'HornpipePlane'
+    plane_obj = bpy.data.objects.get(plane_name)
+    if(plane_obj != None):
+        mouse_x = event.mouse_region_x
+        mouse_y = event.mouse_region_y
         region, space = get_region_and_space(
             context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
         )
-
-        ray_dir = view3d_utils.region_2d_to_vector_3d(
-            region,
-            space.region_3d,
-            mv
-        )
-        ray_orig = view3d_utils.region_2d_to_origin_3d(
-            region,
-            space.region_3d,
-            mv
-        )
-
-        start = ray_orig
-        end = ray_orig + ray_dir
-
-        # 确定光线和对象的相交
-        mwi = obj.matrix_world.inverted()
-        mwi_start = mwi @ start
-        mwi_end = mwi @ end
-        mwi_dir = mwi_end - mwi_start
-
-        if obj.type == 'MESH':
-            if (obj.mode == 'OBJECT' or obj.mode == "SCULPT"):
-                mesh = obj.data
-                bm = bmesh.new()
-                bm.from_mesh(mesh)
-                tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
-
-                _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
-
-                if fidx is not None:
-                    is_on_object = True  # 如果发生交叉，将变量设为True
-        return is_on_object
-    return False
-
-
-# 判断鼠标状态是否发生改变,圆球
-def is_changed_sphere(context, event):
-    ori_name = bpy.context.scene.leftWindowObj
-    name = bpy.context.scene.leftWindowObj + "SoundcanalSphere"
-    obj = bpy.data.objects.get(name)
-    if (obj != None):
-        curr_on_object = False  # 当前鼠标是否在物体上,初始化为False
-        global prev_on_rotate_sphere  # 之前鼠标是否在物体上
-        global prev_on_rotate_sphereL  # 之前鼠标是否在物体上
-
-        if context.area:
-            context.area.tag_redraw()
-
-        # 获取鼠标光标的区域坐标
-        mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
-
-        # 获取信息和空间信息
-        region, space = get_region_and_space(
-            context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
-        )
-
-        ray_dir = view3d_utils.region_2d_to_vector_3d(
-            region,
-            space.region_3d,
-            mv
-        )
-        ray_orig = view3d_utils.region_2d_to_origin_3d(
-            region,
-            space.region_3d,
-            mv
-        )
-
-        start = ray_orig
-        end = ray_orig + ray_dir
-
-        # 确定光线和对象的相交
-        mwi = obj.matrix_world.inverted()
-        mwi_start = mwi @ start
-        mwi_end = mwi @ end
-        mwi_dir = mwi_end - mwi_start
-
-        if obj.type == 'MESH':
-            if (obj.mode == 'OBJECT' or obj.mode == "SCULPT"):
-                mesh = obj.data
-                bm = bmesh.new()
-                bm.from_mesh(mesh)
-                tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
-
-                _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
-
-                if fidx is not None:
-                    curr_on_object = True  # 如果发生交叉，将变量设为True
-        if ori_name == '右耳':
-            if (curr_on_object != prev_on_rotate_sphere):
-                prev_on_rotate_sphere = curr_on_object
-                return True
-            else:
-                return False
-        elif ori_name == '左耳':
-            if (curr_on_object != prev_on_rotate_sphereL):
-                prev_on_rotate_sphereL = curr_on_object
+        rv3d = space.region_3d
+        coord_3d = plane_obj.location
+        # 将三维坐标转换为二维坐标
+        coord_2d = view3d_utils.location_3d_to_region_2d(region, rv3d, coord_3d)
+        if(coord_2d != None):
+            plane_x, plane_y = coord_2d
+            dis = math.sqrt(math.fabs(plane_x - mouse_x) ** 2 + math.fabs(plane_y - mouse_y) ** 2)
+            if(dis <= 372):
                 return True
             else:
                 return False
@@ -648,7 +596,7 @@ def add_sphere(co, index):
     hooktoobject(index)  # 绑定到指定下标
 
 
-def mouse_switch(context, event):
+def mouse_switch(sphere_number,context, event):
     '''
     鼠标位于不同的物体上时,切换到不同的传声孔鼠标行为
     '''
@@ -664,7 +612,6 @@ def mouse_switch(context, event):
         is_on_rotate_cur = is_on_rotateL
     if (not is_on_rotate_cur):
         if (name == '右耳'):
-            sphere_number = on_which_shpere(context, event)
             if (sphere_number == 200 and mouse_index != 1):
                 mouse_index = 1
                 # 号角管显示圆球颜色设置为红色
@@ -710,6 +657,10 @@ def mouse_switch(context, event):
                 # 鼠标位于管道圆球上的时候,调用传声孔的鼠标行为2,双击删除圆球，左键按下激活并拖动圆球
                 hornpipe_name = name + 'Hornpipe'
                 hornpipe_obj = bpy.data.objects.get(hornpipe_name)
+                if(sphere_number == 1):
+                    sphere_number = 201
+                elif(sphere_number == 2):
+                    sphere_number = 202
                 sphere_name = name + 'soundcanalsphere' + str(sphere_number)
                 sphere_obj = bpy.data.objects.get(sphere_name)
                 if (hornpipe_obj != None):
@@ -719,7 +670,6 @@ def mouse_switch(context, event):
                 bpy.context.view_layer.objects.active = sphere_obj
                 bpy.ops.wm.tool_set_by_id(name="my_tool.addsoundcanal3")
         elif (name == '左耳'):
-            sphere_number = on_which_shpere(context, event)
             if (sphere_number == 200 and mouse_indexL != 1):
                 mouse_indexL = 1
                 # 号角管显示圆球颜色设置为红色
@@ -765,6 +715,10 @@ def mouse_switch(context, event):
                 # 鼠标位于管道圆球上的时候,调用传声孔的鼠标行为2,双击删除圆球，左键按下激活并拖动圆球
                 hornpipe_name = name + 'Hornpipe'
                 hornpipe_obj = bpy.data.objects.get(hornpipe_name)
+                if (sphere_number == 1):
+                    sphere_number = 201
+                elif (sphere_number == 2):
+                    sphere_number = 202
                 sphere_name = name + 'soundcanalsphere' + str(sphere_number)
                 sphere_obj = bpy.data.objects.get(sphere_name)
                 if (hornpipe_obj != None):
@@ -775,9 +729,8 @@ def mouse_switch(context, event):
                 bpy.ops.wm.tool_set_by_id(name="my_tool.addsoundcanal3")
     elif (is_on_rotate_cur):
         if (name == '右耳'):
-            if (is_mouse_on_sphere(context, event) and mouse_index != 4):
+            if (is_mouse_on_rotate_sphere(context, event) and mouse_index != 4):
                 mouse_index = 4
-                print("鼠标行为1")
                 # 切换到三维旋转的模式
                 plane_name = name + 'HornpipePlane'
                 plane_obj = bpy.data.objects.get(plane_name)
@@ -786,16 +739,15 @@ def mouse_switch(context, event):
                 bpy.context.view_layer.objects.active = plane_obj
                 bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
                 bpy.context.scene.transform_orientation_slots[2].type = 'NORMAL'
-            elif (not is_mouse_on_sphere(context, event) and mouse_index != 5):
+            elif (not is_mouse_on_rotate_sphere(context, event) and mouse_index != 5):
                 mouse_index = 5
-                print("鼠标行为2")
                 # 鼠标不再圆球上的时候，调用传声孔的鼠标行为,公共鼠标行为 双击添加圆球
                 bpy.ops.object.select_all(action='DESELECT')
                 bpy.context.view_layer.objects.active = bpy.data.objects[name]
                 bpy.data.objects[name].select_set(True)
                 bpy.ops.wm.tool_set_by_id(name="my_tool.addsoundcanal2")
         elif (name == '左耳'):
-            if (is_mouse_on_sphere(context, event) and mouse_indexL != 4):
+            if (is_mouse_on_rotate_sphere(context, event) and mouse_indexL != 4):
                 mouse_indexL = 4
                 # 切换到三维旋转的模式
                 plane_name = name + 'HornpipePlane'
@@ -805,7 +757,7 @@ def mouse_switch(context, event):
                 bpy.context.view_layer.objects.active = plane_obj
                 bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
                 bpy.context.scene.transform_orientation_slots[2].type = 'NORMAL'
-            elif (not is_mouse_on_sphere(context, event) and mouse_indexL != 5):
+            elif (not is_mouse_on_rotate_sphere(context, event) and mouse_indexL != 5):
                 mouse_indexL = 5
                 # 鼠标不在圆球上的时候，调用传声孔的鼠标行为,公共鼠标行为 双击添加圆球
                 bpy.ops.object.select_all(action='DESELECT')
@@ -818,16 +770,26 @@ def plane_switch(sphere_number):
     '''
     鼠标在管道中的圆球中切换时,更新生成平面
     '''
+    global is_on_rotate
+    global is_on_rotateL
     global prev_sphere_number_plane
     global prev_sphere_number_planeL
     name = bpy.context.scene.leftWindowObj
+    is_on_rotate_cur = None
+    if name == '右耳':
+        is_on_rotate_cur = is_on_rotate
+    elif name == '左耳':
+        is_on_rotate_cur = is_on_rotateL
+    #旋转模式下,所有的管道控制红球都被隐藏,不允许操作,自然不允许生成平面
+    if(is_on_rotate_cur):
+        return
     # 若位于管道两端的圆球上,则需要吸附在模型上
-    if sphere_number == 1 or sphere_number == 2:
+    if sphere_number == 201 or sphere_number == 202 or sphere_number == 1 or sphere_number == 2:
         bpy.context.scene.tool_settings.use_snap = True
         # 左右耳模型是不可选中的,为了让其吸附在模型上,需要将该吸附参数设置为False
         bpy.context.scene.tool_settings.use_snap_selectable = False
     # 鼠标位于管道中间的圆球上且在不同的圆球上切换时,删除原有的平面并生成新的平面
-    if (sphere_number != 0 and sphere_number != 1 and sphere_number != 2 and sphere_number != 100 and sphere_number != 101 and sphere_number != 200):
+    if (sphere_number != 0 and sphere_number != 1 and sphere_number != 2 and sphere_number != 201 and sphere_number != 202 and sphere_number != 100 and sphere_number != 101 and sphere_number != 200):
         bpy.context.scene.tool_settings.use_snap = True
         # 左右耳模型是不可选中的,平面是可选中的,设置该参数使其只能吸附在平面上
         bpy.context.scene.tool_settings.use_snap_selectable = True
@@ -852,41 +814,53 @@ class TEST_OT_addsoundcanal(bpy.types.Operator):
 
         global number
         global numberL
+        global is_on_rotate
+        global is_on_rotateL
         number_cur = None
-        # 主窗口物体
+        is_on_rotate_cur = None
         name = bpy.context.scene.leftWindowObj
         mesh_name = name + 'meshsoundcanal'
         if name == '右耳':
             number_cur = number
+            is_on_rotate_cur = is_on_rotate
         elif name == '左耳':
             number_cur = numberL
-        if number_cur == 0:  # 如果number等于0，初始化
-            co = cal_co(name, context, event)
-            if co != -1:
-                generate_canal(co)
-                # 设置旋转中心
-                bpy.ops.object.select_all(action='DESELECT')
-                bpy.context.view_layer.objects.active = bpy.data.objects.get(name)
+            is_on_rotate_cur = is_on_rotateL
+        #非三维旋转模式下才能够添加控制点
+        if(not is_on_rotate_cur):
+            if number_cur == 0:  # 如果number等于0，初始化
+                co = cal_co(name, context, event)
+                if co != -1:
+                    generate_canal(co)
+                    # 设置旋转中心
+                    bpy.ops.object.select_all(action='DESELECT')
+                    bpy.context.view_layer.objects.active = bpy.data.objects.get(name)
 
-        elif number_cur == 1:  # 如果number等于1双击完成管道
-            co = cal_co(name, context, event)
-            if co != -1:
-                finish_canal(co)
-                # 将左右耳模型变透明
-                bpy.data.objects[name].data.materials.clear()  # 清除材质
-                bpy.data.objects[name].data.materials.append(bpy.data.materials["Transparency"])
-                bpy.ops.object.select_all(action='DESELECT')
-                # bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
+            elif number_cur == 1:  # 如果number等于1双击完成管道
+                co = cal_co(name, context, event)
+                if co != -1:
+                    finish_canal(co)
+                    # 将左右耳模型变透明
+                    # bpy.data.objects[name].data.materials.clear()  # 清除材质
+                    # bpy.data.objects[name].data.materials.append(bpy.data.materials["Transparency"])
+                    if name == '右耳':
+                        bpy.context.scene.transparent3EnumR = 'OP3'
+                        # bpy.context.scene.transparentper3EnumR = '0.6'
+                    elif name == '左耳':
+                        bpy.context.scene.transparent3EnumL = 'OP3'
+                        # bpy.context.scene.transparentper3EnumR = '0.6'
+                    bpy.ops.object.select_all(action='DESELECT')
+                    # bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
 
-        else:  # 如果number大于1，双击添加控制点
-            co = cal_co(mesh_name, context, event)
-            if co != -1:
-                min_index, secondmin_index, insert_index = select_nearest_point(co)
-                add_canal(min_index, secondmin_index, co, insert_index)
+            else:  # 如果number大于1，双击添加控制点
+                co = cal_co(mesh_name, context, event)
+                if co != -1:
+                    min_index, secondmin_index, insert_index = select_nearest_point(co)
+                    add_canal(min_index, secondmin_index, co, insert_index)
 
-            # 重新更新管道中间圆球生成的平面
-            delete_sphere_snap_plane()
-            create_sphere_snap_plane(number_cur)
+                # 重新更新管道中间圆球生成的平面
+                delete_sphere_snap_plane()
+                create_sphere_snap_plane(number_cur)
 
     def invoke(self, context, event):
         self.excute(context, event)
@@ -902,18 +876,27 @@ class TEST_OT_deletesoundcanal(bpy.types.Operator):
 
         global object_dic
         global object_dicL
+        global is_on_rotate
+        global is_on_rotateL
+        global soundcanal_shape
+        global soundcanal_shapeL
         name = bpy.context.scene.leftWindowObj
         sphere_number = on_which_shpere(context, event)
+        soundcanal_enum_cur = None
+        is_on_rotate_cur = None
+        if name == '右耳':
+            is_on_rotate_cur = is_on_rotate
+            soundcanal_enum_cur = soundcanal_shape
+        elif name == '左耳':
+            is_on_rotate_cur = is_on_rotateL
+            soundcanal_enum_cur = soundcanal_shapeL
 
-        if sphere_number == 0:
+        if sphere_number == 0 or sphere_number == 1 or sphere_number == 2 or sphere_number == 201 or sphere_number == 202 \
+                or sphere_number == 100 or sphere_number == 101 or is_on_rotate_cur:
             pass
-
-        elif sphere_number == 1 or sphere_number == 2 or sphere_number == 100 or sphere_number == 101:
-            pass
-
         else:
             if (name == "右耳"):
-                # 主窗口物体
+                #删除该红球对应的曲线控制点
                 name = bpy.context.scene.leftWindowObj
                 sphere_name = name + 'soundcanalsphere' + str(sphere_number)
                 index = object_dic[sphere_name]
@@ -921,7 +904,7 @@ class TEST_OT_deletesoundcanal(bpy.types.Operator):
                 bpy.data.objects[name + 'soundcanal'].hide_set(False)
                 bpy.context.view_layer.objects.active = bpy.data.objects[name + 'soundcanal']
                 bpy.data.objects[name + 'soundcanal'].select_set(True)
-                bpy.ops.object.mode_set(mode='EDIT')  # 进入编辑模式删除点
+                bpy.ops.object.mode_set(mode='EDIT')
                 bpy.ops.curve.select_all(action='DESELECT')
                 bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].select = True
                 bpy.ops.curve.delete(type='VERT')
@@ -929,12 +912,13 @@ class TEST_OT_deletesoundcanal(bpy.types.Operator):
                 bpy.data.objects[name + 'soundcanal'].select_set(False)
                 bpy.data.objects[name + 'soundcanal'].hide_set(True)
 
-                # 更新
+                # 将该红球删除并在字典中删除{红球名称:控制点索引值}
                 bpy.data.objects.remove(bpy.data.objects[sphere_name], do_unlink=True)
                 for key in object_dic:
                     if object_dic[key] > index:
                         object_dic[key] -= 1
                 del object_dic[sphere_name]
+                #更新该红球的后续红球的名称(红球名称sphere_number根据红球添加的先后顺序生成)
                 global number
                 count = number - sphere_number
                 if count >= 1:
@@ -944,10 +928,11 @@ class TEST_OT_deletesoundcanal(bpy.types.Operator):
                         object_dic.update({replace_name: object_dic.pop(old_name)})
                         bpy.data.objects[old_name].name = replace_name
                 number -= 1
+                #根据曲线控制点重新生成曲线管道并将曲线控制点保存到列表中
                 convert_soundcanal()
                 save_soundcanal_info([0, 0, 0])
             elif (name == "左耳"):
-                # 主窗口物体
+                #删除该红球对应的曲线控制点
                 name = bpy.context.scene.leftWindowObj
                 sphere_name = name + 'soundcanalsphere' + str(sphere_number)
                 index = object_dicL[sphere_name]
@@ -955,7 +940,7 @@ class TEST_OT_deletesoundcanal(bpy.types.Operator):
                 bpy.data.objects[name + 'soundcanal'].hide_set(False)
                 bpy.context.view_layer.objects.active = bpy.data.objects[name + 'soundcanal']
                 bpy.data.objects[name + 'soundcanal'].select_set(True)
-                bpy.ops.object.mode_set(mode='EDIT')  # 进入编辑模式删除点
+                bpy.ops.object.mode_set(mode='EDIT')
                 bpy.ops.curve.select_all(action='DESELECT')
                 bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].select = True
                 bpy.ops.curve.delete(type='VERT')
@@ -963,12 +948,13 @@ class TEST_OT_deletesoundcanal(bpy.types.Operator):
                 bpy.data.objects[name + 'soundcanal'].select_set(False)
                 bpy.data.objects[name + 'soundcanal'].hide_set(True)
 
-                # 更新
+                # 将该红球删除并在字典中删除{红球名称:控制点索引值}
                 bpy.data.objects.remove(bpy.data.objects[sphere_name], do_unlink=True)
                 for key in object_dicL:
                     if object_dicL[key] > index:
                         object_dicL[key] -= 1
                 del object_dicL[sphere_name]
+                # 更新该红球的后续红球的名称(红球名称sphere_number根据红球添加的先后顺序生成)
                 global numberL
                 count = numberL - sphere_number
                 if count >= 1:
@@ -978,11 +964,13 @@ class TEST_OT_deletesoundcanal(bpy.types.Operator):
                         object_dicL.update({replace_name: object_dicL.pop(old_name)})
                         bpy.data.objects[old_name].name = replace_name
                 numberL -= 1
+                # 根据曲线控制点重新生成曲线管道并将曲线控制点保存到列表中
                 convert_soundcanal()
                 save_soundcanal_info([0, 0, 0])
 
             # 更新号角管位置
-            update_hornpipe_location()
+            if(soundcanal_enum_cur == "OP2"):
+                update_hornpipe_location()
             # 删除可能存在的圆球平面
             delete_sphere_snap_plane()
 
@@ -998,22 +986,29 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
 
     __timer = None  # 定时器,设定一个固定的时间检测状态,更新状态,切换鼠标行为(若不设置定时器,一直处于检测状态则无法进行数据更新和鼠标切换)
 
-    __mouse_listener = None
-    __left_mouse_press = None
-    __mouse_x = 0
+    __mouse_listener = None          #添加鼠标监听,监听鼠标行为(调用三维旋转按钮的时候,更新号角管信息容易打断该按钮的调用,因此设置了一系列参数监听鼠标行为,满足一定条件的时候才进行号角管信息更新)
+    __left_mouse_press = None        #鼠标左键是否按下
+    __mouse_x = 0                    #记录鼠标按下的位置
     __mouse_y = 0
-    __mouse_x_y_flag = False
-    __start_update = False
+    __mouse_x_y_flag = False         #鼠标左键按下的时候,通过该标志,记录鼠标按下的位置
+    __start_update = False           #调用旋转按钮的时候,是否开始更新号角管的位置信息
 
     def invoke(self, context, event):  # 初始化
+        global is_mouseSwitch_modal_start
+        global is_mouseSwitch_modal_startL
+        name = bpy.context.scene.leftWindowObj
+        if (name == "右耳"):
+            is_mouseSwitch_modal_start = True
+        elif (name == "左耳"):
+            is_mouseSwitch_modal_startL = True
         op_cls = TEST_OT_soundcanalqiehuan
         print('soundcanalqiehuan invoke')
-        initialTransparency()
+        # initialTransparency()
         newColor('red', 1, 0, 0, 0, 1)
         newColor('grey', 0.8, 0.8, 0.8, 0, 1)  # 不透明材质
         newColor('grey2', 0.8, 0.8, 0.8, 1, 0.4)  # 透明材质
         if not op_cls.__timer:
-            op_cls.__timer = context.window_manager.event_timer_add(0.1, window=context.window)
+            op_cls.__timer = context.window_manager.event_timer_add(0.08, window=context.window)
         if not op_cls.__mouse_listener:
             op_cls.__mouse_listener = mouse.Listener(
                 on_click=self.on_click
@@ -1031,24 +1026,56 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
         global object_dicL
         global is_on_rotate
         global is_on_rotateL
+        global soundcanal_shape
+        global soundcanal_shapeL
+        global is_mouseSwitch_modal_start
+        global is_mouseSwitch_modal_startL
+        global soundcanal_convert
+        global soundcanal_convertL
 
         mouse_x = event.mouse_x
         mouse_y = event.mouse_y
         override1 = getOverride()
         area = override1['area']
         op_cls = TEST_OT_soundcanalqiehuan
+        name = bpy.context.scene.leftWindowObj
 
         # 鼠标在3D区域内
         if (mouse_x < area.width and area.y < mouse_y < area.y + area.height and bpy.context.scene.var == 23):
             object_dic_cur = None
             is_on_rotate_cur = None
-            name = bpy.context.scene.leftWindowObj
+            soundcanal_enum_cur = None
             if (name == "右耳"):
                 object_dic_cur = object_dic
                 is_on_rotate_cur = is_on_rotate
+                soundcanal_enum_cur = soundcanal_shape
             elif (name == "左耳"):
                 object_dic_cur = object_dicL
                 is_on_rotate_cur = is_on_rotateL
+                soundcanal_enum_cur = soundcanal_shapeL
+
+            #若没有将曲线管道转化为网格管道,则根据曲线管道复制出一份转化为网格管道并显示(主要是为了防止convert_soundcanal执行过于频繁发生闪退)
+            #限定不在号角管旋转圆球上是为了防止在号角管三维旋转时执行convert_soundcanal中断三维旋转鼠标行为
+            if (name == "右耳"):
+                if(soundcanal_convert and not is_on_rotate_cur and not self.__left_mouse_press):
+                    soundcanal_convert = False
+                    #保存曲线控制点信息
+                    save_soundcanal_info([0, 0, 0])
+                    #根据曲线管道更新mesh管道信息
+                    convert_soundcanal()
+                    # 将曲线管道显示出来,mesh管道隐藏(若实时根据曲线管道更新mesh管道信息,容易闪退)
+                    bpy.data.objects[name + 'soundcanal'].hide_set(True)
+                    bpy.data.objects[name + 'meshsoundcanal'].hide_set(False)
+            elif (name == "左耳"):
+                if (soundcanal_convertL and not is_on_rotate_cur and not self.__left_mouse_press):
+                    soundcanal_convertL = False
+                    # 保存曲线控制点信息
+                    save_soundcanal_info([0, 0, 0])
+                    # 根据曲线管道更新mesh管道信息
+                    convert_soundcanal()
+                    # 将曲线管道显示出来,mesh管道隐藏(若实时根据曲线管道更新mesh管道信息,容易闪退)
+                    bpy.data.objects[name + 'soundcanal'].hide_set(True)
+                    bpy.data.objects[name + 'meshsoundcanal'].hide_set(False)
 
             # 不存在管道,在公共鼠标行为和双击添加控制点鼠标行为之间切换(公共鼠标行为功能始终存在)
             if len(object_dic_cur) < 2:
@@ -1068,16 +1095,17 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
                 # 判断是否位于红球上,存在则返回其索引,不存在则返回0
                 sphere_number = on_which_shpere(context, event)
 
-                # 根据鼠标位于模型的种类,切换到不同的鼠标行为
+                # 根据鼠标位于模型的种类,切换到不同的鼠标行为(鼠标左键松开的时候,才检测鼠标行为并进行切换)
                 if not self.__left_mouse_press:
-                    mouse_switch(context, event)
+                    mouse_switch(sphere_number,context, event)
 
                 # 实时更新管道控制点的位置,随圆球位置更新而改变
                 # 未进入三维旋转状态的时候,拖动号角管控制圆球后更新管道
                 if (not is_on_rotate_cur):
 
                     # 生成管道中间红球对应的平面
-                    plane_switch(sphere_number)
+                    if(not self.__left_mouse_press):
+                        plane_switch(sphere_number)
 
                     # 鼠标位于管道或圆球上的时候,改变管道的材质,将其亮度调高
                     if cal_co(name + 'meshsoundcanal', context, event) == -1:
@@ -1097,24 +1125,68 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
                         # 更新号角管位置信息,摆正对齐
                         update_hornpipe_location()
                         return {'PASS_THROUGH'}
+                    # 对于管道两端的控制点,操控调整的时候,限制其不能拖出模型之外
+                    elif (sphere_number == 201 or sphere_number == 202 or sphere_number == 1 or sphere_number == 2):
+                        active_object = bpy.context.active_object
+                        if(active_object != None):
+                            active_object_name = active_object.name
+                            if(active_object_name in [name + 'soundcanalsphere201', name + 'soundcanalsphere202']):
+                                active_object_index = int(active_object_name.replace(name + 'soundcanalsphere', ''))
+                                loc = cal_co(name, context, event)
+                                sphere_number = active_object_index
+                                sphere_number1 = active_object_index
+                                #鼠标左键按下的时候,虽然不会发生鼠标行为的切换,但当我们操作管道末端透明控制红球的时候,若将鼠标同时移动到另外一端的透明控制红球的时候,
+                                # 会将该透明圆球吸附到鼠标位置上,等于同时操控了两个圆球,为了避免这种现象,我们使用当前激活物体来限制确认操作的圆球物体,并非单纯根据鼠标在哪个物体上
+                                if (active_object_index == 201):
+                                    sphere_number1 = 1
+                                elif (active_object_index == 202):
+                                    sphere_number1 = 2
+                                #管道末端透明控制圆球
+                                sphere_name = name + 'soundcanalsphere' + str(sphere_number)
+                                obj = bpy.data.objects[sphere_name]
+                                #管道末端显示红球
+                                sphere_name1 = name + 'soundcanalsphere' + str(sphere_number1)
+                                obj1 = bpy.data.objects[sphere_name1]
+                                obj.location = obj1.location
+                                if (loc != -1 and self.__left_mouse_press):
+                                    obj1.location = loc
+                                    index = int(object_dic_cur[sphere_name1])
+                                    bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[0:3] = obj1.location
+                                    bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[3] = 1
+                                    # 操控管道两端控制点期间,为了不影响鼠标操作,不实时的将曲线转化为网格(转化曲线函数会切换模式,影响鼠标行为);将曲线管道显示出来,mesh管道隐藏
+                                    if (name == "右耳"):
+                                        if (not soundcanal_convert):
+                                            soundcanal_convert = True
+                                            bpy.data.objects[name + 'soundcanal'].hide_set(False)
+                                            bpy.data.objects[name + 'meshsoundcanal'].hide_set(True)
+                                    elif (name == "左耳"):
+                                        if (not soundcanal_convertL):
+                                            soundcanal_convertL = True
+                                            bpy.data.objects[name + 'soundcanal'].hide_set(False)
+                                            bpy.data.objects[name + 'meshsoundcanal'].hide_set(True)
+                                    # 更新号角管位置信息,摆正对齐
+                                    if (soundcanal_enum_cur == 'OP2'):
+                                        update_hornpipe_location()
+                        return {'PASS_THROUGH'}
                     # 鼠标位于其他控制圆球上的时候,管道控制点随着圆球位置的拖动改变而更新
                     else:
                         sphere_name = name + 'soundcanalsphere' + str(sphere_number)
                         obj = bpy.data.objects[sphere_name]
                         index = int(object_dic_cur[sphere_name])
-                        bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[0:3] = \
-                            bpy.data.objects[
-                                sphere_name].location
+                        bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[0:3] = obj.location
                         bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[3] = 1
+                        # todo: save函数可以优化
                         flag = save_soundcanal_info(obj.location)
                         if flag:
                             convert_soundcanal()
                         # 更新号角管位置信息,摆正对齐
-                        update_hornpipe_location()
+                        if(soundcanal_enum_cur == 'OP2'):
+                            update_hornpipe_location()
                         return {'PASS_THROUGH'}
 
                 # 进入三维旋转状态的时候,旋转拖动号角管后更新管道
-                elif (is_on_rotate_cur and is_mouse_on_sphere(context, event)):
+                elif (is_on_rotate_cur and is_mouse_on_rotate_sphere(context, event)):
+                    #记录鼠标第一次按钮时的鼠标信息
                     if (self.__left_mouse_press):
                         if (self.__mouse_x_y_flag):
                             self.__mouse_x = event.mouse_x
@@ -1126,6 +1198,7 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
                         self.__mouse_y - mouse_y) ** 2)
 
                     # TODO： 距离(dis)参数的调整
+                    #当鼠标左键按下并且使用三维旋转按钮旋转移动一段距离之后,再进行号角管信息更新
                     if not self.__start_update and self.__left_mouse_press == True and dis > 5:
                         self.__start_update = True
 
@@ -1141,15 +1214,25 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
             if op_cls.__timer:
                 context.window_manager.event_timer_remove(op_cls.__timer)
                 op_cls.__timer = None
-                print('soundcanalqiehuan finish')
             if op_cls.__mouse_listener:
                 # 关闭监听器
                 op_cls.__mouse_listener.stop()
                 op_cls.__mouse_listener = None
+            if (name == "右耳"):
+                is_mouseSwitch_modal_start = False
+            elif (name == "左耳"):
+                is_mouseSwitch_modal_startL = False
+            print('soundcanalqiehuan finish')
             return {'FINISHED'}
 
         # 鼠标在3D区域外
         else:
+            global mouse_index
+            global mouse_indexL
+            if (name == '右耳' and mouse_index != -1):
+                mouse_index = -1
+            if (name == '左耳' and mouse_indexL != -1):
+                mouse_indexL = -1
             bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             return {'PASS_THROUGH'}
 
@@ -1162,6 +1245,7 @@ class TEST_OT_soundcanalqiehuan(bpy.types.Operator):
             self.__left_mouse_press = False
             self.__mouse_x_y_flag = False
             self.__start_update = False
+
 
 class TEST_OT_finishsoundcanal(bpy.types.Operator):
     bl_idname = "object.finishsoundcanal"
@@ -1193,10 +1277,7 @@ class TEST_OT_resetsoundcanal(bpy.types.Operator):
     def invoke(self, context, event):
         bpy.context.scene.var = 25
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-        self.excute(context, event)
-        return {'FINISHED'}
 
-    def excute(self, context, event):
         # 删除多余的物体
         global object_dic
         global object_dicL
@@ -1204,18 +1285,21 @@ class TEST_OT_resetsoundcanal(bpy.types.Operator):
         global soundcanal_finishL
         global is_on_rotate
         global is_on_rotateL
+        global soundcanal_convert
+        global soundcanal_convertL
         name = bpy.context.scene.leftWindowObj
         if name == '右耳':
             if not soundcanal_finish:
                 is_on_rotate = False
+                soundcanal_convert = False
                 # 主窗口物体
                 name = bpy.context.scene.leftWindowObj
-                # 删除管道
+                # 删除管道线管信息
                 need_to_delete_model_name_list = [name + 'meshsoundcanal', name + 'soundcanal', name + 'HornpipePlane',
                                                   name + 'Hornpipe', name + 'soundcanalsphere' + '100',
                                                   name + 'soundcanalsphere' + '101',
-                                                  name + 'SoundCanalPlaneBorderCurveObject', name + 'SoundCanalPlane',
-                                                  name + 'SoundcanalSphere']
+                                                  name + 'soundcanalsphere' + '201', name + 'soundcanalsphere' + '202',
+                                                  name + 'SoundCanalPlaneBorderCurveObject', name + 'SoundCanalPlane']
                 # 删除圆球
                 for key in object_dic:
                     bpy.data.objects.remove(bpy.data.objects[key], do_unlink=True)
@@ -1246,20 +1330,27 @@ class TEST_OT_resetsoundcanal(bpy.types.Operator):
                 soundcanal_shape = bpy.context.scene.soundcancalShapeEnum
                 soundcanal_hornpipe_offset = bpy.context.scene.chuanShenKongOffset
                 prev_sphere_number_plane = 0
-                bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
+                bpy.context.scene.transparent3EnumR = 'OP1'
+                # bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
+                context.window_manager.modal_handler_add(self)
+                return {'RUNNING_MODAL'}
         elif name == '左耳':
             if not soundcanal_finishL:
                 is_on_rotateL = False
+                soundcanal_convertL = False
                 # 主窗口物体
                 name = bpy.context.scene.leftWindowObj
+                # 删除管道线管信息
                 need_to_delete_model_name_list = [name + 'meshsoundcanal', name + 'soundcanal', name + 'HornpipePlane',
                                                   name + 'Hornpipe', name + 'soundcanalsphere' + '100',
                                                   name + 'soundcanalsphere' + '101',
-                                                  name + 'SoundCanalPlaneBorderCurveObject', name + 'SoundCanalPlane',
-                                                  name + 'SoundcanalSphere']
+                                                  name + 'soundcanalsphere' + '201', name + 'soundcanalsphere' + '202',
+                                                  name + 'SoundCanalPlaneBorderCurveObject', name + 'SoundCanalPlane']
+                # 删除圆球
                 for key in object_dicL:
                     bpy.data.objects.remove(bpy.data.objects[key], do_unlink=True)
                 delete_useless_object(need_to_delete_model_name_list)
+                # 圆球字典置空
                 object_dicL.clear()
                 # 将SoundCanalReset复制并替代当前操作模型
                 oriname = name
@@ -1285,7 +1376,30 @@ class TEST_OT_resetsoundcanal(bpy.types.Operator):
                 soundcanal_shapeL = bpy.context.scene.soundcancalShapeEnum_L
                 soundcanal_hornpipe_offsetL = bpy.context.scene.chuanShenKongOffset_L
                 prev_sphere_number_planeL = 0
+                bpy.context.scene.transparent3EnumR = 'OP1'
+                # bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
+                context.window_manager.modal_handler_add(self)
+                return {'RUNNING_MODAL'}
+
+
+        return {'FINISHED'}
+
+    def modal(self, context, event):
+        global is_mouseSwitch_modal_start
+        global is_mouseSwitch_modal_startL
+        name = bpy.context.scene.leftWindowObj
+        if (name == '右耳'):
+            if(not is_mouseSwitch_modal_start):
+                is_mouseSwitch_modal_start = True
                 bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
+                return {'FINISHED'}
+        elif (name == '左耳'):
+            if (not is_mouseSwitch_modal_startL):
+                is_mouseSwitch_modal_startL = True
+                bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
+                return {'FINISHED'}
+        return {'PASS_THROUGH'}
+
 
 
 class TEST_OT_soundcanalrotate(bpy.types.Operator):
@@ -1299,39 +1413,236 @@ class TEST_OT_soundcanalrotate(bpy.types.Operator):
     def execute(self, context):
         global is_on_rotate
         global is_on_rotateL
+        soundcanal_enum_cur = None
         name = bpy.context.scene.leftWindowObj
+        if name == '右耳':
+            soundcanal_enum_cur = soundcanal_shape
+        elif name == '左耳':
+            soundcanal_enum_cur = soundcanal_shapeL
         plane_name = name + 'HornpipePlane'
         plane_obj = bpy.data.objects.get(plane_name)
-        spherename = name + "SoundcanalSphere"
-        sphere_obj = bpy.data.objects.get(spherename)
-        if (plane_obj != None and sphere_obj != None):
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.context.view_layer.objects.active = bpy.data.objects[name]
+        bpy.data.objects[name].select_set(True)
+        bpy.ops.wm.tool_set_by_id(name="my_tool.addsoundcanal2")
+        #管道类型为号角管的情况下才启用三维旋转
+        if (soundcanal_enum_cur == "OP2"):
             print("三维鼠标旋转按钮")
             if (name == '右耳'):
                 is_on_rotate = not is_on_rotate
                 if (is_on_rotate == True):
                     print("按钮三维旋转")
-                    sphere_obj.hide_select = False
-                    sphere_obj.select_set(True)
+                    #号角管旋转初始化,将管道红球隐藏并得到管道末端及其上一个红球到号角管平面的距离,用于旋转状态下更新offset参数
                     update_hornpipe_rotate_initial()
                 else:
                     print("按钮非三维旋转")
-                    # 当切换到非三维旋转模式的时候,将圆球设置为不可选中状态,防止拖动管道圆球上的时候圆球吸附到sphere_obj上而非红环平面上
-                    sphere_obj.hide_select = False
-                    sphere_obj.select_set(False)
-                    sphere_obj.hide_select = True
+                    #号角管旋转完成时,将隐藏的红球显示出来并更新号角管控制红球的位置
                     update_hornpipe_rotate_finish()
             elif (name == '左耳'):
                 is_on_rotateL = not is_on_rotateL
                 if (is_on_rotateL == True):
-                    sphere_obj.hide_select = False
-                    sphere_obj.select_set(True)
+                    print("按钮三维旋转")
+                    # 号角管旋转初始化,将管道红球隐藏并得到管道末端及其上一个红球到号角管平面的距离,用于旋转状态下更新offset参数
                     update_hornpipe_rotate_initial()
                 else:
-                    sphere_obj.hide_select = False
-                    sphere_obj.select_set(False)
-                    sphere_obj.hide_select = True
+                    print("按钮非三维旋转")
+                    # 号角管旋转完成时,将隐藏的红球显示出来并更新号角管控制红球的位置
                     update_hornpipe_rotate_finish()
         return {'FINISHED'}
+
+
+class TEST_OT_mirrorsoundcanal(bpy.types.Operator):
+    bl_idname = 'object.mirrorsoundcanal'
+    bl_label = '传声孔镜像'
+
+    def invoke(self, context, event):
+        bpy.context.scene.var = 23
+        self.execute(context)
+        return {'FINISHED'}
+
+    def execute(self, context):
+        global object_dic, object_dicL
+        global soundcanal_dataL, soundcanal_data
+        global object_dic, object_dicL
+        global number, numberL
+        global soundcanal_shape, soundcanal_shapeL
+
+        tar_obj_name = bpy.context.scene.leftWindowObj
+        tar_obj = bpy.data.objects[tar_obj_name]
+
+        workspace = context.window.workspace.name
+
+        ori_soundcanal_shape = None
+
+        # 只在双窗口下执行镜像
+        if workspace == '布局.001':
+            if tar_obj_name == '左耳':
+                ori_spheres = [obj for obj in bpy.context.scene.objects if
+                               obj.name.startswith('右耳soundcanalsphere') and not (
+                                           obj.name.endswith('100') or obj.name.endswith('101'))]
+                new_spheres = [obj for obj in bpy.context.scene.objects if obj.name.startswith('左耳soundcanalsphere')]
+
+                tar_soundcanal_data = soundcanal_dataL
+                ori_soundcanal_data = soundcanal_data
+
+                tar_object_dic = object_dicL
+                ori_object_dic = object_dic
+
+                ori_soundcanal_shape = soundcanal_shape
+            else:
+                ori_spheres = [obj for obj in bpy.context.scene.objects if
+                               obj.name.startswith('左耳soundcanalsphere') and not (
+                                           obj.name.endswith('100') or obj.name.endswith('101'))]
+                new_spheres = [obj for obj in bpy.context.scene.objects if obj.name.startswith('右耳soundcanalsphere')]
+
+                tar_soundcanal_data = soundcanal_data
+                ori_soundcanal_data = soundcanal_dataL
+
+                tar_object_dic = object_dic
+                ori_object_dic = object_dicL
+
+                ori_soundcanal_shape = soundcanal_shapeL
+
+            # 删除原有的所有圆球，清空曲线控制点坐标信息和字典
+            for obj in new_spheres:
+                bpy.data.objects.remove(obj, do_unlink=True)
+            tar_soundcanal_data.clear()
+            tar_object_dic.clear()
+            # 删除原有曲线及其网格
+            for obj in bpy.data.objects:
+                if obj.name == tar_obj_name + "soundcanal":
+                    bpy.data.objects.remove(obj, do_unlink=True)
+                elif obj.name == tar_obj_name + "meshsoundcanal":
+                    bpy.data.objects.remove(obj, do_unlink=True)
+
+            # 镜像创建各个圆球
+            if len(new_spheres) == 0:
+                i = 1
+                for obj in ori_spheres:
+                    ori_obj_name = obj.name
+                    # 获取原始对象
+                    ori_obj = bpy.data.objects.get(ori_obj_name)
+                    new_obj_data = ori_obj.data.copy()
+
+                    new_name = ''
+                    if tar_obj_name == '左耳':
+                        new_name = f"左耳soundcanalsphere{i}"
+                    else:
+                        new_name = f"右耳soundcanalsphere{i}"
+                    i += 1
+
+                    new_obj = bpy.data.objects.new(name=new_name, object_data=new_obj_data)
+
+                    # 设置新对象的位置为原始对象的位置
+                    new_obj.location = ori_obj.location.copy()
+                    # 将新对象的Y坐标置反
+                    new_obj.location.y = -new_obj.location.y
+                    # 圆球放到相应的集合中
+                    if tar_obj_name == '左耳':
+                        bpy.data.collections['Left'].objects.link(new_obj)
+                    else:
+                        bpy.data.collections['Right'].objects.link(new_obj)
+
+                    if i != 2:
+                        new_spheres.append(new_obj)
+
+            # 将字典复制并改变键值
+            if tar_obj_name == '左耳':
+                tar_object_dic = {key.replace('右', '左'): value for key, value in ori_object_dic.items()}
+                numberL = len(tar_object_dic)
+            else:
+                tar_object_dic = {key.replace('左', '右'): value for key, value in ori_object_dic.items()}
+                number = len(tar_object_dic)
+
+            # 复制soundcanal_data
+            for i in range(len(ori_spheres)):
+                tar_soundcanal_data.append(ori_soundcanal_data[3 * i])
+                tar_soundcanal_data.append(-1 * ori_soundcanal_data[3 * i + 1])
+                tar_soundcanal_data.append(ori_soundcanal_data[3 * i + 2])
+
+            if tar_obj_name == '左耳':
+                soundcanal_dataL = tar_soundcanal_data
+                object_dicL = tar_object_dic
+            else:
+                soundcanal_data = tar_soundcanal_data
+                object_dic = tar_object_dic
+
+            if len(tar_object_dic) <= 1:  # 如果只有一个红球，不进行镜像，直接删除相关数据
+                if tar_obj_name == '左耳':
+                    numerL = 0
+                else:
+                    numer = 0
+                tar_soundcanal_data.clear()
+                tar_object_dic.clear()
+
+            elif len(tar_object_dic) > 1:  # 如果有两个及以上个红球，生成管道
+                # initialTransparency()
+                # tar_obj.data.materials.clear()
+                # tar_obj.data.materials.append(bpy.data.materials['Transparency'])
+                name = bpy.context.scene.leftWindowObj
+                if name == '右耳':
+                    bpy.context.scene.transparent3EnumR = 'OP3'
+                    # bpy.context.scene.transparentper3EnumR = '0.6'
+                elif name == '左耳':
+                    bpy.context.scene.transparent3EnumL = 'OP3'
+                    # bpy.context.scene.transparentper3EnumR = '0.6'
+
+                newColor('grey', 0.8, 0.8, 0.8, 0, 1)
+                newColor('grey2', 0.8, 0.8, 0.8, 1, 0.4)
+                obj = new_curve(tar_obj_name + 'soundcanal')
+                obj.data.materials.append(bpy.data.materials["grey"])
+                # 添加一个曲线样条
+                spline = obj.data.splines.new(type='NURBS')
+                spline.order_u = 2
+                spline.use_smooth = True
+                spline.points.add(count=len(tar_object_dic) - 1)
+                for i, point in enumerate(spline.points):
+                    point.co = (
+                    tar_soundcanal_data[3 * i], tar_soundcanal_data[3 * i + 1], tar_soundcanal_data[3 * i + 2], 1)
+
+                bpy.ops.object.select_all(action='DESELECT')
+                obj.select_set(True)
+                bpy.context.view_layer.objects.active = obj
+                bpy.ops.object.duplicate()
+                duplicated_curve_obj = bpy.context.view_layer.objects.active
+                duplicated_curve_obj.name = f"{tar_obj_name}meshsoundcanal"
+                bpy.ops.object.convert(target='MESH')
+                obj.hide_set(True)
+
+                # 号角管相关
+                if ori_soundcanal_shape == 'OP2':
+                    if tar_obj_name == '左耳':
+                        soundcanal_shapeL = 'OP2'
+                    else:
+                        soundcanal_shape = 'OP2'
+
+        bpy.ops.object.addsoundcanal('INVOKE_DEFAULT')
+
+
+class TEST_OT_initialsoundcanal(bpy.types.Operator):
+    bl_idname = 'object.initialsoundcanal'
+    bl_label = '传声孔初始化'
+
+    def invoke(self, context, event):
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+        global is_mouseSwitch_modal_start
+        global is_mouseSwitch_modal_startL
+        name = bpy.context.scene.leftWindowObj
+        if name == '右耳':
+            if not is_mouseSwitch_modal_start:
+                is_mouseSwitch_modal_start = True
+                bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
+                return {'FINISHED'}
+        elif name == '左耳':
+            if not is_mouseSwitch_modal_startL:
+                is_mouseSwitch_modal_startL = True
+                bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
+                return {'FINISHED'}
+
+        return {'PASS_THROUGH'}
 
 
 def new_curve(curve_name):
@@ -1481,21 +1792,23 @@ def finish_canal(co):
     ''' 完成管道的初始化。存在一个圆球的情况加,再添加一个新的圆球  管道会初始化显示出来'''
     # 主窗口物体
     name = bpy.context.scene.leftWindowObj
+    global object_dic
+    global object_dicL
     global soundcanal_shape
     global soundcanal_shapeL
     global soundcanal_hornpipe_offset
     global soundcanal_hornpipe_offsetL
+    object_dic_cur = None
     soundcanal_enum_cur = None
-    soundcanal_hornpipe_offset_cur = 0
     if name == '右耳':
+        object_dic_cur = object_dic
         soundcanal_enum_cur = soundcanal_shape
         bpy.context.scene.soundcancalShapeEnum = soundcanal_shape
-        soundcanal_hornpipe_offset_cur = soundcanal_hornpipe_offset
         bpy.context.scene.chuanShenKongOffset = soundcanal_hornpipe_offset
     elif name == '左耳':
+        object_dic_cur = object_dicL
         soundcanal_enum_cur = soundcanal_shapeL
         bpy.context.scene.soundcancalShapeEnum_L = soundcanal_shapeL
-        soundcanal_hornpipe_offset_cur = soundcanal_hornpipe_offsetL
         bpy.context.scene.chuanShenKongOffset_L = soundcanal_hornpipe_offsetL
     curve_object = bpy.data.objects[name + 'soundcanal']
     curve_data = curve_object.data
@@ -1518,23 +1831,116 @@ def finish_canal(co):
     # 添加两个圆球并将索引信息保存到字典中
     add_sphere(co, 2)
     add_sphere(projected_point, 1)
+    # 确保后期添加号角管的时候,号角管一定添加在下面的底部红球末端位置(由于历史问题,号角管一定添加在后缀为2的红球)
+    sphere_name1 = name + 'soundcanalsphere1'
+    sphere_obj1 = bpy.data.objects.get(sphere_name1)
+    sphere_name2 = name + 'soundcanalsphere2'
+    sphere_obj2 = bpy.data.objects.get(sphere_name2)
+    if (sphere_obj1 != None and sphere_obj2 != None):
+        if (sphere_obj2.location[2] > sphere_obj1.location[2]):
+            # 更新互换二者红球的名称
+            shpere_name_temp = name + 'soundcanalspheretemp'
+            sphere_obj1.name = shpere_name_temp
+            sphere_obj2.name = sphere_name1
+            sphere_obj1.name = sphere_name2
+            #更新互换曲线控制点
+            curve_point0_co = bpy.data.objects[name + 'soundcanal'].data.splines[0].points[0].co[0:3]
+            curve_point2_co =bpy.data.objects[name + 'soundcanal'].data.splines[0].points[2].co[0:3]
+            bpy.data.objects[name + 'soundcanal'].data.splines[0].points[0].co[0:3] = curve_point2_co
+            bpy.data.objects[name + 'soundcanal'].data.splines[0].points[2].co[0:3] = curve_point0_co
+    # 根据管道两端的红球复制出两个透明圆球,操作管道两端的时候,每次激活的都是这两个透明圆球,用于限制实际的两端管道红球和管道控制点在左右耳模型上
+    sphere_name1 = name + 'soundcanalsphere' + '1'
+    sphere_obj1 = bpy.data.objects.get(sphere_name1)
+    duplicate_obj1 = sphere_obj1.copy()
+    duplicate_obj1.data = sphere_obj1.data.copy()
+    duplicate_obj1.animation_data_clear()
+    duplicate_obj1.name = name + 'soundcanalsphere' + '201'
+    bpy.context.scene.collection.objects.link(duplicate_obj1)
+    newColor('soundcanalSphereTransparency', 0.8, 0.8, 0.8, 1, 0.03)
+    # newColor('soundcanalSphereTransparency', 0, 1, 1, 1, 0.9)
+    duplicate_obj1.data.materials.clear()
+    duplicate_obj1.data.materials.append(bpy.data.materials['soundcanalSphereTransparency'])
+    duplicate_obj1.scale[0] = 1.5
+    duplicate_obj1.scale[1] = 1.5
+    duplicate_obj1.scale[2] = 1.5
+    sphere_name2 = name + 'soundcanalsphere' + '2'
+    sphere_obj2 = bpy.data.objects.get(sphere_name2)
+    duplicate_obj2 = sphere_obj2.copy()
+    duplicate_obj2.data = sphere_obj2.data.copy()
+    duplicate_obj2.animation_data_clear()
+    duplicate_obj2.name = name + 'soundcanalsphere' + '202'
+    bpy.context.scene.collection.objects.link(duplicate_obj2)
+    newColor('soundcanalSphereTransparency', 0.8, 0.8, 0.8, 1, 0.03)
+    # newColor('soundcanalSphereTransparency', 0, 1, 1, 1, 0.9)
+    duplicate_obj2.data.materials.clear()
+    duplicate_obj2.data.materials.append(bpy.data.materials['soundcanalSphereTransparency'])
+    duplicate_obj2.scale[0] = 1.5
+    duplicate_obj2.scale[1] = 1.5
+    duplicate_obj2.scale[2] = 1.5
+    if name == '右耳':
+        moveToRight(duplicate_obj1)
+        moveToRight(duplicate_obj2)
+    elif name == '左耳':
+        moveToLeft(duplicate_obj1)
+        moveToLeft(duplicate_obj2)
+    # 根据管道控制点生成曲线网格
     convert_soundcanal()
-    save_soundcanal_info(co)
+    save_soundcanal_info([0, 0, 0])
     curve_object.hide_set(True)
     bpy.data.objects[name].hide_select = True
-    if (soundcanal_enum_cur == 'OP2'):
-        # 将管道末端控制点隐藏
+
+    # 在管道末端初始化添加一个号角管
+    initial_hornpipe()
+    # 根据offset面板参数更新号角管和管道末端控制点的位置
+    update_hornpipe_offset()
+    # 根据面板offset参数设置号角管偏移位置
+    hornpipe_name = name + 'Hornpipe'
+    hornpipe_obj = bpy.data.objects.get(hornpipe_name)
+    hornpipe_plane_name = name + 'HornpipePlane'
+    hornpipe_plane_obj = bpy.data.objects.get(hornpipe_plane_name)
+    hornpipe_sphere_name = name + 'soundcanalsphere' + '100'
+    hornpipe_sphere_obj = bpy.data.objects.get(hornpipe_sphere_name)
+    hornpipe_sphere_name1 = name + 'soundcanalsphere' + '101'
+    hornpipe_sphere_obj1 = bpy.data.objects.get(hornpipe_sphere_name1)
+    if (soundcanal_enum_cur == 'OP1'):
+        #将号角管相关物体隐藏
+        if (hornpipe_obj != None):
+            hornpipe_obj.hide_set(True)
+        if (hornpipe_plane_obj != None):
+            hornpipe_plane_obj.hide_set(True)
+        if (hornpipe_sphere_obj != None):
+            hornpipe_sphere_obj.hide_set(True)
+        if (hornpipe_sphere_obj1 != None):
+            hornpipe_sphere_obj1.hide_set(True)
+        # 将管道上的所有圆球控制点显示
+        for key in object_dic_cur:
+            sphere_obj = bpy.data.objects.get(key)
+            if (sphere_obj != None):
+                sphere_obj.hide_set(False)
+        # 将管道末端控制点设置为末端红球位置
+        last_sphere_name = name + 'soundcanalsphere' + str(2)
+        last_sphere_obj = bpy.data.objects.get(last_sphere_name)
+        index = int(object_dic_cur[last_sphere_name])
+        bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[0:3] = last_sphere_obj.location
+        bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[3] = 1
+        save_soundcanal_info([0, 0, 0])
+    elif (soundcanal_enum_cur == 'OP2'):
+        # 根据面板offset参数设置号角管偏移位置
+        update_hornpipe_offset()
+        update_hornpipe_location()
+        # 将号角管末端红球隐藏
         last_sphere_name = name + 'soundcanalsphere' + '2'
         last_sphere_obj = bpy.data.objects.get(last_sphere_name)
         last_sphere_obj.hide_set(True)
-        # 在管道末端初始化添加一个号角管
-        initial_hornpipe()
-        # 根据面板offset参数设置号角管偏移位置
-        update_hornpipe_offset_location_normal()
+        # 将号角管末端透明圆球隐藏
+        last_sphere_name1 = name + 'soundcanalsphere' + '202'
+        last_sphere_obj1 = bpy.data.objects.get(last_sphere_name1)
+        last_sphere_obj1.hide_set(True)
+
 
 
 def hooktoobject(index):
-    ''' 建立指定下标的控制点到圆球的字典 '''
+    ''' 建立指定{新建的红球名称:下标index}添加到到圆球映射字典 '''
     global number
     global numberL
     global object_dic
@@ -1597,15 +2003,6 @@ def initial_hornpipe():
     # 为号角管添加灰色材质
     newColor('grey', 0.8, 0.8, 0.8, 0, 1)  # 灰色不透明材质
     hornpipe_obj.data.materials.append(bpy.data.materials["grey"])
-    # 导入传声孔模块中的圆球,主要用于鼠标模式切换,当三维旋转状态开启的时候,鼠标在圆球上的时候,调用三维旋转鼠标行为,否则调用公共鼠标行为
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=30, ring_count=30, radius=15, enter_editmode=False, align='WORLD',
-                                         location=(0, -4.8, 4.5), scale=(1, 1, 1))
-    spherename = "Sphere"
-    sphere_obj = bpy.data.objects[spherename]
-    sphere_obj.name = name + "SoundcanalSphere"
-    initialSoundcanalTransparency()
-    sphere_obj.data.materials.clear()
-    sphere_obj.data.materials.append(bpy.data.materials['SoundcanalTransparency'])
     # 创建一个平面作为号角管的父物体,用于将号角管的位置摆正对齐
     bpy.ops.mesh.primitive_plane_add(enter_editmode=False, align='WORLD', location=(0, -4.8, 4.5), scale=(1, 1, 1))
     planename = "Plane"
@@ -1618,12 +2015,8 @@ def initial_hornpipe():
     plane_obj.select_set(True)
     bpy.context.view_layer.objects.active = plane_obj
     hornpipe_obj.select_set(True)
-    sphere_obj.select_set(True)
     bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
     hornpipe_obj.select_set(False)
-    sphere_obj.select_set(False)
-    # 将圆球设置为不可选中防止吸附到圆球上
-    sphere_obj.hide_select = True
     # 获取管道末端控制点 和 与其相连的管道控制点 得到二者法线
     last_sphere_name = name + 'soundcanalsphere' + str(2)
     last_sphere_obj = bpy.data.objects.get(last_sphere_name)
@@ -1642,7 +2035,7 @@ def initial_hornpipe():
     normal = Vector(middle_co[0:3]) - Vector(co[0:3])
     horn_fit_rotate(normal, co)
     # 获取号角管控制点的位置
-    step = 10
+    step = 15
     hornpipe_point = (
     co[0] - normal.normalized()[0] * step, co[1] - normal.normalized()[1] * step, co[2] - normal.normalized()[2] * step)
     # 添加号角管控制圆球,鼠标激活拖动的是该圆球
@@ -1653,17 +2046,18 @@ def initial_hornpipe():
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.select_all(action='DESELECT')
     obj.select_set(state=True)
-    bpy.ops.object.mode_set(mode='EDIT')
-    bm = bmesh.from_edit_mesh(obj.data)
+    me = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
     radius = 0.64
     segments = 32
     bmesh.ops.create_uvsphere(bm, u_segments=segments, v_segments=segments, radius=radius * 2)
-    bmesh.update_edit_mesh(obj.data)
-    bpy.ops.object.mode_set(mode='OBJECT')
+    bm.to_mesh(me)
+    bm.free()
     newColor('hornpipeSphereTransparency', 0.8, 0.8, 0.8, 1, 0.03)
     obj.data.materials.append(bpy.data.materials['hornpipeSphereTransparency'])
     obj.location = hornpipe_point
-    # 添加用于显示的号角管圆球,鼠标激活拖动号角管控制圆球的时候,该
+    # 添加用于显示的号角管圆球,鼠标激活拖动号角管控制圆球的时候,由号角管控制圆球与管道末端的上一个圆球决定该圆球的位置
     mesh = bpy.data.meshes.new(name + "soundcanalsphere")
     name1 = name + 'soundcanalsphere' + '101'  # 号角管控制圆球位置信息相对于号角管固定,因此其位置信息不会被保存,也不会将索引保存在object_dic中
     obj1 = bpy.data.objects.new(name1, mesh)  # 圆球名称为  右/左soundcanalsphere100 末尾数字下标固定为101
@@ -1671,26 +2065,25 @@ def initial_hornpipe():
     bpy.context.view_layer.objects.active = obj1
     bpy.ops.object.select_all(action='DESELECT')
     obj1.select_set(state=True)
-    bpy.ops.object.mode_set(mode='EDIT')
-    bm = bmesh.from_edit_mesh(obj1.data)
-    radius = 0.4
+    me = obj1.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    radius = 0.64
     segments = 32
     bmesh.ops.create_uvsphere(bm, u_segments=segments, v_segments=segments, radius=radius * 2)
-    bmesh.update_edit_mesh(obj1.data)
-    bpy.ops.object.mode_set(mode='OBJECT')
+    bm.to_mesh(me)
+    bm.free()
     obj1.data.materials.append(bpy.data.materials['red'])
     obj1.select_set(False)
     obj1.location = hornpipe_point
     # 将添加的物体移动到集合中
     if name == '右耳':
         moveToRight(hornpipe_obj)
-        moveToRight(sphere_obj)
         moveToRight(plane_obj)
         moveToRight(obj)
         moveToRight(obj1)
     elif name == '左耳':
         moveToLeft(hornpipe_obj)
-        moveToLeft(sphere_obj)
         moveToLeft(plane_obj)
         moveToLeft(obj)
         moveToLeft(obj1)
@@ -1707,10 +2100,12 @@ def initial_hornpipe():
 
     # 设置旋转中心
     bpy.ops.object.select_all(action='DESELECT')
-    bpy.context.view_layer.objects.active = bpy.data.objects.get(name)
+    cur_obj = bpy.data.objects.get(name)
+    cur_obj.select_set(True)
+    bpy.context.view_layer.objects.active = cur_obj
 
 
-def update_hornpipe_offset_location_normal():
+def update_hornpipe_offset():
     '''
     根据面板的offset参数控制号角管的
     '''
@@ -1718,6 +2113,8 @@ def update_hornpipe_offset_location_normal():
     global object_dicL
     global soundcanal_hornpipe_offset
     global soundcanal_hornpipe_offsetL
+    global soundcanal_convert
+    global soundcanal_convertL
     name = bpy.context.scene.leftWindowObj
     object_dic_cur = None
     soundcanal_hornpipe_offset_cur = 0
@@ -1756,18 +2153,126 @@ def update_hornpipe_offset_location_normal():
         index = int(object_dic_cur[last_sphere_name])
         bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[0:3] = offset_co
         bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[3] = 1
-        flag = save_soundcanal_info(offset_co)
-        if flag:
-            convert_soundcanal()
+        # flag = save_soundcanal_info(offset_co)
+        # if flag:
+        #     convert_soundcanal()
+        #将曲线管道显示出来,mesh管道隐藏(若实时根据曲线管道更新mesh管道信息,容易闪退)
+        bpy.data.objects[name + 'soundcanal'].hide_set(False)
+        bpy.data.objects[name + 'meshsoundcanal'].hide_set(True)
+        if (name == "右耳"):
+            soundcanal_convert = True
+        elif (name == "左耳"):
+            soundcanal_convertL = True
         # 号角管的位置随offset偏移并摆正
         horn_fit_rotate(normal, offset_co)
         # 更新号角管控制红球的位置
-        step = 10
+        step = 15
         hornpipe_point = (offset_co[0] - normal.normalized()[0] * step, offset_co[1] - normal.normalized()[1] * step,
                           offset_co[2] - normal.normalized()[2] * step)
         hornpipe_sphere_obj.location = hornpipe_point
         hornpipe_sphere_obj1.location = hornpipe_point
 
+def update_hornpipe_enum():
+    '''
+    根据面板的管道类型参数控制传声孔类型
+    '''
+    global object_dic
+    global object_dicL
+    global is_on_rotate
+    global is_on_rotateL
+    global soundcanal_shape
+    global soundcanal_shapeL
+    global soundcanal_convert
+    global soundcanal_convertL
+    name = bpy.context.scene.leftWindowObj
+    object_dic_cur = None
+    soundcanal_enum_cur = None
+    if name == '右耳':
+        is_on_rotate = False
+        object_dic_cur = object_dic
+        soundcanal_enum_cur = bpy.context.scene.soundcancalShapeEnum
+        soundcanal_shape = bpy.context.scene.soundcancalShapeEnum
+    elif name == '左耳':
+        is_on_rotateL = False
+        object_dic_cur = object_dicL
+        soundcanal_enum_cur = bpy.context.scene.soundcancalShapeEnum_L
+        soundcanal_shapeL = bpy.context.scene.soundcancalShapeEnum_L
+    #切换到红球拖动更新管道位置与公共鼠标行为的鼠标行为
+    bpy.ops.wm.tool_set_by_id(name="my_tool.addsoundcanal2")
+    hornpipe_name = name + 'Hornpipe'
+    hornpipe_obj = bpy.data.objects.get(hornpipe_name)
+    hornpipe_plane_name = name + 'HornpipePlane'
+    hornpipe_plane_obj = bpy.data.objects.get(hornpipe_plane_name)
+    hornpipe_sphere_name = name + 'soundcanalsphere' + '100'
+    hornpipe_sphere_obj = bpy.data.objects.get(hornpipe_sphere_name)
+    hornpipe_sphere_name1 = name + 'soundcanalsphere' + '101'
+    hornpipe_sphere_obj1 = bpy.data.objects.get(hornpipe_sphere_name1)
+    last_sphere_name = name + 'soundcanalsphere' + str(2)
+    last_sphere_obj = bpy.data.objects.get(last_sphere_name)
+    soundcanal_sphere_name = name + 'soundcanalsphere' + str(201)  # 号角管控制圆球
+    soundcanal_sphere_obj = bpy.data.objects.get(soundcanal_sphere_name)
+    soundcanal_sphere_name1 = name + 'soundcanalsphere' + str(202)  # 号角管显示圆球
+    soundcanal_sphere_obj1 = bpy.data.objects.get(soundcanal_sphere_name1)
+    # 红球数量大于2,存在传声管道的时候
+    if (last_sphere_obj != None):
+        if (soundcanal_enum_cur == 'OP1'):
+            # 将号角管与及其控制点隐藏
+            if (hornpipe_obj != None):
+                hornpipe_obj.hide_set(True)
+            if (hornpipe_plane_obj != None):
+                hornpipe_plane_obj.hide_set(True)
+            if (hornpipe_sphere_obj != None):
+                hornpipe_sphere_obj.hide_set(True)
+            if (hornpipe_sphere_obj1 != None):
+                hornpipe_sphere_obj1.hide_set(True)
+            # 将管道红球显示出来
+            for key in object_dic_cur:
+                sphere_obj = bpy.data.objects.get(key)
+                if (sphere_obj != None):
+                    sphere_obj.hide_set(False)
+            # 将管道末端透明红球显示出来
+            if (soundcanal_sphere_obj != None):
+                soundcanal_sphere_obj.hide_set(False)
+            if (soundcanal_sphere_obj1 != None):
+                soundcanal_sphere_obj1.hide_set(False)
+            # 将管道末端控制点设置为末端红球位置
+            index = int(object_dic_cur[last_sphere_name])
+            bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[0:3] = last_sphere_obj.location
+            bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[3] = 1
+            save_soundcanal_info([0, 0, 0])
+            # convert_soundcanal()
+            # 将曲线管道显示出来,mesh管道隐藏(若实时根据曲线管道更新mesh管道信息,容易闪退)
+            bpy.data.objects[name + 'soundcanal'].hide_set(False)
+            bpy.data.objects[name + 'meshsoundcanal'].hide_set(True)
+            if (name == "右耳"):
+                soundcanal_convert = True
+            elif (name == "左耳"):
+                soundcanal_convertL = True
+        elif (soundcanal_enum_cur == 'OP2'):
+            # 将号角管及其控制点显示出来
+            if (hornpipe_obj != None):
+                hornpipe_obj.hide_set(False)
+            if (hornpipe_plane_obj != None):
+                hornpipe_plane_obj.hide_set(False)
+            if (hornpipe_sphere_obj != None):
+                hornpipe_sphere_obj.hide_set(False)
+            if (hornpipe_sphere_obj1 != None):
+                hornpipe_sphere_obj1.hide_set(False)
+            # 将号角管末端红球和透明圆球隐藏
+            last_sphere_obj.hide_set(True)
+            if (soundcanal_sphere_obj1 != None):
+                soundcanal_sphere_obj1.hide_set(True)
+            # 根据offset面板参数更新号角管和管道末端控制点的位置
+            update_hornpipe_offset()
+            update_hornpipe_location()
+            # convert_soundcanal()
+            # 将曲线管道显示出来,mesh管道隐藏(若实时根据曲线管道更新mesh管道信息,容易闪退)
+            bpy.data.objects[name + 'soundcanal'].hide_set(False)
+            bpy.data.objects[name + 'meshsoundcanal'].hide_set(True)
+            if (name == "右耳"):
+                soundcanal_convert = True
+            elif (name == "左耳"):
+                soundcanal_convertL = True
 
 def update_hornpipe_location():
     '''
@@ -1813,10 +2318,13 @@ def update_hornpipe_location():
         hit, loc, normal, index = cur_obj.ray_cast(cur_co, normal)
         # 将管道末端红球和其对应的管道控制点位置设置为交点位置,同步更新号角管的位置
         if (hit):
-            # 更新管道末端控制点及对应红球的位置信息
+            # 更新管道末端控制点及对应红球,透明圆球的位置信息
             last_sphere_name = name + 'soundcanalsphere' + str(2)
             last_sphere_obj = bpy.data.objects[last_sphere_name]
             last_sphere_obj.location = loc
+            last_sphere_name1 = name + 'soundcanalsphere' + str(202)
+            last_sphere_obj1 = bpy.data.objects[last_sphere_name1]
+            last_sphere_obj1.location = loc
             step = soundcanal_hornpipe_offset_cur
             normal = Vector(middle_co[0:3]) - Vector(loc[0:3])
             offset_co = (loc[0] - normal.normalized()[0] * step, loc[1] - normal.normalized()[1] * step,
@@ -1831,7 +2339,7 @@ def update_hornpipe_location():
             # 更新号角管的位置并将其摆正对齐
             horn_fit_rotate(normal, offset_co)
             # 更新号角管红球位置
-            step = 10
+            step = 15
             hornpipe_point = (
             offset_co[0] - normal.normalized()[0] * step, offset_co[1] - normal.normalized()[1] * step,
             offset_co[2] - normal.normalized()[2] * step)
@@ -1845,13 +2353,21 @@ def update_hornpipe_rotate_initial():
     将圆球和红环平面隐藏,得到管道末端及其上一个控制点到号角管的距离
     '''
     name = bpy.context.scene.leftWindowObj
-    global middle_dis
-    global last_dis
+    global rotate_middle_dis
+    global rotate_middle_disL
+    global rotate_last_dis
+    global rotate_last_disL
+    global rotate_offset
+    global rotate_offsetL
+    global soundcanal_convert
+    global soundcanal_convertL
     object_dic_cur = None
     if (name == "右耳"):
         object_dic_cur = object_dic
+        rotate_offset = bpy.context.scene.chuanShenKongOffset
     elif (name == "左耳"):
         object_dic_cur = object_dicL
+        rotate_offsetL = bpy.context.scene.chuanShenKongOffset_L
     # 找到与号角管相连的管道控制点a的上一个控制点b,记录二者之间的距离dis和此时的offset参数,更改offset的时候,更新dis,根据控制点b的位置更新号角管
     plane_name = name + 'HornpipePlane'
     plane_obj = bpy.data.objects.get(plane_name)
@@ -1869,10 +2385,16 @@ def update_hornpipe_rotate_initial():
             middle_sphere_obj = key_obj
             break
     middle_co = middle_sphere_obj.location
-    middle_dis = sqrt((plane_co[0] - middle_co[0]) ** 2 + (plane_co[1] - middle_co[1]) ** 2 + (
-            plane_co[2] - middle_co[2]) ** 2)
-    last_dis = sqrt((plane_co[0] - last_co[0]) ** 2 + (plane_co[1] - last_co[1]) ** 2 + (
-            plane_co[2] - last_co[2]) ** 2)
+    if (name == "右耳"):
+        rotate_middle_dis = sqrt((plane_co[0] - middle_co[0]) ** 2 + (plane_co[1] - middle_co[1]) ** 2 + (
+                plane_co[2] - middle_co[2]) ** 2)
+        rotate_last_dis = sqrt((plane_co[0] - last_co[0]) ** 2 + (plane_co[1] - last_co[1]) ** 2 + (
+                plane_co[2] - last_co[2]) ** 2)
+    elif (name == "左耳"):
+        rotate_middle_disL = sqrt((plane_co[0] - middle_co[0]) ** 2 + (plane_co[1] - middle_co[1]) ** 2 + (
+                plane_co[2] - middle_co[2]) ** 2)
+        rotate_last_disL = sqrt((plane_co[0] - last_co[0]) ** 2 + (plane_co[1] - last_co[1]) ** 2 + (
+                plane_co[2] - last_co[2]) ** 2)
     # 将管道上的所有圆球控制点隐藏
     for key in object_dic_cur:
         sphere_obj = bpy.data.objects.get(key)
@@ -1882,13 +2404,26 @@ def update_hornpipe_rotate_initial():
     hornpipe_sphere_obj = bpy.data.objects.get(hornpipe_sphere_name)
     hornpipe_sphere_name1 = name + 'soundcanalsphere' + str(101)  # 号角管显示圆球
     hornpipe_sphere_obj1 = bpy.data.objects.get(hornpipe_sphere_name1)
+    soundcanal_sphere_name = name + 'soundcanalsphere' + str(201) # 号角管控制圆球
+    soundcanal_sphere_obj = bpy.data.objects.get(soundcanal_sphere_name)
+    soundcanal_sphere_name1 = name + 'soundcanalsphere' + str(202) # 号角管显示圆球
+    soundcanal_sphere_obj1 = bpy.data.objects.get(soundcanal_sphere_name1)
     if (hornpipe_sphere_obj != None):
         hornpipe_sphere_obj.hide_set(True)
     if (hornpipe_sphere_obj1 != None):
         hornpipe_sphere_obj1.hide_set(True)
+    if (soundcanal_sphere_obj != None):
+        soundcanal_sphere_obj.hide_set(True)
+    if (soundcanal_sphere_obj1 != None):
+        soundcanal_sphere_obj1.hide_set(True)
     # 将可能存在的管道圆球红环删除
     delete_sphere_snap_plane()
 
+    #先将网格管道隐藏,曲线管道显示,避免实时将曲线管道转换为网格管道出现闪退以及鼠标问题
+    if (name == "右耳"):
+        soundcanal_convert = True
+    elif (name == "左耳"):
+        soundcanal_convertL = True
     curve_obj = bpy.data.objects[name + 'soundcanal']
     mesh_obj = bpy.data.objects[name + 'meshsoundcanal']
     curve_obj.hide_set(False)
@@ -1899,22 +2434,34 @@ def update_hornpipe_rotate():
     '''
     使用鼠标三维旋转号角管的时候,实时更新管道控制点的位置
     '''
-    global middle_dis
-    global last_dis
+    global rotate_middle_dis
+    global rotate_middle_disL
+    global rotate_last_dis
+    global rotate_last_disL
+    global rotate_offset
+    global rotate_offsetL
     name = bpy.context.scene.leftWindowObj
     object_dic_cur = None
+    rotate_middle_dis_cur = None
+    rotate_last_dis_cur = None
+    rotate_offset_cur = None
     soundcanal_hornpipe_offset_cur = 0
     if (name == "右耳"):
         object_dic_cur = object_dic
-        soundcanal_hornpipe_offset_cur = soundcanal_hornpipe_offset
+        rotate_middle_dis_cur = rotate_middle_dis
+        rotate_last_dis_cur = rotate_last_dis
+        rotate_offset_cur = rotate_offset
+        soundcanal_hornpipe_offset_cur = bpy.context.scene.chuanShenKongOffset
     elif (name == "左耳"):
         object_dic_cur = object_dicL
-        soundcanal_hornpipe_offset_cur = soundcanal_hornpipe_offsetL
-    if (middle_dis != None and last_dis != None):
-        # 根据号角管平面的位置和法线方向,得到管道控制点中与号角管相连的末端控制点及其上一个控制点
+        rotate_middle_dis_cur = rotate_middle_disL
+        rotate_last_dis_cur = rotate_last_disL
+        rotate_offset_cur = rotate_offsetL
+        soundcanal_hornpipe_offset_cur = bpy.context.scene.chuanShenKongOffset_L
+    if (rotate_middle_dis_cur != None and rotate_last_dis_cur != None):
+        # 根据号角管平面的位置和法线方向
         plane_name = name + 'HornpipePlane'
         plane_obj = bpy.data.objects.get(plane_name)
-        # bpy.ops.object.transform_apply(location=False, rotation=True, scale=True, isolate_users=True)
         plane_co = plane_obj.location
         world_matrix = plane_obj.matrix_world
         plane_vert0 = world_matrix @ plane_obj.data.vertices[0].co
@@ -1923,42 +2470,48 @@ def update_hornpipe_rotate():
         point1 = mathutils.Vector((plane_vert0[0], plane_vert0[1], plane_vert0[2]))
         point2 = mathutils.Vector((plane_vert1[0], plane_vert1[1], plane_vert1[2]))
         point3 = mathutils.Vector((plane_vert2[0], plane_vert2[1], plane_vert2[2]))
-        # 计算两个向量
         vector1 = point2 - point1
         vector2 = point3 - point1
-        # 计算法向量
         plane_normal = vector1.cross(vector2)
-
-        last_dis_offset = last_dis - soundcanal_hornpipe_offset_cur
-        last_co = (
-            plane_co[0] + plane_normal.normalized()[0] * last_dis_offset,
-            plane_co[1] + plane_normal.normalized()[1] * last_dis_offset,
-            plane_co[2] + plane_normal.normalized()[2] * last_dis_offset)
-        middle_co = (plane_co[0] + plane_normal.normalized()[0] * middle_dis,
-                     plane_co[1] + plane_normal.normalized()[1] * middle_dis,
-                     plane_co[2] + plane_normal.normalized()[2] * middle_dis)
-
+        #计算管道末端红球及其上一个红球的位置,更新两红球的位置
+        if(rotate_offset_cur >= 0):
+            last_dis_offset = rotate_last_dis_cur + (soundcanal_hornpipe_offset_cur - rotate_offset_cur)
+            middle_dis_offset = rotate_middle_dis_cur + (soundcanal_hornpipe_offset_cur - rotate_offset_cur)
+            last_co = (
+                plane_co[0] + plane_normal.normalized()[0] * last_dis_offset,
+                plane_co[1] + plane_normal.normalized()[1] * last_dis_offset,
+                plane_co[2] + plane_normal.normalized()[2] * last_dis_offset)
+            middle_co = (plane_co[0] + plane_normal.normalized()[0] * middle_dis_offset,
+                         plane_co[1] + plane_normal.normalized()[1] * middle_dis_offset,
+                         plane_co[2] + plane_normal.normalized()[2] * middle_dis_offset)
+        else:
+            last_dis_offset = rotate_last_dis_cur - (soundcanal_hornpipe_offset_cur - rotate_offset_cur)
+            middle_dis_offset = rotate_middle_dis_cur + (soundcanal_hornpipe_offset_cur - rotate_offset_cur)
+            last_co = (
+                plane_co[0] - plane_normal.normalized()[0] * last_dis_offset,
+                plane_co[1] - plane_normal.normalized()[1] * last_dis_offset,
+                plane_co[2] - plane_normal.normalized()[2] * last_dis_offset)
+            middle_co = (plane_co[0] + plane_normal.normalized()[0] * middle_dis_offset,
+                         plane_co[1] + plane_normal.normalized()[1] * middle_dis_offset,
+                         plane_co[2] + plane_normal.normalized()[2] * middle_dis_offset)
+        #更新管道红球的位置
         last_sphere_name = name + 'soundcanalsphere' + str(2)
         last_sphere_obj = bpy.data.objects.get(last_sphere_name)
-        last_sphere_obj.hide_set(False)
+        last_sphere_name1 = name + 'soundcanalsphere' + str(202)
+        last_sphere_obj1 = bpy.data.objects.get(last_sphere_name1)
         middle_sphere_name = name + 'soundcanalsphere' + str(3)
         middle_sphere_obj = bpy.data.objects.get(middle_sphere_name)
         last_sphere_obj.location = last_co
+        last_sphere_obj1.location = last_co
         middle_sphere_obj.location = middle_co
 
         # 根据跟新后的控制点的位置,重新绘制管道
         last_sphere_name = name + 'soundcanalsphere' + str(2)
         last_index = int(object_dic_cur[last_sphere_name])
-        bpy.data.objects[name + 'soundcanal'].data.splines[0].points[last_index].co[0:3] = last_co
-        bpy.data.objects[name + 'soundcanal'].data.splines[0].points[last_index].co[3] = 1
         middle_index = last_index - 1
         bpy.data.objects[name + 'soundcanal'].data.splines[0].points[middle_index].co[0:3] = middle_co
         bpy.data.objects[name + 'soundcanal'].data.splines[0].points[middle_index].co[3] = 1
         save_soundcanal_info(middle_co)
-        # plane_obj = bpy.data.objects.get(name + 'HornpipePlane')
-        # bpy.ops.object.select_all(action='DESELECT')
-        # plane_obj.select_set(True)
-        # bpy.context.view_layer.objects.active = plane_obj
 
 
 
@@ -1969,23 +2522,28 @@ def update_hornpipe_rotate_finish():
     '''
     global object_dic
     global object_dicL
+    global soundcanal_convert
+    global soundcanal_convertL
     global soundcanal_hornpipe_offset
     global soundcanal_hornpipe_offsetL
     # 将管道上的所有圆球控制点显示出来
     name = bpy.context.scene.leftWindowObj
-    soundcanal_hornpipe_offset_cur = 0
     object_dic_cur = None
     if (name == "右耳"):
         object_dic_cur = object_dic
-        soundcanal_hornpipe_offset_cur = bpy.context.scene.chuanShenKongOffset
     elif (name == "左耳"):
         object_dic_cur = object_dicL
-        soundcanal_hornpipe_offset_cur = bpy.context.scene.chuanShenKongOffset_L
 
     hornpipe_sphere_name = name + 'soundcanalsphere' + str(100)  # 号角管控制红球
     hornpipe_sphere_obj = bpy.data.objects.get(hornpipe_sphere_name)
-    hornpipe_sphere_name1 = name + 'soundcanalsphere' + str(101)  # 号角管显示红球
+    hornpipe_sphere_name1 = name + 'soundcanalsphere' + str(101) # 号角管显示红球
     hornpipe_sphere_obj1 = bpy.data.objects.get(hornpipe_sphere_name1)
+    hornpipe_sphere_name2 = name + 'soundcanalsphere' + str(2)   # 号角管连接处红球
+    hornpipe_sphere_obj2 = bpy.data.objects.get(hornpipe_sphere_name2)
+    soundcanal_sphere_name = name + 'soundcanalsphere' + str(201)  # 号角管控制圆球
+    soundcanal_sphere_obj = bpy.data.objects.get(soundcanal_sphere_name)
+    soundcanal_sphere_name1 = name + 'soundcanalsphere' + str(202)  # 号角管显示圆球
+    soundcanal_sphere_obj1 = bpy.data.objects.get(soundcanal_sphere_name1)
     for key in object_dic_cur:
         sphere_obj = bpy.data.objects.get(key)
         if (sphere_obj != None):
@@ -1994,11 +2552,19 @@ def update_hornpipe_rotate_finish():
         hornpipe_sphere_obj.hide_set(False)
     if (hornpipe_sphere_obj1 != None):
         hornpipe_sphere_obj1.hide_set(False)
+    if (hornpipe_sphere_obj2 != None):                #号角管模式下,将该连接处的红球隐藏
+        hornpipe_sphere_obj2.hide_set(True)
+    if (soundcanal_sphere_obj != None):
+        soundcanal_sphere_obj.hide_set(False)
+    if (soundcanal_sphere_obj1 != None):              #号角管模式下,将该连接处的透明圆球隐藏
+        soundcanal_sphere_obj1.hide_set(True)
 
     # 更新管道红球的位置,将红球位置同步更新到 旋转后得到的新管道的对应管道控制点的位置
     # 根据与管道末端控制点相连的控制点红球和管道末端控制点红球位置获取对应法线
     last_sphere_name = name + 'soundcanalsphere' + str(2)
     last_sphere_obj = bpy.data.objects.get(last_sphere_name)
+    plane_name = name + 'HornpipePlane'
+    plane_obj = bpy.data.objects.get(plane_name)
     if (last_sphere_obj != None and hornpipe_sphere_obj != None and hornpipe_sphere_obj1 != None):
         last_co = last_sphere_obj.location
         last_index = int(object_dic_cur[last_sphere_name])
@@ -2014,55 +2580,19 @@ def update_hornpipe_rotate_finish():
         normal = Vector(middle_co[0:3]) - Vector(last_co[0:3])
 
         # 更新号角管控制红球的位置
-        step = 10
-        hornpipe_point = (last_co[0] - normal.normalized()[0] * step, last_co[1] - normal.normalized()[1] * step,
-                          last_co[2] - normal.normalized()[2] * step)
+        step = 15
+        plane_co = plane_obj.location
+        hornpipe_point = (plane_co[0] - normal.normalized()[0] * step, plane_co[1] - normal.normalized()[1] * step,
+                          plane_co[2] - normal.normalized()[2] * step)
         hornpipe_sphere_obj.location = hornpipe_point
         hornpipe_sphere_obj1.location = hornpipe_point
 
-    # 更新号角管最后一个点的位置，以防切换到非三维旋转时号角管位置重新调整
-    # cur_obj = bpy.data.objects[name]
-    # hornpipe_name = name + 'Hornpipe'
-    # hornpipe_obj = bpy.data.objects.get(hornpipe_name)
-    # # 存在号角管的时候,更新号角管的位置和角度
-    # if (hornpipe_obj != None and hornpipe_sphere_obj != None and hornpipe_sphere_obj1 != None):
-    #     cur_co = hornpipe_sphere_obj.location
-    #     # 根据与管道末端控制点相连的控制点红球和号角管红球当前位置获取对应法线
-    #     last_sphere_name = name + 'soundcanalsphere' + str(2)
-    #     last_index = int(object_dic_cur[last_sphere_name])
-    #     middle_index = last_index - 1  # 管道末端控制点相连的控制点红球索引比其小1
-    #     middle_sphere_obj = None
-    #     for key in object_dic_cur:
-    #         key_obj = bpy.data.objects[key]
-    #         key_index = int(object_dic_cur[key])
-    #         if (key_index == middle_index):
-    #             middle_sphere_obj = key_obj
-    #             break
-    #     middle_co = middle_sphere_obj.location
-    #     normal = Vector(middle_co[0:3]) - Vector(cur_co[0:3])
-    #     # 根据法线得到与模型的交点
-    #     hit, loc, normal, index = cur_obj.ray_cast(cur_co, normal)
-    #     # 将管道末端红球和其对应的管道控制点位置设置为交点位置,同步更新号角管的位置
-    #     if (hit):
-    #         # 更新管道末端控制点及对应红球的位置信息
-    #         last_sphere_name = name + 'soundcanalsphere' + str(2)
-    #         last_sphere_obj = bpy.data.objects[last_sphere_name]
-    #         last_sphere_obj.location = loc
-    #         step = soundcanal_hornpipe_offset_cur
-    #         normal = Vector(middle_co[0:3]) - Vector(loc[0:3])
-    #         offset_co = (loc[0] - normal.normalized()[0] * step, loc[1] - normal.normalized()[1] * step,
-    #                      loc[2] - normal.normalized()[2] * step)
-    #         # 管道末端长度随着offset偏移
-    #         index = int(object_dic_cur[last_sphere_name])
-    #         bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[0:3] = offset_co
-    #         bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[3] = 1
-    #         flag = save_soundcanal_info(offset_co)
-    #         if flag:
-    #             convert_soundcanal()
-    #
-    #         # 更新号角管的位置并将其摆正对齐
-    #         horn_fit_rotate(normal, offset_co)
 
+    #将曲线管道转化为网格管道并将曲线管道隐藏网格管道显示
+    if (name == "右耳"):
+        soundcanal_convert = False
+    elif (name == "左耳"):
+        soundcanal_convertL = False
     convert_soundcanal()
     curve_obj = bpy.data.objects[name + 'soundcanal']
     mesh_obj = bpy.data.objects[name + 'meshsoundcanal']
@@ -2131,16 +2661,16 @@ def create_sphere_snap_plane(sphere_number):
             plane_obj.rotation_euler[2] = empty_rotation_z
             bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
             # 为平面添加透明材质
-            initialTransparency()
+            initialPlaneTransparency()
             plane_obj.data.materials.clear()
-            plane_obj.data.materials.append(bpy.data.materials["Transparency"])
+            plane_obj.data.materials.append(bpy.data.materials["PlaneTransparency"])
             # 将平面设置为激活物体,执行布尔交集操作将平面切割为符合的形状
             bpy.ops.object.select_all(action='DESELECT')
             plane_obj.select_set(True)
             bpy.context.view_layer.objects.active = plane_obj
             bpy.ops.object.modifier_add(type='BOOLEAN')
             bpy.context.object.modifiers["Boolean"].operation = 'INTERSECT'
-            bpy.context.object.modifiers["Boolean"].solver = 'EXACT'
+            bpy.context.object.modifiers["Boolean"].solver = 'FAST'
             bpy.context.object.modifiers["Boolean"].object = cur_obj
             bpy.ops.object.modifier_apply(modifier="Boolean")
 
@@ -2162,9 +2692,14 @@ def create_sphere_snap_plane(sphere_number):
                 plane_obj.name = planename
                 plane_obj.select_set(True)
                 bpy.context.view_layer.objects.active = plane_obj
+            bpy.ops.object.mode_set(mode='OBJECT')
 
             # 根据平面边界生成红环
             draw_plane_border()
+            #将平面位置锁定,防止该平面被拖动到该平面之外
+            plane_obj.lock_location[0] = True
+            plane_obj.lock_location[1] = True
+            plane_obj.lock_location[2] = True
             # 将激活物体重新设置为红球
             bpy.ops.object.select_all(action='DESELECT')
             cur_sphere_obj.select_set(True)
@@ -2197,9 +2732,8 @@ def draw_plane_border():
         bpy.ops.mesh.delete(type='ONLY_FACE')
         bpy.ops.object.mode_set(mode='OBJECT')
         bpy.ops.object.convert(target='CURVE')
-        bpy.context.object.data.bevel_depth = 0.02  # 为圆环上色
-        soundcanal_plane_border_red_material = bpy.data.materials.new(name="SoundCanalPlaneBorderRed")
-        soundcanal_plane_border_red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
+        plane_border_curve.data.bevel_depth = 0.02  # 为圆环上色
+        soundcanal_plane_border_red_material = newColor("SoundCanalPlaneBorderRed", 1, 0, 0, 0, 1)
         plane_border_curve.data.materials.append(soundcanal_plane_border_red_material)
         bpy.ops.object.select_all(action='DESELECT')  # 将平面圆环边界设置为不可选中
         plane_border_curve.hide_select = True
@@ -2283,30 +2817,29 @@ def initial_soundcanal():
     object_dic_cur = None
     soundcanal_data_cur = None
     soundcanal_enum_cur = None
-    soundcanal_hornpipe_offset_cur = 0
     name = bpy.context.scene.leftWindowObj
     if name == '右耳':
+        is_on_rotate = False
         soundcanal_finish = False
         object_dic_cur = object_dic
         soundcanal_data_cur = soundcanal_data
         soundcanal_enum_cur = soundcanal_shape
         bpy.context.scene.soundcancalShapeEnum = soundcanal_shape
-        soundcanal_hornpipe_offset_cur = soundcanal_hornpipe_offset
         bpy.context.scene.chuanShenKongOffset = soundcanal_hornpipe_offset
         prev_sphere_number_plane = 0
     elif name == '左耳':
+        is_on_rotateL = False
         soundcanal_finishL = False
         object_dic_cur = object_dicL
         soundcanal_data_cur = soundcanal_dataL
         soundcanal_enum_cur = soundcanal_shapeL
         bpy.context.scene.soundcancalShapeEnum_L = soundcanal_shapeL
-        soundcanal_hornpipe_offset_cur = soundcanal_hornpipe_offsetL
         bpy.context.scene.chuanShenKongOffset_L = soundcanal_hornpipe_offsetL
         prev_sphere_number_planeL = 0
 
     # 主窗口物体
     if len(object_dic_cur) >= 2:  # 存在已保存的圆球位置,复原原有的管道
-        initialTransparency()
+        # initialTransparency()
         newColor('red', 1, 0, 0, 1, 0.8)
         newColor('grey', 0.8, 0.8, 0.8, 0, 1)
         newColor('grey2', 0.8, 0.8, 0.8, 1, 0.4)
@@ -2345,16 +2878,92 @@ def initial_soundcanal():
             obj.data.materials.append(bpy.data.materials['red'])
             obj.location = bpy.data.objects[name + 'soundcanal'].data.splines[0].points[object_dic_cur[key]].co[
                            0:3]  # 指定的位置坐标
+        # 根据管道两端的红球复制出两个透明圆球,操作管道两端的时候,每次激活的都是这两个透明圆球,用于限制实际的两端管道红球和管道控制点在左右耳模型上
+        sphere_name1 = name + 'soundcanalsphere' + '1'
+        sphere_obj1 = bpy.data.objects.get(sphere_name1)
+        duplicate_obj1 = sphere_obj1.copy()
+        duplicate_obj1.data = sphere_obj1.data.copy()
+        duplicate_obj1.animation_data_clear()
+        duplicate_obj1.name = name + 'soundcanalsphere' + '201'
+        bpy.context.scene.collection.objects.link(duplicate_obj1)
+        # newColor('soundcanalSphereTransparency', 0, 1, 1, 1, 0.9)
+        newColor('soundcanalSphereTransparency', 0.8, 0.8, 0.8, 1, 0.03)
+        duplicate_obj1.data.materials.clear()
+        duplicate_obj1.data.materials.append(bpy.data.materials['soundcanalSphereTransparency'])
+        duplicate_obj1.scale[0] = 1.5
+        duplicate_obj1.scale[1] = 1.5
+        duplicate_obj1.scale[2] = 1.5
+        sphere_name2 = name + 'soundcanalsphere' + '2'
+        sphere_obj2 = bpy.data.objects.get(sphere_name2)
+        duplicate_obj2 = sphere_obj2.copy()
+        duplicate_obj2.data = sphere_obj2.data.copy()
+        duplicate_obj2.animation_data_clear()
+        duplicate_obj2.name = name + 'soundcanalsphere' + '202'
+        bpy.context.scene.collection.objects.link(duplicate_obj2)
+        newColor('soundcanalSphereTransparency', 0.8, 0.8, 0.8, 1, 0.03)
+        # newColor('soundcanalSphereTransparency', 0, 1, 1, 1, 0.9)
+        duplicate_obj2.data.materials.clear()
+        duplicate_obj2.data.materials.append(bpy.data.materials['soundcanalSphereTransparency'])
+        duplicate_obj2.scale[0] = 1.5
+        duplicate_obj2.scale[1] = 1.5
+        duplicate_obj2.scale[2] = 1.5
+        if name == '右耳':
+            moveToRight(duplicate_obj1)
+            moveToRight(duplicate_obj2)
+        elif name == '左耳':
+            moveToLeft(duplicate_obj1)
+            moveToLeft(duplicate_obj2)
 
-        if (soundcanal_enum_cur == 'OP2'):
-            # 将管道末端控制点隐藏
+        save_soundcanal_info([0, 0, 0])
+        convert_soundcanal()
+        # 初始化添加号角管
+        initial_hornpipe()
+        # 根据面板offset参数设置号角管偏移位置
+        update_hornpipe_offset()
+        hornpipe_name = name + 'Hornpipe'
+        hornpipe_obj = bpy.data.objects.get(hornpipe_name)
+        hornpipe_plane_name = name + 'HornpipePlane'
+        hornpipe_plane_obj = bpy.data.objects.get(hornpipe_plane_name)
+        hornpipe_sphere_name = name + 'soundcanalsphere' + '100'
+        hornpipe_sphere_obj = bpy.data.objects.get(hornpipe_sphere_name)
+        hornpipe_sphere_name1 = name + 'soundcanalsphere' + '101'
+        hornpipe_sphere_obj1 = bpy.data.objects.get(hornpipe_sphere_name1)
+        if (soundcanal_enum_cur == 'OP1'):
+            #将号角管相关物体隐藏
+            if (hornpipe_obj != None):
+                hornpipe_obj.hide_set(True)
+            if (hornpipe_plane_obj != None):
+                hornpipe_plane_obj.hide_set(True)
+            if (hornpipe_sphere_obj != None):
+                hornpipe_sphere_obj.hide_set(True)
+            if (hornpipe_sphere_obj1 != None):
+                hornpipe_sphere_obj1.hide_set(True)
+            # 将管道上的所有圆球控制点显示
+            for key in object_dic_cur:
+                sphere_obj = bpy.data.objects.get(key)
+                if (sphere_obj != None):
+                    sphere_obj.hide_set(False)
+            # 将管道末端控制点设置为末端红球位置
+            last_sphere_name = name + 'soundcanalsphere' + str(2)
+            last_sphere_obj = bpy.data.objects.get(last_sphere_name)
+            index = int(object_dic_cur[last_sphere_name])
+            bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[
+            0:3] = last_sphere_obj.location
+            bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[3] = 1
+            save_soundcanal_info([0, 0, 0])
+            convert_soundcanal()
+        elif(soundcanal_enum_cur == 'OP2'):
+            # 根据面板offset参数设置号角管偏移位置
+            update_hornpipe_offset()
+            update_hornpipe_location()
+            #将号角管末端红球隐藏
             last_sphere_name = name + 'soundcanalsphere' + '2'
             last_sphere_obj = bpy.data.objects.get(last_sphere_name)
             last_sphere_obj.hide_set(True)
-            # 在管道末端初始化添加一个号角管
-            initial_hornpipe()
-            # 根据面板offset参数设置号角管偏移位置
-            update_hornpipe_offset_location_normal()
+            #将号角管末端透明圆球隐藏
+            last_sphere_name1 = name + 'soundcanalsphere' + '202'
+            last_sphere_obj1 = bpy.data.objects.get(last_sphere_name1)
+            last_sphere_obj1.hide_set(True)
 
         # 开启吸附
         bpy.context.scene.tool_settings.use_snap = True
@@ -2363,8 +2972,14 @@ def initial_soundcanal():
         bpy.context.scene.tool_settings.use_snap_align_rotation = True
         bpy.context.scene.tool_settings.use_snap_backface_culling = True
 
-        bpy.data.objects[name].data.materials.clear()
-        bpy.data.objects[name].data.materials.append(bpy.data.materials["Transparency"])
+        # bpy.data.objects[name].data.materials.clear()
+        # bpy.data.objects[name].data.materials.append(bpy.data.materials["Transparency"])
+        if name == '右耳':
+            bpy.context.scene.transparent3EnumR = 'OP3'
+            # bpy.context.scene.transparentper3EnumR = '0.8'
+        elif name == '左耳':
+            bpy.context.scene.transparent3EnumL = 'OP3'
+            # bpy.context.scene.transparentper3EnumL = '0.8'
         bpy.data.objects[name].hide_select = True
         convert_soundcanal()
         bpy.data.objects[name + 'soundcanal'].hide_set(True)
@@ -2422,13 +3037,8 @@ def initial_soundcanal():
     else:  # 不存在已保存的圆球位置
         pass
 
-    spherename = name + "SoundcanalSphere"
-    sphere_obj = bpy.data.objects.get(spherename)
-    if (sphere_obj != None and name == '右耳' and is_on_rotate):
-        sphere_obj.select_set(True)
-    if (sphere_obj != None and name == '左耳' and is_on_rotateL):
-        sphere_obj.select_set(True)
 
+    # bpy.ops.object.initialsoundcanal('INVOKE_DEFAULT')
     bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
 
 
@@ -2446,65 +3056,143 @@ def submit_soundcanal():
     name = bpy.context.scene.leftWindowObj
     if name == '右耳':
         if len(object_dic) > 0 and soundcanal_finish == False:
-            adjustpoint()
-            bpy.context.view_layer.objects.active = bpy.data.objects[name]
-            # 存在号角管时
-            soundcanal_shape = bpy.context.scene.soundcancalShapeEnum
-            soundcanal_hornpipe_offset = bpy.context.scene.chuanShenKongOffset
-            if (soundcanal_shape == 'OP2'):
+            if(len(object_dic) >= 2):
+                adjustpoint()
+                bpy.ops.object.select_all(action='DESELECT')
+                #若存在号角管,将号角管上的顶点选中
+                if(soundcanal_shape == "OP2"):
+                    Hornpipe_obj = bpy.data.objects.get(name + 'Hornpipe')
+                    Hornpipe_obj.select_set(True)
+                    bpy.context.view_layer.objects.active = Hornpipe_obj
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.mesh.select_all(action='SELECT')
+                    bpy.ops.object.mode_set(mode='OBJECT')
+                    Hornpipe_obj.select_set(False)
+                #将传声孔上的顶点选中
+                sound_canal_obj = bpy.data.objects.get(name + 'meshsoundcanal')
+                sound_canal_obj.select_set(True)
+                bpy.context.view_layer.objects.active = sound_canal_obj
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_all(action='SELECT')
+                bpy.ops.object.mode_set(mode='OBJECT')
+                #将左右耳模型设置为当前激活物体,将顶点取消选中
+                bpy.ops.object.select_all(action='DESELECT')
+                cur_obj = bpy.data.objects.get(name)
+                cur_obj.select_set(True)
+                bpy.context.view_layer.objects.active = cur_obj
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_all(action='DESELECT')
+                bpy.ops.object.mode_set(mode='OBJECT')
+                soundcanal_shape = bpy.context.scene.soundcancalShapeEnum
+                soundcanal_hornpipe_offset = bpy.context.scene.chuanShenKongOffset
+                #若存在号角管,将模型与号角管管道做差集
+                if (soundcanal_shape == 'OP2'):
+                    bool_modifier = bpy.context.active_object.modifiers.new(
+                        name="Soundcanal Boolean Modifier", type='BOOLEAN')
+                    bool_modifier.operation = 'DIFFERENCE'
+                    bool_modifier.object = bpy.data.objects[name + 'Hornpipe']
+                    bpy.ops.object.modifier_apply(modifier="Soundcanal Boolean Modifier", single_user=True)
+                #将模型与传声孔管道做差集
                 bool_modifier = bpy.context.active_object.modifiers.new(
                     name="Soundcanal Boolean Modifier", type='BOOLEAN')
                 bool_modifier.operation = 'DIFFERENCE'
-                bool_modifier.object = bpy.data.objects[name + 'Hornpipe']
+                bool_modifier.object = bpy.data.objects[name + 'meshsoundcanal']
                 bpy.ops.object.modifier_apply(modifier="Soundcanal Boolean Modifier", single_user=True)
-            bool_modifier = bpy.context.active_object.modifiers.new(
-                name="Soundcanal Boolean Modifier", type='BOOLEAN')
-            bool_modifier.operation = 'DIFFERENCE'
-            bool_modifier.object = bpy.data.objects[name + 'meshsoundcanal']
-            bpy.ops.object.modifier_apply(modifier="Soundcanal Boolean Modifier", single_user=True)
+                # 布尔后管道产生的新顶点被选中,根据选中的顶点找出其边界轮廓线,offset_cut后进行倒角
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.region_to_loop()
+                bpy.ops.huier.offset_cut(width=0.5, shade_smooth=True, mark_sharp=False, all_cyclic=True)
+                bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0, offset_pct=80, segments=5, release_confirm=True)
+                bpy.ops.mesh.select_all(action='DESELECT')
+                bpy.ops.object.mode_set(mode='OBJECT')
             need_to_delete_model_name_list = [name + 'meshsoundcanal', name + 'soundcanal', name + 'HornpipePlane',
                                               name + 'Hornpipe', name + 'soundcanalsphere' + '100',
                                               name + 'soundcanalsphere' + '101',
-                                              name + 'SoundCanalPlaneBorderCurveObject', name + 'SoundCanalPlane',
-                                              name + 'SoundcanalSphere']
+                                              name + 'soundcanalsphere' + '201', name + 'soundcanalsphere' + '202',
+                                              name + 'SoundCanalPlaneBorderCurveObject', name + 'SoundCanalPlane']
+            # 删除无用物体并还原材质
             for key in object_dic:
                 need_to_delete_model_name_list.append(key)
             delete_useless_object(need_to_delete_model_name_list)
-            apply_material()
+            bpy.ops.object.select_all(action='DESELECT')
+            cur_obj = bpy.data.objects.get(name)
+            cur_obj.select_set(True)
+            bpy.context.view_layer.objects.active = cur_obj
+            # apply_material()
+            bpy.context.scene.transparent3EnumR = 'OP1'
             utils_re_color(name, (1, 0.319, 0.133))
             bpy.context.active_object.data.use_auto_smooth = True
-            bpy.context.object.data.auto_smooth_angle = 0.9
+            bpy.context.object.data.auto_smooth_angle = 0.8
             bpy.data.objects[name].hide_select = False
     elif name == '左耳':
         if len(object_dicL) > 0 and soundcanal_finishL == False:
-            adjustpoint()
-            bpy.context.view_layer.objects.active = bpy.data.objects[name]
-            # 存在号角管时
-            soundcanal_shapeL = bpy.context.scene.soundcancalShapeEnum_L
-            soundcanal_hornpipe_offsetL = bpy.context.scene.chuanShenKongOffset_L
-            if (soundcanal_shapeL == 'OP2'):
+            if (len(object_dicL) >= 2):
+                adjustpoint()
+                bpy.ops.object.select_all(action='DESELECT')
+                # 若存在号角管,将号角管上的顶点选中
+                if (soundcanal_shapeL == "OP2"):
+                    Hornpipe_obj = bpy.data.objects.get(name + 'Hornpipe')
+                    Hornpipe_obj.select_set(True)
+                    bpy.context.view_layer.objects.active = Hornpipe_obj
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.mesh.select_all(action='SELECT')
+                    bpy.ops.object.mode_set(mode='OBJECT')
+                    Hornpipe_obj.select_set(False)
+                # 将传声孔上的顶点选中
+                sound_canal_obj = bpy.data.objects.get(name + 'meshsoundcanal')
+                sound_canal_obj.select_set(True)
+                bpy.context.view_layer.objects.active = sound_canal_obj
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_all(action='SELECT')
+                bpy.ops.object.mode_set(mode='OBJECT')
+                # 将左右耳模型设置为当前激活物体,将顶点取消选中
+                bpy.ops.object.select_all(action='DESELECT')
+                cur_obj = bpy.data.objects.get(name)
+                cur_obj.select_set(True)
+                bpy.context.view_layer.objects.active = cur_obj
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_all(action='DESELECT')
+                bpy.ops.object.mode_set(mode='OBJECT')
+                soundcanal_shapeL = bpy.context.scene.soundcancalShapeEnum_L
+                soundcanal_hornpipe_offsetL = bpy.context.scene.chuanShenKongOffset_L
+                # 若存在号角管,将模型与号角管管道做差集
+                if (soundcanal_shapeL == 'OP2'):
+                    bool_modifier = bpy.context.active_object.modifiers.new(
+                        name="Soundcanal Boolean Modifier", type='BOOLEAN')
+                    bool_modifier.operation = 'DIFFERENCE'
+                    bool_modifier.object = bpy.data.objects[name + 'Hornpipe']
+                    bpy.ops.object.modifier_apply(modifier="Soundcanal Boolean Modifier", single_user=True)
+                # 将模型与传声孔管道做差集
                 bool_modifier = bpy.context.active_object.modifiers.new(
                     name="Soundcanal Boolean Modifier", type='BOOLEAN')
                 bool_modifier.operation = 'DIFFERENCE'
-                bool_modifier.object = bpy.data.objects[name + 'Hornpipe']
+                bool_modifier.object = bpy.data.objects[name + 'meshsoundcanal']
                 bpy.ops.object.modifier_apply(modifier="Soundcanal Boolean Modifier", single_user=True)
-            bool_modifier = bpy.context.active_object.modifiers.new(
-                name="Soundcanal Boolean Modifier", type='BOOLEAN')
-            bool_modifier.operation = 'DIFFERENCE'
-            bool_modifier.object = bpy.data.objects[name + 'meshsoundcanal']
-            bpy.ops.object.modifier_apply(modifier="Soundcanal Boolean Modifier", single_user=True)
+                # 布尔后管道产生的新顶点被选中,根据选中的顶点找出其边界轮廓线,offset_cut后进行倒角
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.region_to_loop()
+                bpy.ops.huier.offset_cut(width=0.5, shade_smooth=True, mark_sharp=False, all_cyclic=True)
+                bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0, offset_pct=80, segments=5, release_confirm=True)
+                bpy.ops.mesh.select_all(action='DESELECT')
+                bpy.ops.object.mode_set(mode='OBJECT')
             need_to_delete_model_name_list = [name + 'meshsoundcanal', name + 'soundcanal', name + 'HornpipePlane',
                                               name + 'Hornpipe', name + 'soundcanalsphere' + '100',
                                               name + 'soundcanalsphere' + '101',
-                                              name + 'SoundCanalPlaneBorderCurveObject', name + 'SoundCanalPlane',
-                                              name + 'SoundcanalSphere']
+                                              name + 'soundcanalsphere' + '201', name + 'soundcanalsphere' + '202',
+                                              name + 'SoundCanalPlaneBorderCurveObject', name + 'SoundCanalPlane']
+            #删除无用物体并还原材质
             for key in object_dicL:
                 need_to_delete_model_name_list.append(key)
             delete_useless_object(need_to_delete_model_name_list)
-            apply_material()
+            bpy.ops.object.select_all(action='DESELECT')
+            cur_obj = bpy.data.objects.get(name)
+            cur_obj.select_set(True)
+            bpy.context.view_layer.objects.active = cur_obj
+            # apply_material()
+            bpy.context.scene.transparent3EnumL = 'OP1'
             utils_re_color(name, (1, 0.319, 0.133))
             bpy.context.active_object.data.use_auto_smooth = True
-            bpy.context.object.data.auto_smooth_angle = 0.9
+            bpy.context.object.data.auto_smooth_angle = 0.8
             bpy.data.objects[name].hide_select = False
 
 
@@ -2576,6 +3264,13 @@ def frontToSoundCanal():
 
     initial_soundcanal()
 
+    # 将激活物体设置为左/右耳
+    name = bpy.context.scene.leftWindowObj
+    cur_obj = bpy.data.objects.get(name)
+    bpy.ops.object.select_all(action='DESELECT')
+    cur_obj.select_set(True)
+    bpy.context.view_layer.objects.active = cur_obj
+
 
 def frontFromSoundCanal():
     # 主窗口物体
@@ -2586,11 +3281,23 @@ def frontFromSoundCanal():
     global soundcanal_hornpipe_offset
     global soundcanal_hornpipe_offsetL
     name = bpy.context.scene.leftWindowObj
+    #将曲线控制点的末端位置强制更新为末端红球的位置(防止切换该模块在号角管模式下,末端控制点在号角管连接处的位置,信息保存有偏差)
+    last_sphere_name = name + 'soundcanalsphere' + str(2)
+    last_sphere_obj = bpy.data.objects.get(last_sphere_name)
+    if(last_sphere_obj != None):
+        last_co = last_sphere_obj.location
+        if name == '右耳':
+            index = int(object_dic[last_sphere_name])
+        elif name == '左耳':
+            index = int(object_dicL[last_sphere_name])
+        bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[0:3] = last_co
+        bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[3] = 1
     save_soundcanal_info([0, 0, 0])
     need_to_delete_model_name_list = [name + 'meshsoundcanal', name + 'soundcanal', name + 'HornpipePlane',
                                       name + 'Hornpipe', name + 'soundcanalsphere' + '100',
-                                      name + 'soundcanalsphere' + '101', name + 'SoundCanalPlaneBorderCurveObject',
-                                      name + 'SoundCanalPlane', name + 'SoundcanalSphere']
+                                      name + 'soundcanalsphere' + '101',
+                                      name + 'soundcanalsphere' + '201', name + 'soundcanalsphere' + '202',
+                                      name + 'SoundCanalPlaneBorderCurveObject', name + 'SoundCanalPlane']
     if name == '右耳':
         soundcanal_shape = bpy.context.scene.soundcancalShapeEnum
         soundcanal_hornpipe_offset = bpy.context.scene.chuanShenKongOffset
@@ -2698,6 +3405,12 @@ def backToSoundCanal():
         bpy.data.objects.remove(sprue_reset, do_unlink=True)
     if (sprue_last != None):
         bpy.data.objects.remove(sprue_last, do_unlink=True)
+    support_casting_reset = bpy.data.objects.get(name + "CastingCompareSupportReset")
+    support_casting_last = bpy.data.objects.get(name + "CastingCompareSupportLast")
+    if (support_casting_reset != None):
+        bpy.data.objects.remove(support_casting_reset, do_unlink=True)
+    if (support_casting_last != None):
+        bpy.data.objects.remove(support_casting_last, do_unlink=True)
 
     # 删除支撑和排气孔中可能存在的对比物体
     soft_support_compare_obj = bpy.data.objects.get(name + "SoftSupportCompare")
@@ -2795,10 +3508,29 @@ def backToSoundCanal():
 
         initial_soundcanal()
 
+    # 将激活物体设置为左/右耳
+    name = bpy.context.scene.leftWindowObj
+    cur_obj = bpy.data.objects.get(name)
+    bpy.ops.object.select_all(action='DESELECT')
+    cur_obj.select_set(True)
+    bpy.context.view_layer.objects.active = cur_obj
+
 
 def backFromSoundCanal():
-    # 主窗口物体
+    global object_dic
+    global object_dicL
     name = bpy.context.scene.leftWindowObj
+    # 将曲线控制点的末端位置强制更新为末端红球的位置(防止切换该模块在号角管模式下,末端控制点在号角管连接处的位置,信息保存有偏差)
+    last_sphere_name = name + 'soundcanalsphere' + str(2)
+    last_sphere_obj = bpy.data.objects.get(last_sphere_name)
+    if(last_sphere_obj != None):
+        last_co = last_sphere_obj.location
+        if name == '右耳':
+            index = int(object_dic[last_sphere_name])
+        elif name == '左耳':
+            index = int(object_dicL[last_sphere_name])
+        bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[0:3] = last_co
+        bpy.data.objects[name + 'soundcanal'].data.splines[0].points[index].co[3] = 1
     save_soundcanal_info([0, 0, 0])
     submit_soundcanal()
     all_objs = bpy.data.objects
@@ -2967,14 +3699,13 @@ _classes = [
     TEST_OT_soundcanalqiehuan,
     TEST_OT_finishsoundcanal,
     TEST_OT_resetsoundcanal,
-    TEST_OT_soundcanalrotate
+    TEST_OT_soundcanalrotate,
+    TEST_OT_mirrorsoundcanal,
+    # TEST_OT_initialsoundcanal
 ]
 
 
-def register():
-    for cls in _classes:
-        bpy.utils.register_class(cls)
-
+def register_soundcanal_tools():
     bpy.utils.register_tool(resetsoundcanal_MyTool, separator=True, group=False)
     bpy.utils.register_tool(finishsoundcanal_MyTool, separator=True, group=False,
                             after={resetsoundcanal_MyTool.bl_idname})
@@ -2985,6 +3716,22 @@ def register():
 
     bpy.utils.register_tool(addsoundcanal_MyTool2, separator=True, group=False)
     bpy.utils.register_tool(addsoundcanal_MyTool3, separator=True, group=False)
+
+
+def register():
+    for cls in _classes:
+        bpy.utils.register_class(cls)
+
+    # bpy.utils.register_tool(resetsoundcanal_MyTool, separator=True, group=False)
+    # bpy.utils.register_tool(finishsoundcanal_MyTool, separator=True, group=False,
+    #                         after={resetsoundcanal_MyTool.bl_idname})
+    # bpy.utils.register_tool(rotatesoundcanal_MyTool, separator=True, group=False,
+    #                         after={finishsoundcanal_MyTool.bl_idname})
+    # bpy.utils.register_tool(mirrorsoundcanal_MyTool, separator=True, group=False,
+    #                         after={rotatesoundcanal_MyTool.bl_idname})
+    #
+    # bpy.utils.register_tool(addsoundcanal_MyTool2, separator=True, group=False)
+    # bpy.utils.register_tool(addsoundcanal_MyTool3, separator=True, group=False)
 
 
 def unregister():

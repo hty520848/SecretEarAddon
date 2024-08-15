@@ -21,6 +21,11 @@ is_on_rotateL = False
 
 handle_info_save = []    #保存已经提交过的handle信息,用于模块切换时的初始化
 handle_info_saveL = []
+handle_index = -1 # 数组指针，指向附件状态数组中当前访问状态的附件，用于单步撤回操作
+handle_indexL = -1
+
+is_handleAdd_modal_start = False         #在启动下一个modal前必须将上一个modal关闭,防止modal开启过多过于卡顿
+is_handleAdd_modal_startL = False
 
 
 def newColor(id, r, g, b, is_transparency, transparency_degree):
@@ -30,6 +35,11 @@ def newColor(id, r, g, b, is_transparency, transparency_degree):
     output = nodes.new(type='ShaderNodeOutputMaterial')
     shader = nodes.new(type='ShaderNodeBsdfPrincipled')
     shader.inputs[0].default_value = (r, g, b, 1)
+    shader.inputs[6].default_value = 0.46
+    shader.inputs[7].default_value = 0
+    shader.inputs[9].default_value = 0.472
+    shader.inputs[14].default_value = 1
+    shader.inputs[15].default_value = 0.105
     links.new(shader.outputs[0], output.inputs[0])
     if is_transparency:
         mat.blend_method = "BLEND"
@@ -103,54 +113,26 @@ def is_mouse_on_handle(context, event):
 
 # 判断鼠标是否在附件圆球上
 def is_mouse_on_sphere(context, event):
-    name = bpy.context.scene.leftWindowObj + "HandleSphere"
-    obj = bpy.data.objects.get(name)
-    if (obj != None):
-        is_on_object = False  # 初始化变量
-
-        if context.area:
-            context.area.tag_redraw()
-
-        # 获取鼠标光标的区域坐标
-        mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
-
-        # 获取信息和空间信息
+    name = bpy.context.scene.leftWindowObj
+    plane_name = name + 'Plane'
+    plane_obj = bpy.data.objects.get(plane_name)
+    if (plane_obj != None):
+        mouse_x = event.mouse_region_x
+        mouse_y = event.mouse_region_y
         region, space = get_region_and_space(
             context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
         )
-
-        ray_dir = view3d_utils.region_2d_to_vector_3d(
-            region,
-            space.region_3d,
-            mv
-        )
-        ray_orig = view3d_utils.region_2d_to_origin_3d(
-            region,
-            space.region_3d,
-            mv
-        )
-
-        start = ray_orig
-        end = ray_orig + ray_dir
-
-        # 确定光线和对象的相交
-        mwi = obj.matrix_world.inverted()
-        mwi_start = mwi @ start
-        mwi_end = mwi @ end
-        mwi_dir = mwi_end - mwi_start
-
-        if obj.type == 'MESH':
-            if (obj.mode == 'OBJECT' or obj.mode == "SCULPT"):
-                mesh = obj.data
-                bm = bmesh.new()
-                bm.from_mesh(mesh)
-                tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
-
-                _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
-
-                if fidx is not None:
-                    is_on_object = True  # 如果发生交叉，将变量设为True
-        return is_on_object
+        rv3d = space.region_3d
+        coord_3d = plane_obj.location
+        # 将三维坐标转换为二维坐标
+        coord_2d = view3d_utils.location_3d_to_region_2d(region, rv3d, coord_3d)
+        if (coord_2d != None):
+            plane_x, plane_y = coord_2d
+            dis = math.sqrt(math.fabs(plane_x - mouse_x) ** 2 + math.fabs(plane_y - mouse_y) ** 2)
+            if (dis <= 372):
+                return True
+            else:
+                return False
     return False
 
 # 判断鼠标是否在上物体上
@@ -273,69 +255,24 @@ def is_changed_handle(context, event):
 
 # 判断鼠标状态是否发生改变,圆球
 def is_changed_sphere(context, event):
-    ori_name = bpy.context.scene.leftWindowObj
-    name = bpy.context.scene.leftWindowObj + "HandleSphere"
-    obj = bpy.data.objects.get(name)
-    if (obj != None):
-        curr_on_object = False  # 当前鼠标是否在物体上,初始化为False
-        global prev_on_sphere   # 之前鼠标是否在物体上
-        global prev_on_sphereL  # 之前鼠标是否在物体上
+    global prev_on_sphere   # 之前鼠标是否在物体上
+    global prev_on_sphereL  # 之前鼠标是否在物体上
 
-        if context.area:
-            context.area.tag_redraw()
+    name = bpy.context.scene.leftWindowObj
+    curr_on_object = is_mouse_on_sphere(context, event)
 
-        # 获取鼠标光标的区域坐标
-        mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
-
-        # 获取信息和空间信息
-        region, space = get_region_and_space(
-            context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
-        )
-
-        ray_dir = view3d_utils.region_2d_to_vector_3d(
-            region,
-            space.region_3d,
-            mv
-        )
-        ray_orig = view3d_utils.region_2d_to_origin_3d(
-            region,
-            space.region_3d,
-            mv
-        )
-
-        start = ray_orig
-        end = ray_orig + ray_dir
-
-        # 确定光线和对象的相交
-        mwi = obj.matrix_world.inverted()
-        mwi_start = mwi @ start
-        mwi_end = mwi @ end
-        mwi_dir = mwi_end - mwi_start
-
-        if obj.type == 'MESH':
-            if (obj.mode == 'OBJECT' or obj.mode == "SCULPT"):
-                mesh = obj.data
-                bm = bmesh.new()
-                bm.from_mesh(mesh)
-                tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
-
-                _, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
-
-                if fidx is not None:
-                    curr_on_object = True  # 如果发生交叉，将变量设为True
-        if ori_name == '右耳':
-            if (curr_on_object != prev_on_sphere):
-                prev_on_sphere = curr_on_object
-                return True
-            else:
-                return False
-        elif ori_name == '左耳':
-            if (curr_on_object != prev_on_sphereL):
-                prev_on_sphereL = curr_on_object
-                return True
-            else:
-                return False
-    return False
+    if name == '右耳':
+        if (curr_on_object != prev_on_sphere):
+            prev_on_sphere = curr_on_object
+            return True
+        else:
+            return False
+    elif name == '左耳':
+        if (curr_on_object != prev_on_sphereL):
+            prev_on_sphereL = curr_on_object
+            return True
+        else:
+            return False
 
 # 判断鼠标状态是否发生改变,模型
 def is_changed(context, event):
@@ -404,6 +341,254 @@ def is_changed(context, event):
     return False
 
 
+def handle_forward():
+    '''
+    添加多个附件的时候,向后切换的附件状态
+    '''
+    global handle_index
+    global handle_indexL
+    global handle_info_save
+    global handle_info_saveL
+    bpy.context.scene.var = 0
+    name = bpy.context.scene.leftWindowObj
+    handle_index_cur = None
+    handle_info_save_cur = None
+    size = None
+    print("进入handle_forward")
+    if (name == "右耳"):
+        handle_index_cur = handle_index
+        handle_info_save_cur = handle_info_save
+        size = len(handle_info_save)
+    elif (name == "左耳"):
+        handle_index_cur = handle_indexL
+        handle_info_save_cur = handle_info_saveL
+        size = len(handle_info_saveL)
+    print("当前指针:", handle_index_cur)
+    print("数组大小:",size)
+    if (handle_index_cur + 1 < size):
+        handle_index_cur = handle_index_cur +1
+        if (name == "右耳"):
+            # 设置替换数组中指针的指向
+            handle_index = handle_index + 1
+        elif (name == "左耳"):
+            # 设置替换数组中指针的指向
+            handle_indexL = handle_indexL + 1
+        #将当前激活的左右耳模型使用reset还原
+        oriname = bpy.context.scene.leftWindowObj
+        ori_obj = bpy.data.objects.get(oriname)
+        copyname = oriname + "HandleReset"
+        copy_obj = bpy.data.objects.get(copyname)
+        if (ori_obj != None and copy_obj != None):
+            bpy.data.objects.remove(ori_obj, do_unlink=True)
+            duplicate_obj = copy_obj.copy()
+            duplicate_obj.data = copy_obj.data.copy()
+            duplicate_obj.animation_data_clear()
+            duplicate_obj.name = oriname
+            bpy.context.collection.objects.link(duplicate_obj)
+            if (oriname == "右耳"):
+                moveToRight(duplicate_obj)
+            elif (oriname == "左耳"):
+                moveToLeft(duplicate_obj)
+        handlename = name + "Cube"
+        handle_obj = bpy.data.objects.get(handlename)
+        handlecomparename = name + "Cube.001"
+        handle_compare_obj = bpy.data.objects.get(handlecomparename)
+        planename = name + "Plane"
+        plane_obj = bpy.data.objects.get(planename)
+        # 存在未提交的Handle,HandleCompare和Plane时
+        if (handle_obj != None):
+            bpy.data.objects.remove(handle_obj, do_unlink=True)
+        if (handle_compare_obj != None):
+            bpy.data.objects.remove(handle_compare_obj, do_unlink=True)
+        if (plane_obj != None):
+            bpy.data.objects.remove(plane_obj, do_unlink=True)
+        for obj in bpy.data.objects:
+            if (name == "右耳"):
+                pattern = r'右耳软耳膜附件Casting'
+                if re.match(pattern, obj.name):
+                    bpy.data.objects.remove(obj, do_unlink=True)
+            elif (name == "左耳"):
+                pattern = r'左耳软耳膜附件Casting'
+                if re.match(pattern, obj.name):
+                    bpy.data.objects.remove(obj, do_unlink=True)
+        #根据handle_index_cur重新添加handle
+        for i in range(handle_index_cur):
+            handleInfo = handle_info_save_cur[i]
+            offset = handleInfo.offset
+            l_x = handleInfo.l_x
+            l_y = handleInfo.l_y
+            l_z = handleInfo.l_z
+            r_x = handleInfo.r_x
+            r_y = handleInfo.r_y
+            r_z = handleInfo.r_z
+            # 添加Handle并提交
+            print("添加附件",i)
+            handleInitial(offset, l_x, l_y, l_z, r_x, r_y, r_z)
+        #最后一个handle并不提交
+        handleInfo = handle_info_save_cur[handle_index_cur]
+        offset = handleInfo.offset
+        l_x = handleInfo.l_x
+        l_y = handleInfo.l_y
+        l_z = handleInfo.l_z
+        r_x = handleInfo.r_x
+        r_y = handleInfo.r_y
+        r_z = handleInfo.r_z
+        # 添加一个handle,激活鼠标行为
+        bpy.ops.object.handlebackforwordadd('INVOKE_DEFAULT')
+        # 设计问题,点击加号调用bpy.ops.object.handleadd('INVOKE_DEFAULT')添加附件的时候,handle_index也会自增加一,但此处调用不需要自增,因此再减一
+        if (name == "右耳"):
+            # 设置替换数组中指针的指向
+            handle_index = handle_index - 1
+        elif (name == "左耳"):
+            # 设置替换数组中指针的指向
+            handle_indexL = handle_indexL - 1
+        # 获取添加后的Handle,并根据参数设置调整offset
+        planename = name + "Plane"
+        plane_obj = bpy.data.objects.get(planename)
+        if (name == "右耳"):
+            bpy.context.scene.erMoFuJianOffset = offset
+        elif (name == "左耳"):
+            bpy.context.scene.erMoFuJianOffsetL = offset
+        plane_obj.location[0] = l_x
+        plane_obj.location[1] = l_y
+        plane_obj.location[2] = l_z
+        plane_obj.rotation_euler[0] = r_x
+        plane_obj.rotation_euler[1] = r_y
+        plane_obj.rotation_euler[2] = r_z
+        print("执行后指针:", handle_index_cur)
+    # 调用公共鼠标行为
+    bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    # 将激活物体设置为左/右耳
+    name = bpy.context.scene.leftWindowObj
+    cur_obj = bpy.data.objects.get(name)
+    bpy.ops.object.select_all(action='DESELECT')
+    cur_obj.select_set(True)
+    bpy.context.view_layer.objects.active = cur_obj
+
+
+def handle_backup():
+    '''
+    添加多个附件的时候,回退切换附件状态
+    '''
+    global handle_index
+    global handle_indexL
+    global handle_info_save
+    global handle_info_saveL
+    bpy.context.scene.var = 0
+    name = bpy.context.scene.leftWindowObj
+    handle_index_cur = None
+    handle_info_save_cur = None
+    size = None
+    print("进入handle_backup")
+    if (name == "右耳"):
+        handle_index_cur = handle_index
+        handle_info_save_cur = handle_info_save
+        size = len(handle_info_save)
+    elif (name == "左耳"):
+        handle_index_cur = handle_indexL
+        handle_info_save_cur = handle_info_saveL
+        size = len(handle_info_saveL)
+    print("当前指针:", handle_index_cur)
+    print("数组大小:", size)
+    if (handle_index_cur > 0):
+        handle_index_cur = handle_index_cur -1
+        if (name == "右耳"):
+            # 设置替换数组中指针的指向
+            handle_index = handle_index - 1
+        elif (name == "左耳"):
+            # 设置替换数组中指针的指向
+            handle_indexL = handle_indexL - 1
+        # 将当前激活的左右耳模型使用reset还原
+        oriname = bpy.context.scene.leftWindowObj
+        ori_obj = bpy.data.objects.get(oriname)
+        copyname = oriname + "HandleReset"
+        copy_obj = bpy.data.objects.get(copyname)
+        if (ori_obj != None and copy_obj != None):
+            bpy.data.objects.remove(ori_obj, do_unlink=True)
+            duplicate_obj = copy_obj.copy()
+            duplicate_obj.data = copy_obj.data.copy()
+            duplicate_obj.animation_data_clear()
+            duplicate_obj.name = oriname
+            bpy.context.collection.objects.link(duplicate_obj)
+            if (oriname == "右耳"):
+                moveToRight(duplicate_obj)
+            elif (oriname == "左耳"):
+                moveToLeft(duplicate_obj)
+        handlename = name + "Cube"
+        handle_obj = bpy.data.objects.get(handlename)
+        handlecomparename = name + "Cube.001"
+        handle_compare_obj = bpy.data.objects.get(handlecomparename)
+        planename = name + "Plane"
+        plane_obj = bpy.data.objects.get(planename)
+        # 存在未提交的Handle,HandleCompare和Plane时
+        if (handle_obj != None):
+            bpy.data.objects.remove(handle_obj, do_unlink=True)
+        if (handle_compare_obj != None):
+            bpy.data.objects.remove(handle_compare_obj, do_unlink=True)
+        if (plane_obj != None):
+            bpy.data.objects.remove(plane_obj, do_unlink=True)
+        for obj in bpy.data.objects:
+            if (name == "右耳"):
+                pattern = r'右耳软耳膜附件Casting'
+                if re.match(pattern, obj.name):
+                    bpy.data.objects.remove(obj, do_unlink=True)
+            elif (name == "左耳"):
+                pattern = r'左耳软耳膜附件Casting'
+                if re.match(pattern, obj.name):
+                    bpy.data.objects.remove(obj, do_unlink=True)
+        # 根据handle_index_cur重新添加handle
+        for i in range(handle_index_cur):
+            handleInfo = handle_info_save_cur[i]
+            offset = handleInfo.offset
+            l_x = handleInfo.l_x
+            l_y = handleInfo.l_y
+            l_z = handleInfo.l_z
+            r_x = handleInfo.r_x
+            r_y = handleInfo.r_y
+            r_z = handleInfo.r_z
+            # 添加Handle并提交
+            print("添加附件", i)
+            handleInitial(offset, l_x, l_y, l_z, r_x, r_y, r_z)
+        # 最后一个handle并不提交
+        handleInfo = handle_info_save_cur[handle_index_cur]
+        offset = handleInfo.offset
+        l_x = handleInfo.l_x
+        l_y = handleInfo.l_y
+        l_z = handleInfo.l_z
+        r_x = handleInfo.r_x
+        r_y = handleInfo.r_y
+        r_z = handleInfo.r_z
+        # 添加一个handle,激活鼠标行为
+        bpy.ops.object.handlebackforwordadd('INVOKE_DEFAULT')
+        #设计问题,点击加号调用bpy.ops.object.handleadd('INVOKE_DEFAULT')添加附件的时候,handle_index也会自增加一,但此处调用不需要自增,因此再减一
+        if (name == "右耳"):
+            # 设置替换数组中指针的指向
+            handle_index = handle_index - 1
+        elif (name == "左耳"):
+            # 设置替换数组中指针的指向
+            handle_indexL = handle_indexL - 1
+        # 获取添加后的Handle,并根据参数设置调整offset
+        planename = name + "Plane"
+        plane_obj = bpy.data.objects.get(planename)
+        if (name == "右耳"):
+            bpy.context.scene.erMoFuJianOffset = offset
+        elif (name == "左耳"):
+            bpy.context.scene.erMoFuJianOffsetL = offset
+        plane_obj.location[0] = l_x
+        plane_obj.location[1] = l_y
+        plane_obj.location[2] = l_z
+        plane_obj.rotation_euler[0] = r_x
+        plane_obj.rotation_euler[1] = r_y
+        plane_obj.rotation_euler[2] = r_z
+        print("执行后指针:", handle_index_cur)
+    # 调用公共鼠标行为
+    bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    # 将激活物体设置为左/右耳
+    name = bpy.context.scene.leftWindowObj
+    cur_obj = bpy.data.objects.get(name)
+    bpy.ops.object.select_all(action='DESELECT')
+    cur_obj.select_set(True)
+    bpy.context.view_layer.objects.active = cur_obj
 
 #获取鼠标在右耳上的坐标
 def cal_co(context, event):
@@ -483,6 +668,8 @@ def handle_fit_rotate(normal,location):
         plane_obj.rotation_euler[2] = empty_rotation_z
 
 def frontToHandle():
+    global is_on_rotate
+    global is_on_rotateL
     all_objs = bpy.data.objects
     for selected_obj in all_objs:
         name = bpy.context.scene.leftWindowObj
@@ -496,8 +683,10 @@ def frontToHandle():
     duplicate_obj1.name = name + "HandleReset"
     bpy.context.collection.objects.link(duplicate_obj1)
     if(name == "右耳"):
+        is_on_rotate = False
         moveToRight(duplicate_obj1)
     elif(name == "左耳"):
+        is_on_rotateL = False
         moveToLeft(duplicate_obj1)
     duplicate_obj1.hide_set(True)
 
@@ -515,16 +704,12 @@ def frontFromHandle():
     handle_compare_obj = bpy.data.objects.get(handlecomparename)
     planename = bpy.context.scene.leftWindowObj + "Plane"
     plane_obj = bpy.data.objects.get(planename)
-    spherename = bpy.context.scene.leftWindowObj + "HandleSphere"
-    sphere_obj = bpy.data.objects.get(spherename)
     if (handle_obj != None):
         bpy.data.objects.remove(handle_obj, do_unlink=True)
     if (handle_compare_obj != None):
         bpy.data.objects.remove(handle_compare_obj, do_unlink=True)
     if (plane_obj != None):
         bpy.data.objects.remove(plane_obj, do_unlink=True)
-    if (sphere_obj != None):
-        bpy.data.objects.remove(sphere_obj, do_unlink=True)
     #删除附件外壳
     for obj in bpy.data.objects:
         if (name == "右耳"):
@@ -571,6 +756,13 @@ def frontFromHandle():
     bpy.context.view_layer.objects.active = cur_obj
 
 def backToHandle():
+    global is_on_rotate
+    global is_on_rotateL
+    name = bpy.context.scene.leftWindowObj
+    if (name == "右耳"):
+        is_on_rotate = False
+    elif (name == "左耳"):
+        is_on_rotateL = False
     #若添加铸造法之后切换到支撑或者排气孔模块,再由支撑或排气孔模块跳过铸造法模块直接切换回前面的模块,则需要对物体进行特殊的处理
     name = bpy.context.scene.leftWindowObj
     casting_name = name + "CastingCompare"
@@ -628,6 +820,12 @@ def backToHandle():
         bpy.data.objects.remove(sprue_reset, do_unlink=True)
     if (sprue_last != None):
         bpy.data.objects.remove(sprue_last, do_unlink=True)
+    support_casting_reset = bpy.data.objects.get(name + "CastingCompareSupportReset")
+    support_casting_last = bpy.data.objects.get(name + "CastingCompareSupportLast")
+    if (support_casting_reset != None):
+        bpy.data.objects.remove(support_casting_reset, do_unlink=True)
+    if (support_casting_last != None):
+        bpy.data.objects.remove(support_casting_last, do_unlink=True)
 
     # 删除支撑和排气孔中可能存在的对比物体
     soft_support_compare_obj = bpy.data.objects.get(name + "SoftSupportCompare")
@@ -801,41 +999,82 @@ def backFromHandle():
     cur_obj.select_set(True)
     bpy.context.view_layer.objects.active = cur_obj
 
+#
+#
+# def saveInfo():
+#     '''
+#     #在handle提交前会保存handle的相关信息
+#     '''
+#     global handle_index
+#     global handle_indexL
+#     global handle_info_save
+#     global handle_info_saveL
+#
+#     name = bpy.context.scene.leftWindowObj
+#     planename = name + "Plane"
+#     plane_obj = bpy.data.objects.get(planename)
+#     offset = None
+#     if name == '右耳':
+#         offset = bpy.context.scene.erMoFuJianOffset
+#     elif name == '左耳':
+#         offset = bpy.context.scene.erMoFuJianOffsetL
+#     l_x = plane_obj.location[0]
+#     l_y = plane_obj.location[1]
+#     l_z = plane_obj.location[2]
+#     r_x = plane_obj.rotation_euler[0]
+#     r_y = plane_obj.rotation_euler[1]
+#     r_z = plane_obj.rotation_euler[2]
+#
+#     handle_info = HandleInfoSave(offset,l_x,l_y,l_z,r_x,r_y,r_z)
+#     if name == '右耳':
+#         handle_info_save.append(handle_info)
+#     elif name == '左耳':
+#         handle_info_saveL.append(handle_info)
 
 
-def saveInfo():
+def updateInfo():
     '''
-    #在handle提交前会保存handle的相关信息
+    #单步撤回过程中若更改过附件位置信息,则在数组中更新该信息,若未添加过该附件信息,则将该附件信息保存
     '''
+    global handle_index
+    global handle_indexL
     global handle_info_save
     global handle_info_saveL
 
     name = bpy.context.scene.leftWindowObj
     planename = name + "Plane"
     plane_obj = bpy.data.objects.get(planename)
-    offset = None
-    if name == '右耳':
-        offset = bpy.context.scene.erMoFuJianOffset
-    elif name == '左耳':
-        offset = bpy.context.scene.erMoFuJianOffsetL
-    l_x = plane_obj.location[0]
-    l_y = plane_obj.location[1]
-    l_z = plane_obj.location[2]
-    r_x = plane_obj.rotation_euler[0]
-    r_y = plane_obj.rotation_euler[1]
-    r_z = plane_obj.rotation_euler[2]
+    if(plane_obj != None):
+        offset = None
+        if name == '右耳':
+            offset = bpy.context.scene.erMoFuJianOffset
+        elif name == '左耳':
+            offset = bpy.context.scene.erMoFuJianOffsetL
+        l_x = plane_obj.location[0]
+        l_y = plane_obj.location[1]
+        l_z = plane_obj.location[2]
+        r_x = plane_obj.rotation_euler[0]
+        r_y = plane_obj.rotation_euler[1]
+        r_z = plane_obj.rotation_euler[2]
 
-    handle_info = HandleInfoSave(offset,l_x,l_y,l_z,r_x,r_y,r_z)
-    if name == '右耳':
-        handle_info_save.append(handle_info)
-    elif name == '左耳':
-        handle_info_saveL.append(handle_info)
-
+        handle_info = HandleInfoSave(offset,l_x,l_y,l_z,r_x,r_y,r_z)
+        if name == '右耳':
+            if(handle_index < len(handle_info_save)):
+                handle_info_save[handle_index] = handle_info
+            elif(handle_index == len(handle_info_save)):
+                handle_info_save.append(handle_info)
+        elif name == '左耳':
+            if (handle_indexL < len(handle_info_saveL)):
+                handle_info_saveL[handle_indexL] = handle_info
+            elif (handle_indexL == len(handle_info_saveL)):
+                handle_info_saveL.append(handle_info)
 
 def initial():
     ''''
     切换到附件模块的时候,根据之前保存的字体信息进行初始化,恢复之前添加的字体状态
     '''
+    global handle_index
+    global handle_indexL
     global handle_info_save
     global handle_info_saveL
     name = bpy.context.scene.leftWindowObj
@@ -862,9 +1101,7 @@ def initial():
             r_y = handleInfo.r_y
             r_z = handleInfo.r_z
             # 添加一个handle,激活鼠标行为
-            bpy.ops.object.handleadd('INVOKE_DEFAULT')
-            # 新添加的最后一个附件并未提交,多余的信息需要删除
-            handle_info_save.pop()
+            bpy.ops.object.handlebackforwordadd('INVOKE_DEFAULT')
             # 获取添加后的Handle,并根据参数设置调整offset
             planename = name + "Plane"
             plane_obj = bpy.data.objects.get(planename)
@@ -875,6 +1112,8 @@ def initial():
             plane_obj.rotation_euler[0] = r_x
             plane_obj.rotation_euler[1] = r_y
             plane_obj.rotation_euler[2] = r_z
+            #将附件数组指针置为末尾
+            handle_index = len(handle_info_save) - 1
         else:
             bpy.ops.wm.tool_set_by_id(name="my_tool.handle_initial")
     elif name == '左耳':
@@ -899,9 +1138,7 @@ def initial():
             r_y = handleInfo.r_y
             r_z = handleInfo.r_z
             # 添加一个handle,激活鼠标行为
-            bpy.ops.object.handleadd('INVOKE_DEFAULT')
-            # 新添加的最后一个附件并未提交,多余的信息需要删除
-            handle_info_saveL.pop()
+            bpy.ops.object.handlebackforwordadd('INVOKE_DEFAULT')
             # 获取添加后的Handle,并根据参数设置调整offset
             planename = name + "Plane"
             plane_obj = bpy.data.objects.get(planename)
@@ -912,6 +1149,8 @@ def initial():
             plane_obj.rotation_euler[0] = r_x
             plane_obj.rotation_euler[1] = r_y
             plane_obj.rotation_euler[2] = r_z
+            # 将附件数组指针置为末尾
+            handle_indexL = len(handle_info_saveL) - 1
         else:
             bpy.ops.wm.tool_set_by_id(name="my_tool.handle_initial")
 
@@ -941,8 +1180,6 @@ def handleInitial(offset, l_x, l_y, l_z, r_x, r_y, r_z):
     handle_compare_obj = bpy.data.objects.get(handlecomparename)
     planename = name + "Plane"
     plane_obj = bpy.data.objects.get(planename)
-    spherename = name + "HandleSphere"
-    sphere_obj = bpy.data.objects.get(spherename)
     if name == '右耳':
         bpy.context.scene.erMoFuJianOffset = offset
     elif name == '左耳':
@@ -959,25 +1196,29 @@ def handleInitial(offset, l_x, l_y, l_z, r_x, r_y, r_z):
     createHandleForCasting()
 
     #将附件与模型Bool合并
+    bpy.ops.object.select_all(action='DESELECT')
+    handle_obj.select_set(True)
+    obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.modifier_add(type='BOOLEAN')
-    bpy.context.object.modifiers["Boolean"].solver = 'FAST'
-    bpy.context.object.modifiers["Boolean"].operation = 'UNION'
-    bpy.context.object.modifiers["Boolean"].object = handle_obj
-    bpy.ops.object.modifier_apply(modifier="Boolean", single_user=True)
+    bpy.ops.object.booltool_auto_union()
+    # bpy.ops.object.modifier_add(type='BOOLEAN')
+    # bpy.context.object.modifiers["Boolean"].solver = 'FAST'
+    # bpy.context.object.modifiers["Boolean"].operation = 'UNION'
+    # bpy.context.object.modifiers["Boolean"].object = handle_obj
+    # bpy.ops.object.modifier_apply(modifier="Boolean", single_user=True)
 
     #删除原本的附件,附件对比物,三维旋转圆球,父平面
     bpy.data.objects.remove(plane_obj, do_unlink=True)
-    bpy.data.objects.remove(sphere_obj, do_unlink=True)
-    bpy.data.objects.remove(handle_obj, do_unlink=True)
+    # bpy.data.objects.remove(handle_obj, do_unlink=True)
     bpy.data.objects.remove(handle_compare_obj, do_unlink=True)
 
     # 合并后Handle会被去除材质,因此需要重置一下模型颜色为黄色
-    bpy.ops.object.mode_set(mode='VERTEX_PAINT')
-    bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
-    bpy.data.brushes["Draw"].color = (1, 0.6, 0.4)
-    bpy.ops.paint.vertex_color_set()
-    bpy.ops.object.mode_set(mode='OBJECT')
+    utils_re_color(name, (1, 0.319, 0.133))
+    # bpy.ops.object.mode_set(mode='VERTEX_PAINT')
+    # bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
+    # bpy.data.brushes["Draw"].color = (1, 0.6, 0.4)
+    # bpy.ops.paint.vertex_color_set()
+    # bpy.ops.object.mode_set(mode='OBJECT')
 
 
 
@@ -992,8 +1233,6 @@ def handleReset():
     # handle_for_casting_obj = bpy.data.objects.get(handle_for_casting_name)
     planename = name + "Plane"
     plane_obj = bpy.data.objects.get(planename)
-    spherename = name + "HandleSphere"
-    sphere_obj = bpy.data.objects.get(spherename)
     # 存在未提交的Handle,HandleCompare和Plane时
     if (handle_obj != None):
         bpy.data.objects.remove(handle_obj, do_unlink=True)
@@ -1003,8 +1242,6 @@ def handleReset():
     #     bpy.data.objects.remove(handle_for_casting_obj, do_unlink=True)
     if (plane_obj != None):
         bpy.data.objects.remove(plane_obj, do_unlink=True)
-    if(sphere_obj != None):
-        bpy.data.objects.remove(sphere_obj, do_unlink=True)
 
     for obj in bpy.data.objects:
         if (name == "右耳"):
@@ -1144,34 +1381,37 @@ def handleSubmit():
     handle_compare_obj = bpy.data.objects.get(handlecomparename)
     planename = name + "Plane"
     plane_obj = bpy.data.objects.get(planename)
-    spherename = name + "HandleSphere"
-    sphere_obj = bpy.data.objects.get(spherename)
     # 存在未提交的Handle和Plane时
     if (handle_obj != None and plane_obj != None):
         # 先将该Handle的相关信息保存下来,用于模块切换时的初始化。
-        saveInfo()
+        # saveInfo()
 
         #创建用于实体化的附件
         createHandleForCasting()
 
+        #将附件和模型合并
+        bpy.ops.object.select_all(action='DESELECT')
+        handle_obj.select_set(True)
+        obj.select_set(True)
         bpy.context.view_layer.objects.active = obj
-        bpy.ops.object.modifier_add(type='BOOLEAN')
-        bpy.context.object.modifiers["Boolean"].solver = 'FAST'
-        bpy.context.object.modifiers["Boolean"].operation = 'UNION'
-        bpy.context.object.modifiers["Boolean"].object = handle_obj
-        bpy.ops.object.modifier_apply(modifier="Boolean", single_user=True)
+        bpy.ops.object.booltool_auto_union()
+        # bpy.ops.object.modifier_add(type='BOOLEAN')
+        # bpy.context.object.modifiers["Boolean"].solver = 'FAST'
+        # bpy.context.object.modifiers["Boolean"].operation = 'UNION'
+        # bpy.context.object.modifiers["Boolean"].object = handle_obj
+        # bpy.ops.object.modifier_apply(modifier="Boolean", single_user=True)
 
         bpy.data.objects.remove(plane_obj, do_unlink=True)
-        bpy.data.objects.remove(sphere_obj, do_unlink=True)
-        bpy.data.objects.remove(handle_obj, do_unlink=True)
+        # bpy.data.objects.remove(handle_obj, do_unlink=True)
         bpy.data.objects.remove(handle_compare_obj, do_unlink=True)
 
         # 合并后Handle会被去除材质,因此需要重置一下模型颜色为黄色
-        bpy.ops.object.mode_set(mode='VERTEX_PAINT')
-        bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
-        bpy.data.brushes["Draw"].color = (1, 0.6, 0.4)
-        bpy.ops.paint.vertex_color_set()
-        bpy.ops.object.mode_set(mode='OBJECT')
+        utils_re_color(name, (1, 0.319, 0.133))
+        # bpy.ops.object.mode_set(mode='VERTEX_PAINT')
+        # bpy.ops.wm.tool_set_by_id(name="builtin_brush.Draw")
+        # bpy.data.brushes["Draw"].color = (1, 0.6, 0.4)
+        # bpy.ops.paint.vertex_color_set()
+        # bpy.ops.object.mode_set(mode='OBJECT')
 
 
 def addHandle():
@@ -1183,9 +1423,6 @@ def addHandle():
     bpy.ops.wm.stl_import(filepath=relative_path)
     #导入附件的父物体平面
     bpy.ops.mesh.primitive_plane_add(enter_editmode=False, align='WORLD', location=(-100, -100, 0), scale=(4, 1.6, 1))
-    #导入附件模块中的圆球,主要用于鼠标模式切换,当三维旋转状态开启的时候,鼠标在圆球上的时候,调用三维旋转鼠标行为,否则调用公共鼠标行为
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=30, ring_count=30, radius=10, enter_editmode=False, align='WORLD',
-                                         location=(-100, -100, 0), scale=(1, 1, 1))
     name = bpy.context.scene.leftWindowObj
     obj = bpy.data.objects[name]
     cubename = "软耳膜附件"
@@ -1215,13 +1452,6 @@ def addHandle():
         moveToRight(plane_obj)
     elif (name == "左耳"):
         moveToLeft(plane_obj)
-    spherename = "Sphere"
-    sphere_obj = bpy.data.objects[spherename]
-    sphere_obj.name = name + "HandleSphere"
-    if (name == "右耳"):
-        moveToRight(sphere_obj)
-    elif (name == "左耳"):
-        moveToLeft(sphere_obj)
 
     # 为附件添加材质
     bpy.context.view_layer.objects.active = cube_obj
@@ -1243,21 +1473,14 @@ def addHandle():
     plane_obj.data.materials.clear()
     plane_obj.data.materials.append(bpy.data.materials['HandleTransparency'])
 
-    # 为圆球添加透明效果
-    bpy.context.view_layer.objects.active = sphere_obj
-    initialHandleTransparency()
-    sphere_obj.data.materials.clear()
-    sphere_obj.data.materials.append(bpy.data.materials['HandleTransparency'])
 
     #将平面设置为附件的父物体。对父物体平面进行位移和大小缩放操作时，子物体字体会其改变
     bpy.context.view_layer.objects.active = plane_obj
     cube_obj.select_set(True)
     cube_compare_obj.select_set(True)
-    sphere_obj.select_set(True)
     bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
     cube_obj.select_set(False)
     cube_compare_obj.select_set(False)
-    sphere_obj.select_set(False)
     bpy.context.view_layer.objects.active = plane_obj
     plane_obj.select_set(True)
 
@@ -1297,14 +1520,18 @@ class HandleReset(bpy.types.Operator):
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         global is_on_rotate
         global is_on_rotateL
+        global handle_index
+        global handle_indexL
         global handle_info_save
         global handle_info_saveL
         name = bpy.context.scene.leftWindowObj
         if(name == '右耳'):
             is_on_rotate = False
+            handle_index = -1
             handle_info_save = []
         elif(name == '左耳'):
             is_on_rotateL = False
+            handle_indexL = -1
             handle_info_saveL = []
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
@@ -1322,17 +1549,18 @@ class HandleReset(bpy.types.Operator):
         handleReset()
         return {'FINISHED'}
 
-
-class HandleAdd(bpy.types.Operator):
-    bl_idname = "object.handleadd"
-    bl_label = "添加附件"
+class HandleBackForwardAdd(bpy.types.Operator):
+    bl_idname = "object.handlebackforwordadd"
+    bl_label = "单步撤回过程中添加附件"
 
     def invoke(self, context, event):
 
-        bpy.context.scene.var = 14
+        bpy.context.scene.var = 17
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
+        global handle_index
+        global handle_indexL
         global handle_info_save
         global handle_info_saveL
         name = bpy.context.scene.leftWindowObj
@@ -1342,7 +1570,7 @@ class HandleAdd(bpy.types.Operator):
         elif name == '左耳':
             handle_info_save_cur = handle_info_saveL
 
-
+        print("handlebackforwordadd_modal_invoke")
         # 先将未提交的附件提交
         handleSubmit()
         #双击添加过一个附件之后,才能够继续添加附件
@@ -1359,6 +1587,12 @@ class HandleAdd(bpy.types.Operator):
         bpy.context.view_layer.objects.active = plane_obj
         # 将新创建的字体位置设置未上一个提交的字体位置
         handleInfo = handle_info_save_cur[len(handle_info_save_cur) - 1]
+        if name == '右耳':
+            handle_index = handle_index + 1
+            print("添加附件后:",handle_index)
+        elif name == '左耳':
+            handle_indexL = handle_indexL + 1
+            print("添加附件后:", handle_indexL)
         l_x = handleInfo.l_x
         l_y = handleInfo.l_y
         l_z = handleInfo.l_z
@@ -1391,7 +1625,9 @@ class HandleAdd(bpy.types.Operator):
         plane_obj = bpy.data.objects.get(planename)
         cur_obj_name = name
         cur_obj = bpy.data.objects.get(cur_obj_name)
-        if (bpy.context.scene.var == 14):
+        if (bpy.context.scene.var == 17):
+            #在数组中更新附件的信息
+            updateInfo()
             #公共鼠标行为 和 附件平面旋转拖拽鼠标行为之间的切换
             if(not is_on_rotate_cur):
                 if (is_mouse_on_object(context, event) and not is_mouse_on_handle(context, event) and (
@@ -1445,7 +1681,7 @@ class HandleAdd(bpy.types.Operator):
                     cur_obj.select_set(False)
                 elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
                     # 调用公共鼠标行为,将附件设置为默认颜色
-                    red_material = bpy.data.materials.new(name="HandleRed")
+                    red_material = newColor("HandleRed", 1, 0, 0, 0, 1)
                     red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
                     handle_obj.data.materials.clear()
                     handle_obj.data.materials.append(red_material)
@@ -1455,19 +1691,228 @@ class HandleAdd(bpy.types.Operator):
                     plane_obj.select_set(False)
             return {'PASS_THROUGH'}
         else:
+            print("handlebackforwordadd_modal_finished")
+            return {'FINISHED'}
+
+class HandleAddInvoke(bpy.types.Operator):
+    bl_idname = "object.handleaddinvoke"
+    bl_label = "调用handleadd操作类,添加附件(在上一个modal结束后再调用新的modal,防止modal开启过多造成卡顿)"
+
+    def invoke(self, context, event):
+
+        bpy.context.scene.var = 18
+        # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+        global is_on_rotate
+        global is_on_rotateL
+        global is_handleAdd_modal_start
+        global is_handleAdd_modal_startL
+        name = bpy.context.scene.leftWindowObj
+        if (name == '右耳'):
+            is_on_rotate = False
+            if (not is_handleAdd_modal_start):
+                is_handleAdd_modal_start = True
+                bpy.ops.object.handleadd('INVOKE_DEFAULT')
+                return {'FINISHED'}
+        elif (name == '左耳'):
+            is_on_rotateL = False
+            if (not is_handleAdd_modal_startL):
+                is_handleAdd_modal_startL = True
+                bpy.ops.object.handleadd('INVOKE_DEFAULT')
+                return {'FINISHED'}
+        return {'PASS_THROUGH'}
+
+
+class HandleAdd(bpy.types.Operator):
+    bl_idname = "object.handleadd"
+    bl_label = "点击加号按钮添加附件"
+
+    def invoke(self, context, event):
+
+        bpy.context.scene.var = 14
+        # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+
+        global handle_index
+        global handle_indexL
+        global handle_info_save
+        global handle_info_saveL
+        global is_handleAdd_modal_start
+        global is_handleAdd_modal_startL
+        name = bpy.context.scene.leftWindowObj
+        handle_index_cur = None
+        handle_info_save_cur = None
+        if name == '右耳':
+            handle_index_cur = handle_index
+            handle_info_save_cur = handle_info_save
+            is_handleAdd_modal_start = True
+        elif name == '左耳':
+            handle_index_cur = handle_indexL
+            handle_info_save_cur = handle_info_saveL
+            is_handleAdd_modal_startL = True
+
+        print("handleadd_modal_invoke")
+        # 先将未提交的附件提交
+        handleSubmit()
+        #双击添加过一个附件之后,才能够继续添加附件
+        if (len(handle_info_save_cur) == 0):
+            bpy.ops.wm.tool_set_by_id(name="my_tool.handle_initial")
+            if (name == "右耳"):
+                is_handleAdd_modal_start = False
+            elif (name == "左耳"):
+                is_handleAdd_modal_startL = False
+            return {'FINISHED'}
+        elif(handle_index_cur == len(handle_info_save_cur) -1):
+            #创建新的Handle
+            addHandle()
+            # 将Plane激活并选中
+            name = bpy.context.scene.leftWindowObj
+            planename = name + "Plane"
+            plane_obj = bpy.data.objects.get(planename)
+            plane_obj.select_set(True)
+            bpy.context.view_layer.objects.active = plane_obj
+            # 将新创建的字体位置设置未上一个提交的字体位置
+            handleInfo = handle_info_save_cur[len(handle_info_save_cur) - 1]
+            if name == '右耳':
+                handle_index = handle_index + 1
+                print("添加附件后:",handle_index)
+            elif name == '左耳':
+                handle_indexL = handle_indexL + 1
+                print("添加附件后:", handle_indexL)
+            l_x = handleInfo.l_x
+            l_y = handleInfo.l_y
+            l_z = handleInfo.l_z
+            r_x = handleInfo.r_x
+            r_y = handleInfo.r_y
+            r_z = handleInfo.r_z
+            offset = handleInfo.offset
+            plane_obj.location[0] = l_x
+            plane_obj.location[1] = l_y
+            plane_obj.location[2] = l_z
+            plane_obj.rotation_euler[0] = r_x
+            plane_obj.rotation_euler[1] = r_y
+            plane_obj.rotation_euler[2] = r_z
+            if name == '右耳':
+                bpy.context.scene.erMoFuJianOffset = offset
+            elif name == '左耳':
+                bpy.context.scene.erMoFuJianOffsetL = offset
+
+            context.window_manager.modal_handler_add(self)
+            return {'RUNNING_MODAL'}
+        if (name == "右耳"):
+            is_handleAdd_modal_start = False
+        elif (name == "左耳"):
+            is_handleAdd_modal_startL = False
+        return {'FINISHED'}
+
+    def modal(self, context, event):
+        global is_on_rotate
+        global is_on_rotateL
+        global is_handleAdd_modal_start
+        global is_handleAdd_modal_startL
+        name = bpy.context.scene.leftWindowObj
+        is_on_rotate_cur = False
+        if(name == '右耳'):
+            is_on_rotate_cur = is_on_rotate
+        elif(name == '左耳'):
+            is_on_rotate_cur = is_on_rotateL
+        cubename = name + "Cube"
+        handle_obj = bpy.data.objects.get(cubename)
+        planename = name + "Plane"
+        plane_obj = bpy.data.objects.get(planename)
+        cur_obj_name = name
+        cur_obj = bpy.data.objects.get(cur_obj_name)
+        if (bpy.context.scene.var == 14):
+            #在数组中更新附件的信息
+            updateInfo()
+            #公共鼠标行为 和 附件平面旋转拖拽鼠标行为之间的切换
+            if(not is_on_rotate_cur):
+                if (is_mouse_on_object(context, event) and not is_mouse_on_handle(context, event) and (
+                        is_changed_handle(context, event) or is_changed(context, event))):
+                    #公共鼠标行为加双击移动附件位置,将附件设置为默认颜色
+                    red_material = newColor("HandleRed", 1, 0, 0, 0, 1)
+                    handle_obj.data.materials.clear()
+                    handle_obj.data.materials.append(red_material)
+                    bpy.ops.wm.tool_set_by_id(name="my_tool.handle_mouse")
+                    cur_obj.select_set(True)
+                    bpy.context.view_layer.objects.active = cur_obj
+                    plane_obj.select_set(False)
+                elif (is_mouse_on_handle(context, event) and (is_changed_handle(context,event) or is_changed(context,event))):
+                    # 调用handle的鼠标行为,将附件设置为选中的颜色
+                    yellow_material = newColor("HandleYellow", 1, 1, 0, 0, 1)
+                    handle_obj.data.materials.clear()
+                    handle_obj.data.materials.append(yellow_material)
+                    bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+                    plane_obj.select_set(True)
+                    bpy.context.view_layer.objects.active = plane_obj
+                    cur_obj.select_set(False)
+                elif ((not is_mouse_on_object(context, event)) and (is_changed_handle(context,event) or is_changed(context,event))):
+                    # 调用公共鼠标行为,将附件设置为默认颜色
+                    red_material = newColor("HandleRed", 1, 0, 0, 0, 1)
+                    handle_obj.data.materials.clear()
+                    handle_obj.data.materials.append(red_material)
+                    bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                    cur_obj.select_set(True)
+                    bpy.context.view_layer.objects.active = cur_obj
+                    plane_obj.select_set(False)
+            # 公共鼠标行为 和 附件三维旋转鼠标行为之间的切换
+            elif(is_on_rotate_cur):
+                if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
+                        is_changed_sphere(context, event) or is_changed(context, event))):
+                    #公共鼠标行为加双击移动附件位置,将附件设置为默认颜色
+                    red_material = newColor("HandleRed", 1, 0, 0, 0, 1)
+                    handle_obj.data.materials.clear()
+                    handle_obj.data.materials.append(red_material)
+                    bpy.ops.wm.tool_set_by_id(name="my_tool.handle_mouse")
+                    cur_obj.select_set(True)
+                    bpy.context.view_layer.objects.active = cur_obj
+                    plane_obj.select_set(False)
+                elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+                    # 调用handle的三维旋转鼠标行为,将附件设置为选中的颜色
+                    yellow_material = newColor("HandleYellow", 1, 1, 0, 0, 1)
+                    handle_obj.data.materials.clear()
+                    handle_obj.data.materials.append(yellow_material)
+                    bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
+                    plane_obj.select_set(True)
+                    bpy.context.view_layer.objects.active = plane_obj
+                    cur_obj.select_set(False)
+                elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+                    # 调用公共鼠标行为,将附件设置为默认颜色
+                    red_material = newColor("HandleRed", 1, 0, 0, 0, 1)
+                    handle_obj.data.materials.clear()
+                    handle_obj.data.materials.append(red_material)
+                    bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                    cur_obj.select_set(True)
+                    bpy.context.view_layer.objects.active = cur_obj
+                    plane_obj.select_set(False)
+            return {'PASS_THROUGH'}
+        else:
+            print("handleadd_modal_finished")
+            if (name == "右耳"):
+                is_handleAdd_modal_start = False
+            elif (name == "左耳"):
+                is_handleAdd_modal_startL = False
             return {'FINISHED'}
 
 
 class HandleInitialAdd(bpy.types.Operator):
     bl_idname = "object.handleinitialadd"
-    bl_label = "添加附件"
+    bl_label = "进入附件模块初始化双击添加附件"
 
     def invoke(self, context, event):
 
         bpy.context.scene.var = 15
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        global handle_index
+        global handle_indexL
 
+        print("handleinitialadd_modal_invoke")
         #添加一个附件
         addHandle()
         # 将Plane激活并选中
@@ -1479,6 +1924,13 @@ class HandleInitialAdd(bpy.types.Operator):
         co, normal = cal_co(context, event)
         if (co != -1):
             handle_fit_rotate(normal,co)
+        #添加完最初的一个附件之后,将指针置为0
+        if (name == '右耳'):
+            handle_index = 0
+            print("初始化添加后的指针:",handle_index)
+        elif (name == '左耳'):
+            handle_indexL = 0
+            print("初始化添加后的指针:", handle_indexL)
 
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
@@ -1499,6 +1951,8 @@ class HandleInitialAdd(bpy.types.Operator):
         cur_obj_name = name
         cur_obj = bpy.data.objects.get(cur_obj_name)
         if (bpy.context.scene.var == 15):
+            # 在数组中更新附件的信息
+            updateInfo()
             #公共鼠标行为 和 附件平面旋转拖拽鼠标行为之间的切换
             if(not is_on_rotate_cur):
                 if (is_mouse_on_object(context, event) and not is_mouse_on_handle(context, event) and (
@@ -1552,7 +2006,7 @@ class HandleInitialAdd(bpy.types.Operator):
                     cur_obj.select_set(False)
                 elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
                     # 调用公共鼠标行为,将附件设置为默认颜色
-                    red_material = bpy.data.materials.new(name="HandleRed")
+                    red_material = newColor("HandleRed", 1, 0, 0, 0, 1)
                     red_material.diffuse_color = (1.0, 0.0, 0.0, 1.0)
                     handle_obj.data.materials.clear()
                     handle_obj.data.materials.append(red_material)
@@ -1562,6 +2016,7 @@ class HandleInitialAdd(bpy.types.Operator):
                     plane_obj.select_set(False)
             return {'PASS_THROUGH'}
         else:
+            print("handleinitialadd_modal_finished")
             return {'FINISHED'}
 
 
@@ -1570,6 +2025,13 @@ class HandleSubmit(bpy.types.Operator):
     bl_label = "附件提交"
 
     def invoke(self, context, event):
+        global is_on_rotate
+        global is_on_rotateL
+        name = bpy.context.scene.leftWindowObj
+        if (name == '右耳'):
+            is_on_rotate = not is_on_rotate
+        elif (name == '左耳'):
+            is_on_rotateL = not is_on_rotateL
         bpy.context.scene.var = 16
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
@@ -1616,23 +2078,79 @@ class HandleRotate(bpy.types.Operator):
         name = bpy.context.scene.leftWindowObj
         planename = name + "Plane"
         plane_obj = bpy.data.objects.get(planename)
-        spherename = name + "HandleSphere"
-        sphere_obj = bpy.data.objects.get(spherename)
-        if (plane_obj != None and sphere_obj != None):
+        if (plane_obj != None):
             if(name == '右耳'):
                 is_on_rotate = not is_on_rotate
-                if(is_on_rotate == True):
-                    sphere_obj.select_set(True)
-                else:
-                    sphere_obj.select_set(False)
             elif(name == '左耳'):
                 is_on_rotateL = not is_on_rotateL
-                if (is_on_rotateL == True):
-                    sphere_obj.select_set(True)
-                else:
-                    sphere_obj.select_set(False)
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         return {'FINISHED'}
+
+
+
+class HandleMirror(bpy.types.Operator):
+    bl_idname = 'object.handlemirror'
+    bl_label = '附件镜像'
+
+    def invoke(self, context, event):
+        print('进入镜像了')
+        bpy.context.scene.var = 23
+        self.execute(context)
+        return {'FINISHED'}
+
+    def execute(self, context):
+        global handle_info_saveL, handle_info_save
+        global handle_indexL, handle_index
+
+        tar_obj_name = bpy.context.scene.leftWindowObj
+        tar_obj = bpy.data.objects[tar_obj_name]
+
+        workspace = context.window.workspace.name
+
+        if tar_obj_name == '左耳':
+            ori_handle_info = handle_info_save
+        else:
+            ori_handle_info = handle_info_saveL
+
+
+        # 只在双窗口下执行镜像
+        if workspace == '布局.001':
+            tar_info = ori_handle_info[0]
+            offset, l_x, l_y, l_z, r_x, r_y, r_z = tar_info.offset, tar_info.l_x, -tar_info.l_y, tar_info.l_z, tar_info.r_x, tar_info.r_y, tar_info.r_z
+            bpy.ops.object.handleinitialadd('INVOKE_DEFAULT')
+            # 获取添加后的Handle,并根据参数设置调整offset
+            planename = tar_obj_name + "Plane"
+            plane_obj = bpy.data.objects.get(planename)
+            if plane_obj is not None:
+                bpy.context.scene.erMoFuJianOffset = offset
+                plane_obj.location[0] = l_x
+                plane_obj.location[1] = l_y
+                plane_obj.location[2] = l_z
+                plane_obj.rotation_euler[0] = r_x
+                plane_obj.rotation_euler[1] = r_y
+                plane_obj.rotation_euler[2] = r_z
+                # 将附件数组指针置为末尾
+                handle_index = len(handle_info_save) - 1
+
+                bm = bmesh.new()
+                bm.from_mesh(tar_obj.data)
+
+                closest_vertex = None
+                min_distance = float('inf')
+                target_point = mathutils.Vector((l_x,l_y,l_z))
+
+                for vert in bm.verts:
+                    # 将顶点坐标转换到世界坐标系
+                    vertex_world = tar_obj.matrix_world @ vert.co
+                    distance = (vertex_world - target_point).length
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_vertex = vert
+                closest_vertex_world = tar_obj.matrix_world @ closest_vertex.co
+                closest_vertex_normal = tar_obj.matrix_world.to_3x3() @ closest_vertex.normal
+
+                handle_fit_rotate(closest_vertex_normal, closest_vertex_world)
+                bm.free()
 
 class MyTool_Handle1(WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
@@ -1668,7 +2186,7 @@ class MyTool_Handle2(WorkSpaceTool):
     bl_icon = "ops.pose.relax"
     bl_widget = None
     bl_keymap = (
-        ("object.handleadd", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+        ("object.handleaddinvoke", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
         # ("object.handleadd", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
         # ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
         # ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
@@ -1789,17 +2307,18 @@ class MyTool_HandleInitial(WorkSpaceTool):
 # 注册类
 _classes = [
     HandleReset,
+    HandleBackForwardAdd,
     HandleAdd,
+    HandleAddInvoke,
     HandleInitialAdd,
     HandleSubmit,
     HandleDoubleClick,
-    HandleRotate
+    HandleRotate,
+    HandleMirror
 ]
 
 
-def register():
-    for cls in _classes:
-        bpy.utils.register_class(cls)
+def register_handle_tools():
     bpy.utils.register_tool(MyTool_Handle1, separator=True, group=False)
     bpy.utils.register_tool(MyTool_Handle2, separator=True, group=False, after={MyTool_Handle1.bl_idname})
     bpy.utils.register_tool(MyTool_Handle3, separator=True, group=False, after={MyTool_Handle2.bl_idname})
@@ -1807,6 +2326,18 @@ def register():
     bpy.utils.register_tool(MyTool_Handle_Mirror, separator=True, group=False, after={MyTool_Handle_Rotate.bl_idname})
     bpy.utils.register_tool(MyTool_Handle_Mouse, separator=True, group=False, after={MyTool_Handle_Mirror.bl_idname})
     bpy.utils.register_tool(MyTool_HandleInitial, separator=True, group=False, after={MyTool_Handle_Mouse.bl_idname})
+
+
+def register():
+    for cls in _classes:
+        bpy.utils.register_class(cls)
+    # bpy.utils.register_tool(MyTool_Handle1, separator=True, group=False)
+    # bpy.utils.register_tool(MyTool_Handle2, separator=True, group=False, after={MyTool_Handle1.bl_idname})
+    # bpy.utils.register_tool(MyTool_Handle3, separator=True, group=False, after={MyTool_Handle2.bl_idname})
+    # bpy.utils.register_tool(MyTool_Handle_Rotate, separator=True, group=False, after={MyTool_Handle3.bl_idname})
+    # bpy.utils.register_tool(MyTool_Handle_Mirror, separator=True, group=False, after={MyTool_Handle_Rotate.bl_idname})
+    # bpy.utils.register_tool(MyTool_Handle_Mouse, separator=True, group=False, after={MyTool_Handle_Mirror.bl_idname})
+    # bpy.utils.register_tool(MyTool_HandleInitial, separator=True, group=False, after={MyTool_Handle_Mouse.bl_idname})
 
 
 def unregister():
