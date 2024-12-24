@@ -6,6 +6,8 @@ from ...tool import delete_vert_group, set_vert_group, subdivide, convert_to_mes
 from ..parameters_for_create_mould import get_template_high, get_template_low, get_left_template_high, get_left_template_low
 import math
 
+min_z_before_cut = None
+max_z_before_cut = None
 
 def hard_recover_before_cut_and_remind_border():
     '''
@@ -22,7 +24,7 @@ def hard_recover_before_cut_and_remind_border():
         # 删除不需要的物体
         need_to_delete_model_name_list = [name, name + 'CutPlane']
         curve_list = [name + "dragcurve", name + "selectcurve", name + "colorcurve", name + 'coloredcurve',
-                      name + "point"]
+                      name + "point", name + 'create_mould_sphere']
         delete_useless_object(need_to_delete_model_name_list)
         delete_useless_object(curve_list)
         # 将最开始复制出来的OriginForCreateMould名称改为模型名称
@@ -148,9 +150,9 @@ def translate_curve_to_mesh():
 
 def judge_normals():
     name = bpy.context.scene.leftWindowObj
-    selected_objs = bpy.data.objects
-    for selected_obj in selected_objs:
-        print(selected_obj.name)
+    # selected_objs = bpy.data.objects
+    # for selected_obj in selected_objs:
+    #     print(selected_obj.name)
     cut_plane = bpy.data.objects[name + "CutPlane"]
     cut_plane_mesh = bmesh.from_edit_mesh(cut_plane.data)
     sum = 0
@@ -234,6 +236,11 @@ def plane_cut():
     bpy.ops.mesh.select_all(action='SELECT')
     bm = bmesh.from_edit_mesh(obj.data)
     ori_border_index = [v.index for v in bm.verts if v.select]
+    all_index = [v for v in bm.verts]
+    all_index.sort(key=lambda vert: vert.co[2])
+    global min_z_before_cut, max_z_before_cut
+    min_z_before_cut = all_index[0].co[2]
+    max_z_before_cut = all_index[-1].co[2]
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.mode_set(mode='OBJECT')
     set_vert_group("all", ori_border_index)
@@ -353,9 +360,29 @@ def delete_useless_part():
     target_bm = bmesh.new()
     # 将网格数据复制到bmesh对象
     target_bm.from_mesh(target_me)
+    global min_z_before_cut
+    all_verts = [v for v in target_bm.verts]
+    all_verts.sort(key=lambda vert: vert.co[2])
     if len(target_bm.verts) < 100:
         print("切割出错，完全切掉了")
         raise ValueError("切割出错，完全切掉了")
+    elif min_z_before_cut == all_verts[0].co[2]:
+        print("切割出错，没有切掉下半部分")
+        if all_verts[-1].co[2] != max_z_before_cut:
+            print("切反了")
+            # recover_and_remind_border()
+            # # 翻转平面法线
+            # bpy.ops.object.select_all(action='DESELECT')
+            # bpy.context.view_layer.objects.active = bpy.data.objects[name + "CutPlane"]
+            # bpy.data.objects[name + "CutPlane"].select_set(True)
+            # bpy.ops.object.mode_set(mode='EDIT')
+            # bpy.ops.mesh.select_all(action='SELECT')
+            # bpy.ops.mesh.flip_normals()
+            # bpy.ops.object.mode_set(mode='OBJECT')
+            # plane_boolean_cut()
+            # delete_useless_part()
+        else:
+            raise ValueError("切割出错，没有切掉下半部分")
 
     # 最后删掉没用的CutPlane
     # bpy.data.objects.remove(bpy.data.objects["CutPlane"], do_unlink=True)
@@ -531,86 +558,86 @@ def get_cut_plane_for_re_cut():
     main_obj.select_set(True)
 
 
-def re_hard_cut(hard_eardrum_border, step_number_out, step_number_in):
-    name = bpy.context.scene.leftWindowObj
-    utils_draw_curve(hard_eardrum_border, name + "BottomRingBorderR", 0.18)
-    # 给蓝线上色
-    newColor('blue', 0, 0, 1, 1, 1)
-    bpy.data.objects[name + "BottomRingBorderR"].data.materials.append(bpy.data.materials['blue'])
-    resample_curve(160,name + "BottomRingBorderR")
-    convert_to_mesh(name + 'BottomRingBorderR', name + 'meshBottomRingBorderR', 0.18)
-
-    # 重新切割
-    active_obj = bpy.data.objects[name + 'BottomRingBorderR']
-    duplicate_obj = active_obj.copy()
-    duplicate_obj.data = active_obj.data.copy()
-    duplicate_obj.name = name + "CutPlane"
-    duplicate_obj.animation_data_clear()
-    # 将复制的物体加入到场景集合中
-    bpy.context.collection.objects.link(duplicate_obj)
-    if name == '右耳':
-        moveToRight(duplicate_obj)
-    elif name == '左耳':
-        moveToLeft(duplicate_obj)
-
-    duplicate_obj.data.bevel_depth = 0
-    bpy.ops.object.select_all(action='DESELECT')
-    bpy.context.view_layer.objects.active = duplicate_obj
-    duplicate_obj.select_set(state=True)
-    bpy.ops.object.convert(target='MESH')
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    duplicate_obj.vertex_groups.new(name='HardEardrumBorderVertex')
-    bpy.ops.object.vertex_group_assign()
-    bpy.ops.mesh.offset_edges(geometry_mode='extrude', width=step_number_out, caches_valid=False)
-    bpy.ops.object.vertex_group_remove_from()
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.vertex_group_select()
-    bpy.ops.mesh.offset_edges(geometry_mode='extrude', width=-step_number_in, caches_valid=False)
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
-    bpy.ops.mesh.bridge_edge_loops()
-    bpy.ops.mesh.normals_make_consistent(inside=False)
-    if judge_normals():
-        bpy.ops.mesh.flip_normals()
-    bpy.ops.object.mode_set(mode='OBJECT')
-    plane_cut()
-    # 下面这个函数有改动，先删一下切出来的面
-    delete_useless_part()
-    bpy.data.objects.remove(bpy.data.objects[name + "CutPlane"], do_unlink=True)
-
-
-# def re_hard_cut(hard_eardrum_border_and_normal,step_out, step_in):
+# def re_hard_cut(hard_eardrum_border, step_number_out, step_number_in):
 #     name = bpy.context.scene.leftWindowObj
-#     # 进入这里说明移动过蓝线了，进行二次切割，传入的参数已经是排序好的圆环数据，不需要重新排序
-#     center_border = list()
-#     inner_border = list()
-#     cut_plane_border = list()
-#     for item in hard_eardrum_border_and_normal:
-#         border_co = item[0]
-#         normal = item[1]
-#         center_border.append(border_co)
-#         cut_plane_border.append((border_co[0] + normal[0] * step_out, border_co[1] + normal[1] * step_out, border_co[2] + normal[2] * step_out))
-#         inner_border.append((border_co[0] - normal[0] * step_in, border_co[1] - normal[1] * step_in, border_co[2] - normal[2] * step_in))
-#     utils_draw_curve(center_border, name + "BottomRingBorderR", 0.18)
+#     utils_draw_curve(hard_eardrum_border, name + "BottomRingBorderR", 0.18)
 #     # 给蓝线上色
 #     newColor('blue', 0, 0, 1, 1, 1)
 #     bpy.data.objects[name + "BottomRingBorderR"].data.materials.append(bpy.data.materials['blue'])
 #     resample_curve(160,name + "BottomRingBorderR")
 #     convert_to_mesh(name + 'BottomRingBorderR', name + 'meshBottomRingBorderR', 0.18)
 #
-#     utils_draw_curve(center_border, name + "Center", 0)
-#     utils_draw_curve(cut_plane_border, name + "CutPlane", 0)
-#     utils_draw_curve(inner_border, name + "Inner", 0)
+#     # 重新切割
+#     active_obj = bpy.data.objects[name + 'BottomRingBorderR']
+#     duplicate_obj = active_obj.copy()
+#     duplicate_obj.data = active_obj.data.copy()
+#     duplicate_obj.name = name + "CutPlane"
+#     duplicate_obj.animation_data_clear()
+#     # 将复制的物体加入到场景集合中
+#     bpy.context.collection.objects.link(duplicate_obj)
+#     if name == '右耳':
+#         moveToRight(duplicate_obj)
+#     elif name == '左耳':
+#         moveToLeft(duplicate_obj)
 #
-#     # 根据中内外三圈绘制切割平面
-#     get_cut_plane_for_re_cut()
-#     # 套用切割
+#     duplicate_obj.data.bevel_depth = 0
+#     bpy.ops.object.select_all(action='DESELECT')
+#     bpy.context.view_layer.objects.active = duplicate_obj
+#     duplicate_obj.select_set(state=True)
+#     bpy.ops.object.convert(target='MESH')
+#     bpy.ops.object.mode_set(mode='EDIT')
+#     bpy.ops.mesh.select_all(action='SELECT')
+#     duplicate_obj.vertex_groups.new(name='HardEardrumBorderVertex')
+#     bpy.ops.object.vertex_group_assign()
+#     bpy.ops.mesh.offset_edges(geometry_mode='extrude', width=step_number_out, caches_valid=False)
+#     bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
+#     bpy.ops.object.vertex_group_remove_from()
+#     bpy.ops.mesh.select_all(action='DESELECT')
+#     bpy.ops.object.vertex_group_select()
+#     bpy.ops.mesh.offset_edges(geometry_mode='extrude', width=-step_number_in, caches_valid=False)
+#     bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
+#     bpy.ops.mesh.select_all(action='SELECT')
+#     bpy.ops.mesh.normals_make_consistent(inside=False)
+#     if judge_normals():
+#         bpy.ops.mesh.flip_normals()
+#     bpy.ops.object.mode_set(mode='OBJECT')
 #     plane_cut()
 #     # 下面这个函数有改动，先删一下切出来的面
 #     delete_useless_part()
 #     bpy.data.objects.remove(bpy.data.objects[name + "CutPlane"], do_unlink=True)
-#     # bpy.ops.object.shade_smooth(use_auto_smooth=True)
+
+
+def re_hard_cut(hard_eardrum_border_and_normal, step_out, step_in):
+    name = bpy.context.scene.leftWindowObj
+    # 进入这里说明移动过蓝线了，进行二次切割，传入的参数已经是排序好的圆环数据，不需要重新排序
+    center_border = list()
+    inner_border = list()
+    cut_plane_border = list()
+    for item in hard_eardrum_border_and_normal:
+        border_co = item[0]
+        normal = item[1]
+        center_border.append(border_co)
+        cut_plane_border.append((border_co[0] + normal[0] * step_out, border_co[1] + normal[1] * step_out, border_co[2] + normal[2] * step_out))
+        inner_border.append((border_co[0] - normal[0] * step_in, border_co[1] - normal[1] * step_in, border_co[2] - normal[2] * step_in))
+    utils_draw_curve(center_border, name + "BottomRingBorderR", 0.18)
+    # 给蓝线上色
+    newColor('blue', 0, 0, 1, 1, 1)
+    bpy.data.objects[name + "BottomRingBorderR"].data.materials.append(bpy.data.materials['blue'])
+    resample_curve(160,name + "BottomRingBorderR")
+    convert_to_mesh(name + 'BottomRingBorderR', name + 'meshBottomRingBorderR', 0.18)
+
+    utils_draw_curve(center_border, name + "Center", 0)
+    utils_draw_curve(cut_plane_border, name + "CutPlane", 0)
+    utils_draw_curve(inner_border, name + "Inner", 0)
+
+    # 根据中内外三圈绘制切割平面
+    get_cut_plane_for_re_cut()
+    # 套用切割
+    plane_cut()
+    # 下面这个函数有改动，先删一下切出来的面
+    delete_useless_part()
+    bpy.data.objects.remove(bpy.data.objects[name + "CutPlane"], do_unlink=True)
+    # bpy.ops.object.shade_smooth(use_auto_smooth=True)
 
 
 # ----------------凸包算法，用于把模板调整为凸多边形，防止扩大时重叠----------------

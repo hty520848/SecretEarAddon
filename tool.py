@@ -273,7 +273,7 @@ def get_region_and_space(context, area_type, region_type, space_type):
 
 # 判断鼠标是否在物体上
 def is_mouse_on_object(context, event):
-    active_obj = context.active_object
+    active_obj = bpy.data.objects.get(context.scene.leftWindowObj)
     is_on_object = False  # 初始化变量
 
     # 获取鼠标光标的区域坐标
@@ -333,7 +333,7 @@ def is_mouse_on_object(context, event):
 
 # 判断鼠标状态是否发生改变
 def is_changed(context, event):
-    active_obj = context.active_object
+    active_obj = bpy.data.objects.get(context.scene.leftWindowObj)
 
     curr_on_object = False  # 当前鼠标是否在物体上,初始化为False
     global prev_on_object  # 之前鼠标是否在物体上
@@ -407,9 +407,6 @@ def is_mouse_on_which_object(obj_name, context, event):
     sphere4 = bpy.data.objects[obj_name+"StepCutSphere4"]
 
     is_on_object = 5  # 初始化变量
-
-    if context.area:
-        context.area.tag_redraw()
 
     # 获取鼠标光标的区域坐标
     override1 = getOverride()
@@ -558,9 +555,10 @@ def convert_to_mesh(curve_name, mesh_name, depth):
     duplicate_obj.select_set(state=True)
     bpy.context.object.data.bevel_depth = depth  # 设置曲线倒角深度
     bpy.ops.object.convert(target='MESH')  # 转化为网格
-    bpy.context.view_layer.objects.active = last_active_obj
-    bpy.ops.object.select_all(action='DESELECT')
-    last_active_obj.select_set(state=True)
+    if last_active_obj:
+        bpy.context.view_layer.objects.active = last_active_obj
+        bpy.ops.object.select_all(action='DESELECT')
+        last_active_obj.select_set(state=True)
 
 
 def recover_and_remind_border():
@@ -577,28 +575,36 @@ def recover_and_remind_border():
     if recover_flag:
         enum = bpy.context.scene.muJuTypeEnum
         if enum == 'OP4':
-            need_to_delete_model_name_list = [name, name + "OriginForFill", name + "OriginForDigHole"]
+            # need_to_delete_model_name_list = [name, name + "OriginForFill", name + "OriginForDigHole"]
+            need_to_delete_model_name_list = [name, name + "FillPlane", name + "ForGetFillPlane", name + "Inner",
+                                              "RetopoPart", name + "OuterOrigin", name + "InnerOrigin",
+                                              name + "OuterRetopo", name + "InnerRetopo", name + "huanqiecompare"]
             curve_list = [name + "dragcurve", name + "selectcurve", name + "colorcurve", name + 'coloredcurve',
-                          name + "point"]
+                          name + "point", name + 'create_mould_sphere']
             delete_useless_object(need_to_delete_model_name_list)
             delete_useless_object(curve_list)
-            delete_hole_border()  # 删除框架式耳模中的挖孔边界
+            # delete_hole_border()  # 删除框架式耳模中的挖孔边界
 
         elif enum == 'OP2':
-            need_to_delete_model_name_list = [name, name + "HardEarDrumForSmooth"]
+            need_to_delete_model_name_list = [name, name + "HardEarDrumForSmooth", name + 'ForBottomFillReset']
             curve_list = [name + "dragcurve", name + "selectcurve", name + "colorcurve", name + 'coloredcurve',
-                          name + "point"]
+                          name + "point", name + 'create_mould_sphere']
             delete_useless_object(need_to_delete_model_name_list)
             delete_useless_object(curve_list)
 
         elif enum == "OP1":
             need_to_delete_model_name_list = [name, name + "FillPlane", name + "ForGetFillPlane", name + "Inner",
                                               "RetopoPart", name + "OuterOrigin", name + "InnerOrigin",
-                                              name + "OuterRetopo", name + "InnerRetopo", name + "circle",
-                                              name + "Torus",
-                                              name + "huanqiecompare"]
+                                              name + "OuterRetopo", name + "InnerRetopo", name + "huanqiecompare"]
             curve_list = [name + "dragcurve", name + "selectcurve", name + "colorcurve", name + 'coloredcurve',
-                          name + "point"]
+                          name + "point", name + 'create_mould_sphere']
+            delete_useless_object(need_to_delete_model_name_list)
+            delete_useless_object(curve_list)
+
+        elif enum == "OP3":
+            need_to_delete_model_name_list = [name]
+            curve_list = [name + "dragcurve", name + "selectcurve", name + "colorcurve", name + 'coloredcurve',
+                          name + "point", name + 'create_mould_sphere']
             delete_useless_object(need_to_delete_model_name_list)
             delete_useless_object(curve_list)
 
@@ -645,16 +651,16 @@ def recover_to_dig():
     # 找到最初创建的  OriginForDigHole 才能进行恢复
     if recover_flag:
         # 删除不需要的物体
-        need_to_delete_model_name_list = [name, name + "OriginForFill"]
+        need_to_delete_model_name_list = [name, name + "OriginForFill", name + "Inner"]
         curve_list = [name + "dragcurve", name + "selectcurve", name + "colorcurve", name + 'coloredcurve',
-                      name + "point"]
+                      name + "point", name + 'create_mould_sphere']
         for selected_obj in bpy.data.objects:
             if (selected_obj.name in need_to_delete_model_name_list):
                 bpy.data.objects.remove(selected_obj, do_unlink=True)
-            if (selected_obj.name in curve_list):
+            elif (selected_obj.name in curve_list):
                 bpy.data.objects.remove(selected_obj, do_unlink=True)
-            bpy.ops.outliner.orphans_purge(
-                do_local_ids=True, do_linked_ids=True, do_recursive=False)
+        bpy.ops.outliner.orphans_purge(
+            do_local_ids=True, do_linked_ids=True, do_recursive=False)
         # 将最开始复制出来的OriginForDigHole名称改为模型名称
         obj.hide_set(False)
         obj.name = name
@@ -702,8 +708,8 @@ def delete_useless_object(need_to_delete_model_name_list):
     for selected_obj in bpy.data.objects:
         if (selected_obj.name in need_to_delete_model_name_list):
             bpy.data.objects.remove(selected_obj, do_unlink=True)
-        bpy.ops.outliner.orphans_purge(
-            do_local_ids=True, do_linked_ids=True, do_recursive=False)
+    bpy.ops.outliner.orphans_purge(
+        do_local_ids=True, do_linked_ids=True, do_recursive=False)
 
 def delete_hole_border():
     name = bpy.context.scene.leftWindowObj
@@ -948,6 +954,60 @@ def get_cast_index(tar_obj,ori_index):
     return cast_vertex_index
 
 
+# def extrude_border_by_vertex_groups(ori_group_name, target_group_name):
+#     name = bpy.context.scene.leftWindowObj
+#     ori_obj = bpy.data.objects[name]
+#     bpy.ops.object.mode_set(mode='EDIT')
+#     bm = bmesh.from_edit_mesh(ori_obj.data)
+#     bpy.ops.mesh.select_all(action='DESELECT')
+#
+#     outer_border_vertex = ori_obj.vertex_groups.get(ori_group_name)
+#     bpy.ops.object.vertex_group_set_active(group=ori_group_name)
+#     if (outer_border_vertex != None):
+#         bpy.ops.object.vertex_group_select()
+#         bpy.ops.mesh.remove_doubles(threshold=0.8)
+#         outer_border = [v for v in bm.verts if v.select]
+#         outer_edges = set()
+#         extrude_direction = {}
+#         # 遍历选中的顶点
+#         for vert in outer_border:
+#             key = (vert.co[0], vert.co[1], vert.co[2])
+#             extrude_direction[key] = vert.normal
+#             for edge in vert.link_edges:
+#                 # 检查边的两个顶点是否都在选中的顶点中
+#                 if edge.verts[0] in outer_border and edge.verts[1] in outer_border:
+#                     outer_edges.add(edge)
+#                     edge.select_set(True)
+#
+#         # 复制选中的顶点并沿着各自的法线方向移动
+#         bpy.ops.mesh.duplicate()
+#
+#         # 获取所有选中的顶点
+#         inside_border_vert = [v for v in bm.verts if v.select]
+#         inside_border_index = [v.index for v in bm.verts if v.select]
+#
+#         inside_edges = [e for e in bm.edges if e.select]
+#
+#         thickness = bpy.context.scene.zongHouDu
+#         for i, vert in enumerate(inside_border_vert):
+#             key = (vert.co[0], vert.co[1], vert.co[2])
+#             dir = extrude_direction[key]
+#             vert.co -= dir * thickness  # 沿法线方向移动
+#
+#         # 重新选中外边界
+#         for v in outer_border:
+#             v.select_set(True)
+#
+#         for edge in outer_edges:
+#             edge.select_set(True)
+#
+#         bpy.ops.mesh.bridge_edge_loops()
+#
+#         bpy.ops.object.mode_set(mode='OBJECT')
+#         set_vert_group(target_group_name, inside_border_index)
+#     return inside_border_index
+
+
 def extrude_border_by_vertex_groups(ori_group_name, target_group_name):
     name = bpy.context.scene.leftWindowObj
     ori_obj = bpy.data.objects[name]
@@ -959,7 +1019,7 @@ def extrude_border_by_vertex_groups(ori_group_name, target_group_name):
     bpy.ops.object.vertex_group_set_active(group=ori_group_name)
     if (outer_border_vertex != None):
         bpy.ops.object.vertex_group_select()
-        bpy.ops.mesh.remove_doubles(threshold=0.5)
+        bpy.ops.mesh.remove_doubles(threshold=0.7)
         outer_border = [v for v in bm.verts if v.select]
         outer_edges = set()
         extrude_direction = {}
@@ -980,11 +1040,18 @@ def extrude_border_by_vertex_groups(ori_group_name, target_group_name):
         inside_border_vert = [v for v in bm.verts if v.select]
         inside_border_index = [v.index for v in bm.verts if v.select]
 
-        thickness = bpy.context.scene.zongHouDu   # todo: 左右耳适配
+        if name == '右耳':
+            thickness = bpy.context.scene.zongHouDuR
+        elif name == '左耳':
+            thickness = bpy.context.scene.zongHouDuL
         for i, vert in enumerate(inside_border_vert):
             key = (vert.co[0], vert.co[1], vert.co[2])
             dir = extrude_direction[key]
             vert.co -= dir * thickness  # 沿法线方向移动
+        bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
+        bpy.ops.mesh.looptools_flatten(influence=100, lock_x=False, lock_y=False, lock_z=False, plane='best_fit',
+                                       restriction='none')
+        # bpy.ops.mesh.looptools_space(influence=100, input='selected', interpolation='cubic', lock_x=False, lock_y=False, lock_z=False)
 
         # 重新选中外边界
         for v in outer_border:
@@ -1033,9 +1100,6 @@ def is_on_object(name, context, event):
     active_obj = bpy.data.objects[name]
     is_on_object = False  # 初始化变量
 
-    if context.area:
-        context.area.tag_redraw()
-
     # 获取鼠标光标的区域坐标
     override1 = getOverride()
     override2 = getOverride2()
@@ -1078,7 +1142,7 @@ def is_on_object(name, context, event):
     mwi_dir = mwi_end - mwi_start
 
     if active_obj.type == 'MESH':
-        if (active_obj.mode == 'OBJECT' or active_obj.mode == "SCULPT"):
+        if active_obj.mode == 'OBJECT':
             mesh = active_obj.data
             bm = bmesh.new()
             bm.from_mesh(mesh)
@@ -1166,3 +1230,31 @@ def apply_material():
     obj = bpy.data.objects[name]
     obj.data.materials.clear()
     obj.data.materials.append(mat)
+
+
+def transform_normal(target_obj_name, vert_index_list):
+    """
+    将目标物体的法线信息传递给当前物体
+    :param target_obj_name: 目标物体名称
+    :param vert_index_list: 顶点索引列表
+    """
+    target_obj = bpy.data.objects[target_obj_name]
+
+    main_obj = bpy.context.active_object
+    vert_group = main_obj.vertex_groups.get("TransformBorder")
+    if (vert_group == None):
+        vert_group = main_obj.vertex_groups.new(name="TransformBorder")
+    if len(vert_index_list) > 0:
+        for vert_index in vert_index_list:
+            vert_group.add([vert_index], 1, 'ADD')
+
+    bpy.ops.object.shade_smooth()
+    bpy.context.active_object.data.use_auto_smooth = True
+    bpy.context.object.data.auto_smooth_angle = 3.14159
+    bpy.ops.object.modifier_add(type='DATA_TRANSFER')
+    bpy.context.object.modifiers["DataTransfer"].object = target_obj
+    bpy.context.object.modifiers["DataTransfer"].vertex_group = "TransformBorder"
+    bpy.context.object.modifiers["DataTransfer"].use_loop_data = True
+    bpy.context.object.modifiers["DataTransfer"].data_types_loops = {'CUSTOM_NORMAL'}
+    bpy.context.object.modifiers["DataTransfer"].loop_mapping = 'POLYINTERP_LNORPROJ'
+    bpy.ops.object.modifier_apply(modifier="DataTransfer", single_user=True)

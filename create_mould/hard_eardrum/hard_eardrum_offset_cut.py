@@ -5,7 +5,7 @@ from mathutils import Vector, Matrix
 import gpu
 from gpu_extras.batch import batch_for_shader
 from math import degrees, radians, sin, cos, pi
-from ...tool import delete_vert_group, laplacian_smooth
+from ...tool import delete_vert_group, laplacian_smooth, transform_normal
 import math
 
 
@@ -219,7 +219,8 @@ class OffsetCut(bpy.types.Operator):
         # delete_vert_group("BevelBorder")
         delete_vert_group('BorderVertex')
         delete_vert_group('SeparateVertex')
-        delete_vert_group('TransformBorder')
+        delete_vert_group('ExtrudeVertex')
+        # delete_vert_group('TransformBorder')
         return {'FINISHED'}
 
         # bmesh.ops.dissolve_edges(bm, edges=junk_edges, use_verts=True)
@@ -1129,6 +1130,10 @@ def bridge_border(width, center_border_group_name):
     bpy.ops.object.vertex_group_select()
     # 进行倒角
     bpy.ops.mesh.bevel(offset=width * 0.8, segments=int(width / 0.1))
+    # bm = bmesh.from_edit_mesh(main_obj.data)
+    # smooth_index = [v.index for v in bm.verts if v.select]
+    # laplacian_smooth(smooth_index, 0.5, 5)
+    # bpy.ops.object.mode_set(mode='EDIT')
     # bpy.ops.mesh.select_more()
     # bpy.ops.object.vertex_group_set_active(group='SeprateVertex')
     # bpy.ops.object.vertex_group_select()
@@ -1138,21 +1143,28 @@ def bridge_border(width, center_border_group_name):
     bpy.ops.mesh.select_more()
     bpy.ops.mesh.region_to_loop()
     bpy.ops.mesh.select_more()
-    main_obj.vertex_groups.new(name="TransformBorder")
-    bpy.ops.object.vertex_group_assign()
+    bm = bmesh.from_edit_mesh(main_obj.data)
+    transform_index = [v.index for v in bm.verts if v.select]
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.mode_set(mode='OBJECT')
-    bpy.ops.object.shade_smooth()
-    bpy.context.active_object.data.use_auto_smooth = True
-    bpy.context.object.data.auto_smooth_angle = 3.14159
-    bpy.ops.object.modifier_add(type='DATA_TRANSFER')
-    bpy.context.object.modifiers["DataTransfer"].object = bpy.data.objects[
-        bpy.context.scene.leftWindowObj + "HardEarDrumForSmooth"]
-    bpy.context.object.modifiers["DataTransfer"].vertex_group = "TransformBorder"
-    bpy.context.object.modifiers["DataTransfer"].use_loop_data = True
-    bpy.context.object.modifiers["DataTransfer"].data_types_loops = {'CUSTOM_NORMAL'}
-    bpy.context.object.modifiers["DataTransfer"].loop_mapping = 'POLYINTERP_LNORPROJ'
-    bpy.ops.object.modifier_apply(modifier="DataTransfer", single_user=True)
+    transform_obj_name = bpy.context.scene.leftWindowObj + "HardEarDrumForSmooth"
+    transform_normal(transform_obj_name, transform_index)
+
+    # main_obj.vertex_groups.new(name="TransformBorder")
+    # bpy.ops.object.vertex_group_assign()
+    # bpy.ops.mesh.select_all(action='DESELECT')
+    # bpy.ops.object.mode_set(mode='OBJECT')
+    # bpy.ops.object.shade_smooth()
+    # bpy.context.active_object.data.use_auto_smooth = True
+    # bpy.context.object.data.auto_smooth_angle = 3.14159
+    # bpy.ops.object.modifier_add(type='DATA_TRANSFER')
+    # bpy.context.object.modifiers["DataTransfer"].object = bpy.data.objects[
+    #     bpy.context.scene.leftWindowObj + "HardEarDrumForSmooth"]
+    # bpy.context.object.modifiers["DataTransfer"].vertex_group = "TransformBorder"
+    # bpy.context.object.modifiers["DataTransfer"].use_loop_data = True
+    # bpy.context.object.modifiers["DataTransfer"].data_types_loops = {'CUSTOM_NORMAL'}
+    # bpy.context.object.modifiers["DataTransfer"].loop_mapping = 'POLYINTERP_LNORPROJ'
+    # bpy.ops.object.modifier_apply(modifier="DataTransfer", single_user=True)
     return
 
     # 细分

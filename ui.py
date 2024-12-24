@@ -20,9 +20,10 @@ from bpy_extras import view3d_utils
 from bpy.types import SpaceView3D
 import math
 import time, functools
-from .public_operation import processing_stage_dict, order_processing_list, set_flag, fallback
+from .public_operation import processing_stage_dict, order_processing_list, set_prev_context, fallback
 from .sound_canal import get_is_on_rotate
 from .create_tip.cut_mould import get_color_mode
+from .parameter import set_switch_flag, get_switch_flag, get_mirror_context, set_mirror_context, check_modals_running
 
 # 记录左右窗口视角的数据
 left_last_dis = None
@@ -44,7 +45,6 @@ is_listen_start = False
 
 # 打磨面板
 class HUIER_PT_damo(bpy.types.Panel):
-
     bl_label = "耳样处理"
     bl_idname = "HUIER_PT_damo_R"
     bl_space_type = 'PROPERTIES'
@@ -91,6 +91,7 @@ class HUIER_PT_LocalOrGlobalJiaHou(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "output"
+
     def draw(self, context):
         layout = self.layout
         layout.separator()
@@ -148,9 +149,9 @@ class HUIER_PT_PlantCut(bpy.types.Panel):
         layout.separator()
         col = layout.column(align=True)
         if context.scene.leftWindowObj == '右耳':
-            col.prop(context.scene,'qiegesheRuPianYiR', text="舍入偏移")
+            col.prop(context.scene, 'qiegesheRuPianYiR', text="舍入偏移")
         else:
-            col.prop(context.scene,'qiegesheRuPianYiL', text="舍入偏移")
+            col.prop(context.scene, 'qiegesheRuPianYiL', text="舍入偏移")
         layout.separator()
 
 
@@ -181,6 +182,7 @@ class HUIER_PT_StepCut(bpy.types.Panel):
             layout.separator()
             col = layout.column(align=True)
             col.prop(context.scene, 'qiegeneiBianYuanL', text="内边缘平滑偏移")
+
 
 class HUIER_PT_MoJuTab(bpy.types.Panel):
     bl_label = ""
@@ -227,6 +229,7 @@ class HUIER_PT_ChuangJianMuJu(bpy.types.Panel):
         # col = layout.column(align=True)
         # col.prop(context.scene, 'neiBianYuanSheRuPianYi', text="内舍入偏移")
 
+
 class HUIER_PT_MuJuPianYi(bpy.types.Panel):
     bl_label = "模具偏移"
     bl_idname = "HUIER_PT_MuJuPianYi"
@@ -240,19 +243,28 @@ class HUIER_PT_MuJuPianYi(bpy.types.Panel):
     @classmethod
     def poll(cls, context):
         return (context.scene.tabEnum == '参数' and context.scene.muJuTypeEnum != 'OP2'
-                and context.scene.muJuTypeEnum != 'OP5')
+                and context.scene.muJuTypeEnum != 'OP3')
 
     def draw(self, context):
         layout = self.layout
-        # layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'neiBianJiXian', text="内编辑线")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'waiBianYuanSheRuPianYi', text="外舍入偏移")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'neiBianYuanSheRuPianYi', text="内舍入偏移")
+        if context.scene.leftWindowObj == '右耳':
+            col = layout.column(align=True)
+            col.prop(context.scene, 'neiBianJiXianR', text="内编辑线")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'waiBianYuanSheRuPianYiR', text="外舍入偏移")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'neiBianYuanSheRuPianYiR', text="内舍入偏移")
+        else:
+            col = layout.column(align=True)
+            col.prop(context.scene, 'neiBianJiXianL', text="内编辑线")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'waiBianYuanSheRuPianYiL', text="外舍入偏移")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'neiBianYuanSheRuPianYiL', text="内舍入偏移")
 
 
 class HUIER_PT_MuJuHouDu(bpy.types.Panel):
@@ -267,18 +279,28 @@ class HUIER_PT_MuJuHouDu(bpy.types.Panel):
     @classmethod
     def poll(cls, context):
         return context.scene.tabEnum == '参数' and (context.scene.muJuTypeEnum == 'OP1' or
+                                                    context.scene.muJuTypeEnum == 'OP3' or
                                                     context.scene.muJuTypeEnum == 'OP4' or
-                                                    context.scene.muJuTypeEnum == 'OP5' or
-                                                    context.scene.muJuTypeEnum == 'OP6')
+                                                    context.scene.muJuTypeEnum == 'OP5')
 
     def draw(self, context):
         layout = self.layout
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'zongHouDu', text="总厚度")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'jiHuoBianYuanHouDu', text="激活边缘厚度")
+        if context.scene.leftWindowObj == '右耳':
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = not context.scene.jiHuoBianYuanHouDuR
+            col.prop(context.scene, 'zongHouDuR', text="总厚度")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'jiHuoBianYuanHouDuR', text="激活边缘厚度")
+        else:
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = not context.scene.jiHuoBianYuanHouDuL
+            col.prop(context.scene, 'zongHouDuL', text="总厚度")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'jiHuoBianYuanHouDuL', text="激活边缘厚度")
 
 
 class HUIER_PT_BianYuanHouDu(bpy.types.Panel):
@@ -287,34 +309,60 @@ class HUIER_PT_BianYuanHouDu(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_parent_id = "HUIER_PT_MuJuHouDu"
+
     # bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
-        return context.scene.tabEnum == '参数' and context.scene.jiHuoBianYuanHouDu
+        if context.scene.leftWindowObj == '右耳':
+            return context.scene.tabEnum == '参数' and context.scene.jiHuoBianYuanHouDuR
+        else:
+            return context.scene.tabEnum == '参数' and context.scene.jiHuoBianYuanHouDuL
 
     def draw(self, context):
         layout = self.layout
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'waiBuHouDu', text="外部厚度")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'waiBuQuYuKuanDu', text="外部区域宽度")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'zhongJianHouDu', text="中间厚度")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'shiFouShiYongNeiBu', text="是否使用内部")
-        layout.separator()
-        col = layout.column(align=True)
-        col.active = context.scene.shiFouShiYongNeiBu
-        col.prop(context.scene, 'zhongJianQuYuKuanDu', text="中间区域宽度")
-        layout.separator()
-        col = layout.column(align=True)
-        col.active = context.scene.shiFouShiYongNeiBu
-        col.prop(context.scene, 'neiBuHouDu', text="内部厚度")
+        if context.scene.leftWindowObj == '右耳':
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'waiBuHouDuR', text="外部厚度")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'waiBuQuYuKuanDuR', text="外部区域宽度")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'zhongJianHouDuR', text="中间厚度")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'shiFouShiYongNeiBuR', text="是否使用内部")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.shiFouShiYongNeiBuR
+            col.prop(context.scene, 'zhongJianQuYuKuanDuR', text="中间区域宽度")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.shiFouShiYongNeiBuR
+            col.prop(context.scene, 'neiBuHouDuR', text="内部厚度")
+        else:
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'waiBuHouDuL', text="外部厚度")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'waiBuQuYuKuanDuL', text="外部区域宽度")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'zhongJianHouDuL', text="中间厚度")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'shiFouShiYongNeiBuL', text="是否使用内部")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.shiFouShiYongNeiBuL
+            col.prop(context.scene, 'zhongJianQuYuKuanDuL', text="中间区域宽度")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.shiFouShiYongNeiBuL
+            col.prop(context.scene, 'neiBuHouDuL', text="内部厚度")
 
 
 class HUIER_PT_MianBanAndDianZiSheBei(bpy.types.Panel):
@@ -323,7 +371,7 @@ class HUIER_PT_MianBanAndDianZiSheBei(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "scene"
-    bl_options = {'DEFAULT_CLOSED'}
+    # bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
@@ -341,22 +389,38 @@ class HUIER_PT_MianBanAndDianZiSheBei(bpy.types.Panel):
         col.prop(context.scene, 'jieShouQiTypeEnum', text="接收器类型")
         layout.separator()
         col = layout.column(align=True)
-        col.prop(context.scene, 'jieShouQiKaiGuanTypeEnum', text="接收器开关类型")
+        col.prop(context.scene, 'jieShouQiKaiGuanTypeEnum', text="开关类型")
         layout.separator()
         col = layout.column(align=True)
         col.prop(context.scene, 'buJianBTypeEenu', text="部件B")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'mianBanPianYi', text="面板偏移")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'xiaFangYangXianPianYi', text="下放样线偏移")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'shangSheRuYinZi', text="上舍入因子")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'xiaSheRuYinZi', text="下舍入因子")
+
+        if context.scene.leftWindowObj == '右耳':
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'mianBanPianYiR', text="面板偏移")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'xiaFangYangXianPianYiR', text="下放样线偏移")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'shangSheRuYinZiR', text="上舍入因子")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'xiaSheRuYinZiR', text="下舍入因子")
+
+        else:
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'mianBanPianYiL', text="面板偏移")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'xiaFangYangXianPianYiL', text="下放样线偏移")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'shangSheRuYinZiL', text="上舍入因子")
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'xiaSheRuYinZiL', text="下舍入因子")
 
 
 class HUIER_PT_ShangBuQieGeMianBan(bpy.types.Panel):
@@ -365,7 +429,7 @@ class HUIER_PT_ShangBuQieGeMianBan(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "scene"
-    bl_options = {'DEFAULT_CLOSED'}
+    # bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
@@ -373,13 +437,22 @@ class HUIER_PT_ShangBuQieGeMianBan(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'shiFouShangBuQieGeMianBan', text="上部切割面板")
-        layout.separator()
-        col = layout.column(align=True)
-        col.active = context.scene.shiFouShangBuQieGeMianBan
-        col.prop(context.scene, 'shangBuQieGeMianBanPianYi', text="上部切割面板偏移")
+        if context.scene.leftWindowObj == '右耳':
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'shiFouShangBuQieGeMianBanR', text="上部切割面板")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.shiFouShangBuQieGeMianBanR
+            col.prop(context.scene, 'shangBuQieGeMianBanPianYiR', text="上部切割面板舍入")
+        else:
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'shiFouShangBuQieGeMianBanL', text="上部切割面板")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.shiFouShangBuQieGeMianBanL
+            col.prop(context.scene, 'shangBuQieGeMianBanPianYiL', text="上部切割面板偏移舍入")
 
 
 class HUIER_PT_KongQiangMianBan(bpy.types.Panel):
@@ -396,21 +469,42 @@ class HUIER_PT_KongQiangMianBan(bpy.types.Panel):
         return context.scene.tabEnum == '参数' and (context.scene.muJuTypeEnum == 'OP1' or
                                                     context.scene.muJuTypeEnum == 'OP4' or
                                                     context.scene.muJuTypeEnum == 'OP3' or
-                                                    context.scene.muJuTypeEnum == 'OP6')
+                                                    context.scene.muJuTypeEnum == 'OP5')
 
     def draw(self, context):
         layout = self.layout
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'shiFouKongQiangMianBan', text="空腔面板")
-        layout.separator()
-        col = layout.column(align=True)
-        col.active = context.scene.shiFouKongQiangMianBan
-        col.prop(context.scene, 'KongQiangMianBanSheRuPianYi', text="空腔面板舍入")
-        layout.separator()
-        col = layout.column(align=True)
-        col.active = context.scene.shiFouKongQiangMianBan
-        col.prop(context.scene, 'ShangBuQieGeBanPianYi', text="上部切割板偏移")
+        if context.scene.leftWindowObj == '右耳':
+            kongQiangMianBanType = bpy.context.scene.KongQiangMianBanTypeEnumR
+            layout.separator()
+            col = layout.column(align=True)
+            # col.prop(context.scene, 'shiFouKongQiangMianBanR', text="空腔面板")
+            col.prop(context.scene, 'KongQiangMianBanTypeEnumR', text="空腔面板")
+            if(kongQiangMianBanType != 'OP3'):
+                layout.separator()
+                col = layout.column(align=True)
+                col.active = (context.scene.KongQiangMianBanTypeEnumR == 'OP1' or context.scene.KongQiangMianBanTypeEnumR == 'OP2')
+                col.prop(context.scene, 'KongQiangMianBanSheRuPianYiR', text="空腔面板舍入")
+            if(kongQiangMianBanType == 'OP2'):
+                layout.separator()
+                col = layout.column(align=True)
+                col.active = (context.scene.KongQiangMianBanTypeEnumR == 'OP2')
+                col.prop(context.scene, 'ShangBuQieGeBanPianYiR', text="上部切割面板偏移")
+        else:
+            kongQiangMianBanType = bpy.context.scene.KongQiangMianBanTypeEnumL
+            layout.separator()
+            col = layout.column(align=True)
+            # col.prop(context.scene, 'shiFouKongQiangMianBanL', text="空腔面板")
+            col.prop(context.scene, 'KongQiangMianBanTypeEnumL', text="空腔面板")
+            if (kongQiangMianBanType != 'OP3'):
+                layout.separator()
+                col = layout.column(align=True)
+                col.active = (context.scene.KongQiangMianBanTypeEnumL == 'OP1' or context.scene.KongQiangMianBanTypeEnumL == 'OP2')
+                col.prop(context.scene, 'KongQiangMianBanSheRuPianYiL', text="空腔面板舍入")
+            if (kongQiangMianBanType == 'OP2'):
+                layout.separator()
+                col = layout.column(align=True)
+                col.active = (context.scene.KongQiangMianBanTypeEnumL == 'OP2')
+                col.prop(context.scene, 'ShangBuQieGeBanPianYiL', text="上部切割面板偏移")
 
 
 class HUIER_PT_YingErMoCanShu(bpy.types.Panel):
@@ -419,6 +513,7 @@ class HUIER_PT_YingErMoCanShu(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "scene"
+
     # bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -451,7 +546,7 @@ class HUIER_PT_TongQiKong1(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "scene"
-    bl_options = {'DEFAULT_CLOSED'}
+    # bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
@@ -461,18 +556,56 @@ class HUIER_PT_TongQiKong1(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'shiFouTongFengGuan', text="通风管开关")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'tongFengGuanZhiJing', text="直径")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'tongFengGuanHouDu', text="管厚度")
-        layout.separator()
-        col = layout.column(align=True)
-        col.prop(context.scene, 'tongFengGuanWaiBuHouDu', text="外部厚度")
+        name = bpy.context.scene.leftWindowObj
+        if name == '右耳':
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'useShellCanalR', text="开启通风管")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.useShellCanalR
+            col.prop(context.scene, 'shellCanalDiameterR', text="通风管道直径")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.useShellCanalR
+            col.prop(context.scene, 'shellCanalThicknessR', text="通风管道厚度")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.useShellCanalR
+            col.prop(context.scene, 'shellCanalOffsetR', text="通风管道偏移")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.useShellCanalR
+            col.prop(context.scene, 'innerShellCanalOffsetR', text="通风管道内部平滑")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.useShellCanalR
+            col.prop(context.scene, 'outerShellCanalOffsetR', text="通风管道外部平滑")
+        else:
+            layout.separator()
+            col = layout.column(align=True)
+            col.prop(context.scene, 'useShellCanalL', text="开启通风管")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.useShellCanalL
+            col.prop(context.scene, 'shellCanalDiameterL', text="通风管道直径")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.useShellCanalL
+            col.prop(context.scene, 'shellCanalThicknessL', text="通风管道厚度")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.useShellCanalL
+            col.prop(context.scene, 'shellCanalOffsetL', text="通风管道偏移")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.useShellCanalL
+            col.prop(context.scene, 'innerShellCanalOffsetL', text="通风管道内部平滑")
+            layout.separator()
+            col = layout.column(align=True)
+            col.active = context.scene.useShellCanalL
+            col.prop(context.scene, 'outerShellCanalOffsetL', text="通风管道外部平滑")
+
 
 class HUIER_PT_MoBanXuanZe(bpy.types.Panel):
     bl_label = "模板"
@@ -481,7 +614,6 @@ class HUIER_PT_MoBanXuanZe(bpy.types.Panel):
     bl_region_type = "WINDOW"
     bl_context = "scene"
     bl_options = {'HIDE_HEADER'}
-
 
     @classmethod
     def poll(cls, context):
@@ -492,30 +624,30 @@ class HUIER_PT_MoBanXuanZe(bpy.types.Panel):
         # 左列目录
         split = layout.split(factor=0.3)
         box1 = split.box()
-        box1.label(text = '模板类别')
+        box1.label(text='模板类别')
         box2 = box1.box()
         col = box2.column()
-        col.label(text = '用户模板')
-        col.label(text = '预定义模板')
+        col.label(text='用户模板')
+        col.label(text='预定义模板')
         col.prop(context.scene, "showHdu",
-            icon="TRIA_DOWN" if context.scene.showHdu else "TRIA_RIGHT",
-            icon_only=True, emboss=False,text = 'HDU'
-        )
+                 icon="TRIA_DOWN" if context.scene.showHdu else "TRIA_RIGHT",
+                 icon_only=True, emboss=False, text='HDU'
+                 )
         if context.scene.showHdu:
             # 右列模板
-            icons=load_icons()                                                    
-            icon=icons.get("icon_reset")
-            col = split.column(align = True)
-            grid_flow = col.grid_flow(columns=2,align=True)
+            icons = load_icons()
+            icon = icons.get("icon_reset")
+            col = split.column(align=True)
+            grid_flow = col.grid_flow(columns=2, align=True)
             grid_flow.scale_y = 5
-            grid_flow.prop_tabs_enum(context.scene, 'muJuTypeEnum',icon_only=True)
-            
+            grid_flow.prop_tabs_enum(context.scene, 'muJuTypeEnum', icon_only=True)
+
             # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
             # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
             # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
             # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
             # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
-            # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)   
+            # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
 
 
 # 传声孔
@@ -542,10 +674,11 @@ class HUIER_PT_ChuanShenKong1(bpy.types.Panel):
             layout.separator()
             col = layout.column(align=True)
             col.prop(context.scene, 'soundcancalShapeEnum', text="管道类型")
-            if(shape_enum == 'OP2'):
+
+            if (shape_enum == 'OP2'):
                 layout.separator()
                 col = layout.column(align=True)
-                col.active = not get_is_on_rotate()
+                # col.active = not get_is_on_rotate()
                 col.prop(context.scene, 'chuanShenKongOffset', text="管道偏移")
         else:
             col.prop(context.scene, 'gaunDaoPinHua_L', text="管道平滑")
@@ -558,8 +691,9 @@ class HUIER_PT_ChuanShenKong1(bpy.types.Panel):
             if (shape_enum_l == 'OP2'):
                 layout.separator()
                 col = layout.column(align=True)
-                col.active = not get_is_on_rotate()
+                # col.active = not get_is_on_rotate()
                 col.prop(context.scene, 'chuanShenKongOffset_L', text="管道偏移")
+
 
 class HUIER_PT_ChuanShenKong2(bpy.types.Panel):
     bl_label = "faceplate opening面板开口"
@@ -614,7 +748,7 @@ class HUIER_PT_YuDingYi(bpy.types.Panel):
         layout.separator()
         col = layout.column(align=True)
         col.prop(context.scene, 'waiBuHouDu', text="外部厚度")
-        
+
 
 # 耳膜附件
 class HUIER_PT_ErMoFuJian(bpy.types.Panel):
@@ -835,6 +969,7 @@ class TOPBAR_HT_upper_bar(bpy.types.Header):
     def draw_right(self, context):
         pass
 
+
 # ********** 标题栏自定义菜单透明度 **********
 class TOPBAR_PT_transparency1(bpy.types.Panel):
     bl_label = "透明度1"
@@ -940,19 +1075,19 @@ class Huier_OT_NewFile(bpy.types.Operator):
     first_mouse_x = 0
     first_mouse_y = 0
 
-    def invoke(self,context,event):
+    def invoke(self, context, event):
         self.first_mouse_x = event.mouse_x
         self.first_mouse_y = event.mouse_y
-        print('x',self.first_mouse_x)
-        print('y',self.first_mouse_y)
+        print('x', self.first_mouse_x)
+        print('y', self.first_mouse_y)
         self.execute(context)
         return {'FINISHED'}
 
     def execute(self, context):
         context.scene.rightEar_path = ""
         context.scene.leftEar_path = ""
-        #移动光标到屏幕中心
-        context.window.cursor_warp(context.window.width//2, (context.window.height//2) + 60)
+        # 移动光标到屏幕中心
+        context.window.cursor_warp(context.window.width // 2, (context.window.height // 2) + 60)
         bpy.ops.screen.userpref_show(section='SAVE_LOAD')
         # context.window.cursor_warp(self.first_mouse_x, self.first_mouse_y)
         return {'FINISHED'}
@@ -967,6 +1102,7 @@ class Huier_OT_addon(bpy.types.Operator):
         bpy.ops.screen.userpref_show(section='ADDONS')
         return {'FINISHED'}
 
+
 class Huier_OT_keymap(bpy.types.Operator):
     bl_idname = "huier.keymap"
     bl_label = "查看键位映射"
@@ -975,6 +1111,7 @@ class Huier_OT_keymap(bpy.types.Operator):
     def execute(self, context):
         bpy.ops.screen.userpref_show(section='KEYMAP')
         return {'FINISHED'}
+
 
 class Huier_OT_DaoChuWei(bpy.types.Operator):
     bl_idname = "huier.export"
@@ -986,8 +1123,8 @@ class Huier_OT_DaoChuWei(bpy.types.Operator):
         current_tab = bpy.context.screen.areas[0].spaces.active.context
         submit_process = processing_stage_dict[current_tab]
         submit(submit_process)
-        #移动光标到屏幕中心
-        context.window.cursor_warp(context.window.width//2, (context.window.height//2) + 60)
+        # 移动光标到屏幕中心
+        context.window.cursor_warp(context.window.width // 2, (context.window.height // 2) + 60)
         bpy.ops.screen.userpref_show(section='SYSTEM')
         # bpy.ops.screen.userpref_show()
         # area = bpy.context.window_manager.windows[-1].screen.areas[0]
@@ -995,16 +1132,18 @@ class Huier_OT_DaoChuWei(bpy.types.Operator):
         # area.ui_type = 'ASSETS'
         return {'FINISHED'}
 
+
 class Huier_OT_SaveAsMoban(bpy.types.Operator):
     bl_idname = "huier.save_as_moban"
     bl_label = "另存为模板"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        #移动光标到屏幕中心
-        context.window.cursor_warp(context.window.width//2, (context.window.height//2) + 60)
+        # 移动光标到屏幕中心
+        context.window.cursor_warp(context.window.width // 2, (context.window.height // 2) + 60)
         bpy.ops.screen.userpref_show(section='FILE_PATHS')
         return {'FINISHED'}
+
 
 # 自定义的新增菜单
 class TOPBAR_MT_huierFile(bpy.types.Menu):
@@ -1025,6 +1164,7 @@ class TOPBAR_MT_huierFile(bpy.types.Menu):
 
         layout.operator("huier.export", text="导出为", icon='EXPORT')
         layout.operator("huier.save_as_moban", text="另存为模板")
+
 
 # 原始File菜单
 class TOPBAR_MT_file(bpy.types.Menu):
@@ -1128,6 +1268,7 @@ class TOPBAR_MT_edit(bpy.types.Menu):
         layout.operator("screen.userpref_show",
                         text="Preferences...", icon='PREFERENCES')
 
+
 # 视图菜单
 class TOPBAR_MT_huierView(bpy.types.Menu):
     bl_label = "视图"
@@ -1147,7 +1288,7 @@ class TOPBAR_MT_huierView(bpy.types.Menu):
 
 # 监听响应
 def test():
-    global left_last_dis,right_last_dis,left_last_rot,right_last_rot,left_last_loc,right_last_loc
+    global left_last_dis, right_last_dis, left_last_rot, right_last_rot, left_last_loc, right_last_loc
     override1 = getOverride()
     override2 = getOverride2()
     area1 = override1['area']
@@ -1163,25 +1304,25 @@ def test():
     if bpy.context.window.workspace.name == '布局.001':
         # 视角缩放
         if view_dis1 != left_last_dis:
-            print('view_dis1',view_dis1)
+            print('view_dis1', view_dis1)
             area2.spaces.active.region_3d.view_distance = view_dis1
-            print('area2',area2.spaces.active.region_3d.view_distance)
-            print('area1',area1.spaces.active.region_3d.view_distance)
+            print('area2', area2.spaces.active.region_3d.view_distance)
+            print('area1', area1.spaces.active.region_3d.view_distance)
             left_last_dis = view_dis1
             return
         elif view_dis2 != right_last_dis:
-            print('view_dis2',view_dis1)
+            print('view_dis2', view_dis1)
             area2.spaces.active.region_3d.view_distance = view_dis1
-            print('area2',area2.spaces.active.region_3d.view_distance)
-            print('area1',area1.spaces.active.region_3d.view_distance)
+            print('area2', area2.spaces.active.region_3d.view_distance)
+            print('area1', area1.spaces.active.region_3d.view_distance)
             right_last_dis = view_dis2
             return
-        
+
         if view_loc1 != left_last_loc:
-            new = mathutils.Vector((view_loc1[0],-view_loc1[1],view_loc1[2]))
-            area2.spaces.active.region_3d.view_location = new 
+            new = mathutils.Vector((view_loc1[0], -view_loc1[1], view_loc1[2]))
+            area2.spaces.active.region_3d.view_location = new
             # return
-        
+
         # 视角旋转
         if view_rot1 != left_last_rot:
             # print('view1',view_rot1)
@@ -1279,11 +1420,154 @@ def notify_test(context):
                 bpy.ops.object.hide_collection(collection_index=2, extend=False, toggle=True)
             bpy.context.scene.activecollecion = bpy.context.scene.leftWindowObj
 
+    # 如果检测到有modal正在运行则启动重启的modal
+    if check_modals_running(bpy.context.scene.var, prev_context):
+        set_mirror_context(True)
+        bpy.ops.restart.modal('INVOKE_DEFAULT')
     # 切换布局时重绘右上角标识
     draw_font()
     # 回退操作
-    fallback(processing_stage_dict[prev_context])
-    set_flag(True, prev_context)
+    # fallback(processing_stage_dict[prev_context])
+    set_switch_flag(True)
+    set_prev_context(prev_context)
+
+
+class RestartModal(bpy.types.Operator):
+    bl_idname = "restart.modal"
+    bl_label = "重新启动正在运行的modal"
+
+    def invoke(self, context, event):
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+        global prev_context
+        if not get_mirror_context():
+            submit_process = processing_stage_dict[prev_context]
+            var = bpy.context.scene.var
+            if (submit_process == '打磨'):
+                if var == 1:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.object.thickening('INVOKE_DEFAULT')
+                elif var == 2:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.object.thinning('INVOKE_DEFAULT')
+                elif var == 3:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.object.smooth('INVOKE_DEFAULT')
+            elif (submit_process == '局部加厚'):
+                if var == 5:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.obj.localthickeningaddarea('INVOKE_DEFAULT')
+                elif var == 6:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.obj.localthickeningreducearea('INVOKE_DEFAULT')
+                elif var == 7:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.obj.localthickeningthick('INVOKE_DEFAULT')
+            elif (submit_process == '切割'):
+                if var == 55:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.object.circlecut('INVOKE_DEFAULT')
+                elif var == 56:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.object.stepcut('INVOKE_DEFAULT')
+            elif (submit_process == '创建模具'):
+                if var == 19:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.object.pointqiehuan('INVOKE_DEFAULT')
+                elif var == 20:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.object.dragcurve('INVOKE_DEFAULT')
+                elif var == 21:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.object.smoothcurve('INVOKE_DEFAULT')
+            elif (submit_process == '传声孔'):
+                if var == 23:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.object.soundcanalqiehuan('INVOKE_DEFAULT')
+            elif (submit_process == '通气孔'):
+                if var == 26:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.object.ventcanalqiehuan('INVOKE_DEFAULT')
+            elif (submit_process == '耳膜附件'):
+                if var != 16:
+                    if var == 14:
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            bpy.ops.object.handleswitch('INVOKE_DEFAULT')
+                    else:
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            bpy.ops.wm.tool_set_by_id(name="my_tool.handle_initial")
+            elif (submit_process == '编号'):
+                if var != 43:
+                    if var == 41:
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            bpy.ops.object.labelswitch('INVOKE_DEFAULT')
+                    else:
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            bpy.ops.wm.tool_set_by_id(name="my_tool.label_initial")
+            elif (submit_process == '支撑'):
+                if var != 78:
+                    if var == 77:
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            bpy.ops.object.supportswitch('INVOKE_DEFAULT')
+                    else:
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            bpy.ops.wm.tool_set_by_id(name="my_tool.support_initial")
+            elif (submit_process == '排气孔'):
+                if var != 89:
+                    if var == 87:
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            bpy.ops.object.sprueswitch('INVOKE_DEFAULT')
+                    else:
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_initial")
+            elif (submit_process == '后期打磨'):
+                if var == 111:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.object.last_thickening('INVOKE_DEFAULT')
+                elif var == 112:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.object.last_thinning('INVOKE_DEFAULT')
+                elif var == 113:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.object.last_smooth('INVOKE_DEFAULT')
+            elif (submit_process == '切割模具'):
+                if var != 91:
+                    if var == 90:
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            bpy.ops.wm.tool_set_by_id(name="tool.cutmouldswitch1")
+                    else:
+                        override = getOverride()
+                        with bpy.context.temp_override(**override):
+                            bpy.ops.wm.tool_set_by_id(name="tool.cutmouldswitch2")
+            return {'FINISHED'}
+        return {'PASS_THROUGH'}
 
 
 # 给3d区域添加监听器
@@ -1300,15 +1584,15 @@ class Huier_OT_SwitchWorkspace(bpy.types.Operator):
         rightWindowObj = bpy.data.objects.get("右耳")
         leftWindowObj = bpy.data.objects.get("左耳")
         if leftWindowObj != None and rightWindowObj != None:
-            bpy.context.scene.var = 0   # 退出所有模态
+            # bpy.context.scene.var = 0   # 退出所有模态
             global prev_context
-            set_flag(False, prev_context)
+            set_switch_flag(False)
 
             global is_listen_start
             if not is_listen_start:
                 is_listen_start = True
                 # 监听workspace切换到左右耳窗口
-                subscribe_to = bpy.types.Window,'workspace'
+                subscribe_to = bpy.types.Window, 'workspace'
                 bpy.msgbus.subscribe_rna(
                     key=subscribe_to,
                     owner=object(),
@@ -1332,37 +1616,21 @@ class Huier_OT_SwitchWorkspace(bpy.types.Operator):
                 if my_layer_collection:
                     bpy.context.view_layer.active_layer_collection = my_layer_collection
 
-
             if bpy.context.window.workspace.name == '布局.001':
                 # 保存之前窗口的模式
                 prev_context = bpy.context.screen.areas[0].spaces.active.context
                 bpy.context.window.workspace = bpy.data.workspaces['布局']
 
-
         return {'FINISHED'}
-    
-
-class Huier_OT_Startmodal(bpy.types.Operator):
-    bl_idname = "start.modal"
-    bl_label = "注册"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        bpy.ops.switch.init('INVOKE_DEFAULT')
-        bpy.ops.object.createmouldinit('INVOKE_DEFAULT')
-        bpy.ops.object.createmouldcut('INVOKE_DEFAULT')
-        bpy.ops.object.createmouldfill('INVOKE_DEFAULT')
-        return {'FINISHED'}
-
 
 
 class VIEW3D_HT_header(bpy.types.Header):
     bl_space_type = 'VIEW_3D'
 
-    def draw(self,context):
+    def draw(self, context):
         name = bpy.context.scene.leftWindowObj
         layout = self.layout
-        icons=load_icons()                                                    #标题栏自制图标
+        icons = load_icons()  # 标题栏自制图标
 
         icon = icons.get("icon_backup")
         layout.operator("obj.undo1", text="", icon_value=icon.icon_id)
@@ -1392,15 +1660,19 @@ class VIEW3D_HT_header(bpy.types.Header):
         icon = icons.get("icon_transparency2")
         if name == '右耳':
             row.active = ((bpy.data.objects.get(name + "WaxForShow") != None) or
-                          (bpy.data.objects.get(name) != None and bpy.context.screen.areas[0].spaces.active.context == 'RENDER') or
-                          ((bpy.data.objects.get(name) != None and bpy.context.screen.areas[0].spaces.active.context == 'MATERIAL') and get_color_mode() == 1))
+                          (bpy.data.objects.get(name) != None and bpy.context.screen.areas[
+                              1].spaces.active.context == 'RENDER') or
+                          ((bpy.data.objects.get(name) != None and bpy.context.screen.areas[
+                              1].spaces.active.context == 'MATERIAL') and get_color_mode() == 1))
             row.prop(context.scene, "transparent2R", text="", icon_value=icon.icon_id, icon_only=True)
             sub = row.row(align=True)
             sub.popover("TOPBAR_PT_transparency2", text="")
         elif name == '左耳':
             row.active = ((bpy.data.objects.get(name + "WaxForShow") != None) or
-                          (bpy.data.objects.get(name) != None and bpy.context.screen.areas[0].spaces.active.context == 'RENDER') or
-                          ((bpy.data.objects.get(name) != None and bpy.context.screen.areas[0].spaces.active.context == 'MATERIAL') and get_color_mode() == 1))
+                          (bpy.data.objects.get(name) != None and bpy.context.screen.areas[
+                              1].spaces.active.context == 'RENDER') or
+                          ((bpy.data.objects.get(name) != None and bpy.context.screen.areas[
+                              1].spaces.active.context == 'MATERIAL') and get_color_mode() == 1))
             row.prop(context.scene, "transparent2L", text="", icon_value=icon.icon_id, icon_only=True)
             sub = row.row(align=True)
             sub.popover("TOPBAR_PT_transparency2", text="")
@@ -1453,11 +1725,12 @@ class HUIER_PT_TestButton(bpy.types.Panel):
         # col.operator("object.switchtestfunc", text="磨具功能测试")
         col.operator("obj.localthickeningjingxiang", text="加厚镜像")
 
+
 class ToggleProperty(bpy.types.Operator):
     bl_idname = "screen.toggleproperty"
     bl_label = "显示隐藏属性栏"
 
-    __initial_mouse_x = None  
+    __initial_mouse_x = None
     __initial_mouse_y = None
 
     def invoke(self, context, event):
@@ -1466,7 +1739,6 @@ class ToggleProperty(bpy.types.Operator):
         self.__initial_mouse_y = event.mouse_y
         self.execute(context)
         return {'FINISHED'}
-
 
     def execute(self, context):
         global show_prop
@@ -1482,18 +1754,20 @@ class ToggleProperty(bpy.types.Operator):
                 show_prop = True
             else:
                 show_prop = False
-            x = area.x+int(area.width/2)
-            y = area.y+area.height+3
+            x = area.x + int(area.width / 2)
+            y = area.y + area.height + 3
             w.cursor_warp(x, y)
             if show_prop == False:
-                delta= 300 - area.height
+                delta = 300 - area.height
                 show_prop = True
             else:
-                delta = -area.height+1
+                delta = -area.height + 1
                 show_prop = False
-            bpy.app.timers.register(functools.partial(snooper, context.copy(), w,initx, inity, x, y, delta=delta), first_interval=0.2)
+            bpy.app.timers.register(functools.partial(snooper, context.copy(), w, initx, inity, x, y, delta=delta),
+                                    first_interval=0.2)
 
         return {'FINISHED'}
+
 
 def snooper(c, w, initx, inity, x, y, delta):
     global show_prop
@@ -1519,7 +1793,7 @@ def submit(submit_process):
         mat = bpy.data.materials.get("YellowL")
     if (submit_process == '打磨'):
         pass
-    elif(submit_process == '局部加厚'):
+    elif (submit_process == '局部加厚'):
         override = getOverride()
         with bpy.context.temp_override(**override):
             bpy.ops.obj.localthickeningsubmit('INVOKE_DEFAULT')
@@ -1579,14 +1853,27 @@ def submit(submit_process):
         override = getOverride()
         with bpy.context.temp_override(**override):
             bpy.ops.object.spruesubmit('INVOKE_DEFAULT')
-            #为铸造法外壳添加透明材质
+            # 为铸造法外壳添加透明材质
             mat.blend_method = 'BLEND'
             if bpy.context.scene.leftWindowObj == '右耳':
                 bpy.context.scene.transparent3EnumR = 'OP3'
             elif bpy.context.scene.leftWindowObj == '左耳':
                 bpy.context.scene.transparent3EnumL = 'OP3'
-    elif(submit_process == '后期打磨'):
+    elif (submit_process == '后期打磨'):
         pass
+
+
+class Huier_OT_Startmodal(bpy.types.Operator):
+    bl_idname = "start.modal"
+    bl_label = "注册"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        # bpy.ops.object.createmouldinit('INVOKE_DEFAULT')
+        # bpy.ops.object.createmouldcut('INVOKE_DEFAULT')
+        # bpy.ops.object.createmouldfill('INVOKE_DEFAULT')
+        bpy.ops.object.msgbuscallback('INVOKE_DEFAULT')
+        return {'FINISHED'}
 
 
 # 注册类
@@ -1635,6 +1922,7 @@ _classes = [
     Huier_OT_SwitchWorkspace,
     ToggleProperty,
     HUIER_PT_CutMould,
+    RestartModal,
     Huier_OT_Startmodal
 ]
 

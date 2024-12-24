@@ -5,7 +5,10 @@ from bpy_extras import view3d_utils
 import mathutils
 import bmesh
 import re
+import time
 from .tool import *
+from .parameter import get_switch_time, set_switch_time, get_switch_flag, set_switch_flag, check_modals_running,\
+    get_mirror_context, set_mirror_context, get_process_var_list
 
 default_plane_size_x = 1  # 记录添加字体后平面的x轴默认尺寸,此时默认字体大小为4
 default_plane_size_y = 1  # 记录添加字体后平面的y轴默认尺寸,此时默认字体大小为4
@@ -312,7 +315,7 @@ def label_forward():
     global label_indexL
     global label_info_save
     global label_info_saveL
-    bpy.context.scene.var = 0
+    # bpy.context.scene.var = 0
     name = bpy.context.scene.leftWindowObj
     label_index_cur = None
     label_info_save_cur = None
@@ -443,7 +446,7 @@ def label_backup():
     global label_indexL
     global label_info_save
     global label_info_saveL
-    bpy.context.scene.var = 0
+    # bpy.context.scene.var = 0
     name = bpy.context.scene.leftWindowObj
     label_index_cur = None
     label_info_save_cur = None
@@ -763,11 +766,14 @@ def backToLabel():
     # 将用于铸造法的立方体删除
     name = bpy.context.scene.leftWindowObj
     for obj in bpy.data.objects:
-        patternR = r'右耳LabelPlaneForCasting'
-        patternL = r'左耳LabelPlaneForCasting'
-        if re.match(patternR, obj.name) or re.match(patternL, obj.name):
-            label_obj = obj
-            bpy.data.objects.remove(label_obj, do_unlink=True)
+        if (name == "右耳"):
+            pattern = r'右耳LabelPlaneForCasting'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
+        elif (name == "左耳"):
+            pattern = r'左耳LabelPlaneForCasting'
+            if re.match(pattern, obj.name):
+                bpy.data.objects.remove(obj, do_unlink=True)
 
     # 将后续模块中的reset和last都删除
     casting_reset = bpy.data.objects.get(name + "CastingReset")
@@ -1107,6 +1113,7 @@ def initial():
             r_y = labelInfo.r_y
             r_z = labelInfo.r_z
             # 先根据text信息添加一个label,激活鼠标行为
+            bpy.ops.object.labelswitch('INVOKE_DEFAULT')
             bpy.ops.object.labelbackforwardadd('INVOKE_DEFAULT')
             # 更新label的text
             bpy.context.scene.labelText = text
@@ -1155,6 +1162,7 @@ def initial():
             r_y = labelInfo.r_y
             r_z = labelInfo.r_z
             # 先根据text信息添加一个label,激活鼠标行为
+            bpy.ops.object.labelswitch('INVOKE_DEFAULT')
             bpy.ops.object.labelbackforwardadd('INVOKE_DEFAULT')
             # 更新label的text
             bpy.context.scene.labelTextL = text
@@ -1261,7 +1269,7 @@ def labelInitial(text, depth, size, style, l_x, l_y, l_z, r_x, r_y, r_z):
     # bpy.ops.object.modifier_apply(modifier="Boolean", single_user=True)
 
     bpy.context.object.data.use_auto_smooth = True
-    bpy.context.object.data.auto_smooth_angle = 0.8
+    bpy.context.object.data.auto_smooth_angle = 3.14159
 
     # 删除平面和字体
     bpy.data.objects.remove(plane_obj, do_unlink=True)
@@ -1333,6 +1341,9 @@ def addLabel(text):
     planename = "Lattice"
     plane_obj = bpy.data.objects[planename]
     plane_obj.name = name + "Plane"
+    plane_obj.data.points_u = 4
+    plane_obj.data.points_v = 4
+    plane_obj.data.points_w = 1
     if (name == "右耳"):
         moveToRight(plane_obj)
     elif (name == "左耳"):
@@ -1379,11 +1390,11 @@ def addLabel(text):
         green_material = newColor("LabelBlue", 0, 0.4, 1, 0, 1)
         text_obj.data.materials.clear()
         text_obj.data.materials.append(green_material)
-    # 为字体添加细分修改器并应用。对字体添加表面形变修改器，将目标绑定为平面
-    bpy.ops.object.modifier_add(type='SUBSURF')
-    bpy.context.object.modifiers["Subdivision"].subdivision_type = 'SIMPLE'
-    bpy.context.object.modifiers["Subdivision"].levels = 1
-    bpy.ops.object.modifier_apply(modifier="Subdivision")
+    #减小字体表面的顶点数
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.remove_doubles(threshold=0.02)
+    bpy.ops.object.mode_set(mode='OBJECT')
     #对字体添加晶格修改器，将目标绑定为晶格
     bpy.ops.object.modifier_add(type='LATTICE')
     bpy.context.object.modifiers["Lattice"].object = plane_obj
@@ -1393,7 +1404,7 @@ def addLabel(text):
     # 为晶格添加缩裹修改器,将目标绑定为右耳
     bpy.context.view_layer.objects.active = plane_obj
     bpy.ops.object.modifier_add(type='SHRINKWRAP')
-    bpy.context.object.modifiers["Shrinkwrap"].wrap_method = 'NEAREST_SURFACEPOINT'
+    bpy.context.object.modifiers["Shrinkwrap"].wrap_method = 'TARGET_PROJECT'
     bpy.context.object.modifiers["Shrinkwrap"].wrap_mode = 'ON_SURFACE'
     bpy.context.object.modifiers["Shrinkwrap"].target = obj
 
@@ -1589,6 +1600,23 @@ def labelSubmit():
         #先将该Label的相关信息保存下来,用于模块切换时的初始化。
         # saveInfo()
 
+        #将字体合并之前的物体复制一份用于合并之后的光滑处理
+        name = bpy.context.scene.leftWindowObj
+        before_submit_obj_name = name + "LabelBeforeSubmit"
+        before_submit_obj = bpy.data.objects.get(before_submit_obj_name)
+        if (before_submit_obj != None):
+            bpy.data.objects.remove(before_submit_obj, do_unlink=True)
+        duplicate_obj = obj.copy()
+        duplicate_obj.data = obj.data.copy()
+        duplicate_obj.name = obj.name + "LabelBeforeSubmit"
+        duplicate_obj.animation_data_clear()
+        bpy.context.scene.collection.objects.link(duplicate_obj)
+        if bpy.context.scene.leftWindowObj == '右耳':
+            moveToRight(duplicate_obj)
+        else:
+            moveToLeft(duplicate_obj)
+        duplicate_obj.hide_set(True)
+
         #为外凸字体创建用于实体化的外壳
         saveLabelPlaneForCasting()
 
@@ -1627,8 +1655,10 @@ def labelSubmit():
         # bpy.ops.object.modifier_apply(modifier="Boolean",single_user=True)
 
         #开启自动平滑功能
-        bpy.context.object.data.use_auto_smooth = True
-        bpy.context.object.data.auto_smooth_angle = 0.8
+        # bpy.context.object.data.use_auto_smooth = True
+        # bpy.context.object.data.auto_smooth_angle = 3.14159
+        #对合并完成后的字体边缘进行平滑
+        labelEdgeSmooth()
 
         #删除平面和字体
         bpy.data.objects.remove(plane_obj, do_unlink=True)
@@ -1644,6 +1674,82 @@ def labelSubmit():
         # bpy.ops.paint.vertex_color_set()
         # bpy.ops.object.mode_set(mode='OBJECT')
 
+def labelEdgeSmooth():
+    '''
+    对字体边缘进行平滑
+    '''
+    name = bpy.context.scene.leftWindowObj
+    obj = bpy.data.objects.get(name)
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    before_submit_obj_name = name + "LabelBeforeSubmit"
+    before_submit_obj = bpy.data.objects.get(before_submit_obj_name)
+    if (before_submit_obj != None):
+        #布尔后产生的新的字体顶点组
+        label_vertex = obj.vertex_groups.get('LabelVertex')
+        if (label_vertex != None):
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.object.vertex_group_set_active(group='LabelVertex')
+            bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
+            bpy.ops.object.mode_set(mode='OBJECT')
+        label_vertex = obj.vertex_groups.new(name='LabelVertex')
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_less()
+        bpy.ops.object.vertex_group_set_active(group='LabelVertex')
+        bpy.ops.object.vertex_group_assign()
+        bpy.ops.object.mode_set(mode='OBJECT')
+        #字体顶点附近用于平滑的顶点组
+        smooth_vertex = obj.vertex_groups.get('SmoothVertex')
+        if (smooth_vertex != None):
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.object.vertex_group_set_active(group='SmoothVertex')
+            bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
+            bpy.ops.object.mode_set(mode='OBJECT')
+        smooth_vertex = obj.vertex_groups.new(name='SmoothVertex')
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_more()
+        bpy.ops.mesh.select_more()
+        bpy.ops.mesh.select_more()
+        bpy.ops.mesh.select_more()
+        bpy.ops.object.vertex_group_set_active(group='LabelVertex')
+        bpy.ops.object.vertex_group_deselect()
+        bpy.ops.object.vertex_group_set_active(group='SmoothVertex')
+        bpy.ops.object.vertex_group_assign()
+
+        bm = bmesh.from_edit_mesh(obj.data)
+        transform_index = [v.index for v in bm.verts if v.select]
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        transform_obj_name = before_submit_obj_name
+        transform_normal(transform_obj_name, transform_index)
+
+        bpy.ops.object.mode_set(mode='OBJECT')
+        return
+
+        #添加数据传递修改器,只调整字体附近的法线,对附近作光滑
+        modifier_name = "LabelSmoothDataTransfer"
+        target_modifier = None
+        for modifier in obj.modifiers:
+            if modifier.name == modifier_name:
+                target_modifier = modifier
+        if (target_modifier != None):
+            bpy.ops.object.modifier_remove(modifier="LabelSmoothDataTransfer")
+        labelSmoothDataTransfer = obj.modifiers.new(name="LabelSmoothDataTransfer", type='DATA_TRANSFER')
+        labelSmoothDataTransfer.object = before_submit_obj
+        labelSmoothDataTransfer.vertex_group = "SmoothVertex"
+        labelSmoothDataTransfer.use_loop_data = True
+        labelSmoothDataTransfer.data_types_loops = {'CUSTOM_NORMAL'}
+        labelSmoothDataTransfer.loop_mapping = 'POLYINTERP_NEAREST'
+        bpy.ops.object.modifier_apply(modifier="LabelSmoothDataTransfer")
+
+        #将模型上的顶点取消选中
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        #删除用于传递数据的字体提交之前的物体
+        bpy.data.objects.remove(before_submit_obj, do_unlink=True)
 
 def saveLabelPlaneForCasting():
     '''
@@ -1768,7 +1874,7 @@ class LabelReset(bpy.types.Operator):
 
     def invoke(self, context, event):
 
-        bpy.context.scene.var = 10
+        bpy.context.scene.var = 40
         name = bpy.context.scene.leftWindowObj
         global label_index
         global label_indexL
@@ -1841,11 +1947,67 @@ class LabelBackForwardAdd(bpy.types.Operator):
     bl_label = "单步撤回过程中添加字体"
 
     def invoke(self, context, event):
+        self.execute(context)
+        return {'FINISHED'}
 
-        bpy.context.scene.var = 14
-        # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
-        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        # # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
+        # bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        #
+        # name = bpy.context.scene.leftWindowObj
+        # global label_index
+        # global label_indexL
+        # global label_info_save
+        # global label_info_saveL
+        # labelText = None
+        # label_info_save_cur = None
+        # if name == '右耳':
+        #     labelText = bpy.context.scene.labelText
+        #     label_info_save_cur = label_info_save
+        # elif name == '左耳':
+        #     labelText = bpy.context.scene.labelTextL
+        #     label_info_save_cur = label_info_saveL
+        # # 若模型上存在未提交的Label,则先将其提交
+        # labelSubmit()
+        #
+        # # 双击添加过一个字体之后,才能够继续添加字体
+        # if (len(label_info_save_cur) == 0):
+        #     bpy.ops.wm.tool_set_by_id(name="my_tool.label_initial")
+        #     return {'FINISHED'}
+        # # 创建新的Label
+        # addLabel(labelText)
+        # # 将Plane激活并选中
+        # planename = name + "Plane"
+        # plane_obj = bpy.data.objects.get(planename)
+        # plane_obj.select_set(True)
+        # bpy.context.view_layer.objects.active = plane_obj
+        # #将新创建的字体位置设置未上一个提交的字体位置
+        # labelInfo = label_info_save_cur[len(label_info_save_cur) - 1]
+        # if name == '右耳':
+        #     label_index = label_index + 1
+        #     print("添加字体后:",label_index)
+        # elif name == '左耳':
+        #     label_indexL = label_indexL + 1
+        #     print("添加字体后:", label_indexL)
+        # l_x = labelInfo.l_x
+        # l_y = labelInfo.l_y
+        # l_z = labelInfo.l_z
+        # r_x = labelInfo.r_x
+        # r_y = labelInfo.r_y
+        # r_z = labelInfo.r_z
+        # plane_obj.location[0] = l_x
+        # plane_obj.location[1] = l_y
+        # plane_obj.location[2] = l_z
+        # plane_obj.rotation_euler[0] = r_x
+        # plane_obj.rotation_euler[1] = r_y
+        # plane_obj.rotation_euler[2] = r_z
+        #
+        # if bpy.context.scene.var != 44:
+        #     bpy.context.scene.var = 44
+        #     context.window_manager.modal_handler_add(self)
+        #     print("labelbackforwordadd_modal_invoke")
+        # return {'RUNNING_MODAL'}
 
+    def execute(self, context):
         name = bpy.context.scene.leftWindowObj
         global label_index
         global label_indexL
@@ -1859,7 +2021,6 @@ class LabelBackForwardAdd(bpy.types.Operator):
         elif name == '左耳':
             labelText = bpy.context.scene.labelTextL
             label_info_save_cur = label_info_saveL
-        print("labelbackforwordadd_modal_invoke")
         # 若模型上存在未提交的Label,则先将其提交
         labelSubmit()
 
@@ -1895,41 +2056,49 @@ class LabelBackForwardAdd(bpy.types.Operator):
         plane_obj.rotation_euler[1] = r_y
         plane_obj.rotation_euler[2] = r_z
 
+    # def modal(self, context, event):
+    #     name = bpy.context.scene.leftWindowObj
+    #     cubename = name + "Text"
+    #     label_obj = bpy.data.objects.get(cubename)
+    #     planename = name + "Plane"
+    #     plane_obj = bpy.data.objects.get(planename)
+    #     cur_obj_name = bpy.context.scene.leftWindowObj
+    #     cur_obj = bpy.data.objects.get(cur_obj_name)
+    #     if bpy.context.screen.areas[0].spaces.active.context == 'MODIFIER':
+    #         if (bpy.context.scene.var == 44):
+    #             # 在数组中更新附件的信息
+    #             updateInfo()
+    #             if (is_mouse_on_object(context, event) and not is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
+    #                 # 公共鼠标行为加双击移动附件位置
+    #                 bpy.ops.wm.tool_set_by_id(name="my_tool.label_mouse")
+    #                 cur_obj.select_set(True)
+    #                 bpy.context.view_layer.objects.active = cur_obj
+    #                 plane_obj.select_set(False)
+    #             elif (is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
+    #                 bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+    #                 plane_obj.select_set(True)
+    #                 bpy.context.view_layer.objects.active = plane_obj
+    #                 cur_obj.select_set(False)
+    #             elif ((not is_mouse_on_object(context, event)) and (is_changed_label(context, event) or is_changed(context, event))):
+    #                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    #                 cur_obj.select_set(True)
+    #                 bpy.context.view_layer.objects.active = cur_obj
+    #                 plane_obj.select_set(False)
+    #             return {'PASS_THROUGH'}
+    #         else:
+    #             print("labelbackforwordadd_modal_finished")
+    #             return {'FINISHED'}
+    #
+    #     else:
+    #         if get_switch_time() != None and time.time() - get_switch_time() > 0.3 and get_switch_flag():
+    #             print("labelbackforwordadd_modal_finished")
+    #             set_switch_time(None)
+    #             now_context = bpy.context.screen.areas[0].spaces.active.context
+    #             if not check_modals_running(bpy.context.scene.var, now_context):
+    #                 bpy.context.scene.var = 0
+    #             return {'FINISHED'}
+    #         return {'PASS_THROUGH'}
 
-        context.window_manager.modal_handler_add(self)
-        return {'RUNNING_MODAL'}
-
-    def modal(self, context, event):
-        name = bpy.context.scene.leftWindowObj
-        cubename = name + "Text"
-        label_obj = bpy.data.objects.get(cubename)
-        planename = name + "Plane"
-        plane_obj = bpy.data.objects.get(planename)
-        cur_obj_name = bpy.context.scene.leftWindowObj
-        cur_obj = bpy.data.objects.get(cur_obj_name)
-        if (bpy.context.scene.var == 14):
-            # 在数组中更新附件的信息
-            updateInfo()
-            if (is_mouse_on_object(context, event) and not is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
-                # 公共鼠标行为加双击移动附件位置
-                bpy.ops.wm.tool_set_by_id(name="my_tool.label_mouse")
-                cur_obj.select_set(True)
-                bpy.context.view_layer.objects.active = cur_obj
-                plane_obj.select_set(False)
-            elif (is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
-                bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
-                plane_obj.select_set(True)
-                bpy.context.view_layer.objects.active = plane_obj
-                cur_obj.select_set(False)
-            elif ((not is_mouse_on_object(context, event)) and (is_changed_label(context, event) or is_changed(context, event))):
-                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                cur_obj.select_set(True)
-                bpy.context.view_layer.objects.active = cur_obj
-                plane_obj.select_set(False)
-            return {'PASS_THROUGH'}
-        else:
-            print("labelbackforwordadd_modal_finished")
-            return {'FINISHED'}
 
 class LabelAddInvoke(bpy.types.Operator):
     bl_idname = "object.labeladdinvoke"
@@ -1937,7 +2106,7 @@ class LabelAddInvoke(bpy.types.Operator):
 
     def invoke(self, context, event):
 
-        bpy.context.scene.var = 15
+        bpy.context.scene.var = 45
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
@@ -1969,11 +2138,80 @@ class LabelAdd(bpy.types.Operator):
     bl_label = "点击加号按钮添加字体"
 
     def invoke(self, context, event):
-
-        bpy.context.scene.var = 11
-        # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        self.execute(context)
+        return {'FINISHED'}
 
+        # # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
+        # bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        #
+        # name = bpy.context.scene.leftWindowObj
+        # global label_index
+        # global label_indexL
+        # global label_info_save
+        # global label_info_saveL
+        # global is_labelAdd_modal_start
+        # global is_labelAdd_modal_startL
+        # labelText = None
+        # label_index_cur = None
+        # label_info_save_cur = None
+        # if name == '右耳':
+        #     labelText = bpy.context.scene.labelText
+        #     label_index_cur = label_index
+        #     label_info_save_cur = label_info_save
+        #     is_labelAdd_modal_start = True
+        # elif name == '左耳':
+        #     labelText = bpy.context.scene.labelTextL
+        #     label_index_cur = label_indexL
+        #     label_info_save_cur = label_info_saveL
+        #     is_labelAdd_modal_startL = True
+        # # 若模型上存在未提交的Label,则先将其提交
+        # labelSubmit()
+        #
+        # # 双击添加过一个字体之后,才能够继续添加字体
+        # if (len(label_info_save_cur) == 0):
+        #     bpy.ops.wm.tool_set_by_id(name="my_tool.label_initial")
+        #     if (name == "右耳"):
+        #         is_labelAdd_modal_start = False
+        #     elif (name == "左耳"):
+        #         is_labelAdd_modal_startL = False
+        #     return {'FINISHED'}
+        # if(label_index_cur == len(label_info_save_cur) -1):
+        #     # 创建新的Label
+        #     addLabel(labelText)
+        #     # 将Plane激活并选中
+        #     planename = name + "Plane"
+        #     plane_obj = bpy.data.objects.get(planename)
+        #     plane_obj.select_set(True)
+        #     bpy.context.view_layer.objects.active = plane_obj
+        #     #将新创建的字体位置设置未上一个提交的字体位置
+        #     labelInfo = label_info_save_cur[len(label_info_save_cur) - 1]
+        #     if name == '右耳':
+        #         label_index = label_index + 1
+        #         print("添加字体后:",label_index)
+        #     elif name == '左耳':
+        #         label_indexL = label_indexL + 1
+        #         print("添加字体后:", label_indexL)
+        #     l_x = labelInfo.l_x
+        #     l_y = labelInfo.l_y
+        #     l_z = labelInfo.l_z
+        #     r_x = labelInfo.r_x
+        #     r_y = labelInfo.r_y
+        #     r_z = labelInfo.r_z
+        #     plane_obj.location[0] = l_x
+        #     plane_obj.location[1] = l_y
+        #     plane_obj.location[2] = l_z
+        #     plane_obj.rotation_euler[0] = r_x
+        #     plane_obj.rotation_euler[1] = r_y
+        #     plane_obj.rotation_euler[2] = r_z
+        #
+        #     if bpy.context.scene.var != 41:
+        #         bpy.context.scene.var = 41
+        #         context.window_manager.modal_handler_add(self)
+        #         print("labeladd_modal_invoke")
+        #     return {'RUNNING_MODAL'}
+
+    def execute(self, context):
         name = bpy.context.scene.leftWindowObj
         global label_index
         global label_indexL
@@ -1988,20 +2226,18 @@ class LabelAdd(bpy.types.Operator):
             labelText = bpy.context.scene.labelText
             label_index_cur = label_index
             label_info_save_cur = label_info_save
-            is_labelAdd_modal_start = True
+            # is_labelAdd_modal_start = True
         elif name == '左耳':
             labelText = bpy.context.scene.labelTextL
             label_index_cur = label_indexL
             label_info_save_cur = label_info_saveL
-            is_labelAdd_modal_startL = True
-        print("labeladd_modal_invoke")
+            # is_labelAdd_modal_startL = True
         # 若模型上存在未提交的Label,则先将其提交
         labelSubmit()
 
         # 双击添加过一个字体之后,才能够继续添加字体
         if (len(label_info_save_cur) == 0):
             bpy.ops.wm.tool_set_by_id(name="my_tool.label_initial")
-            print("labeladd_modal_finished")
             if (name == "右耳"):
                 is_labelAdd_modal_start = False
             elif (name == "左耳"):
@@ -2035,64 +2271,107 @@ class LabelAdd(bpy.types.Operator):
             plane_obj.rotation_euler[0] = r_x
             plane_obj.rotation_euler[1] = r_y
             plane_obj.rotation_euler[2] = r_z
+            if context.scene.var != 41:
+                bpy.ops.object.labelswitch('INVOKE_DEFAULT')
 
-            context.window_manager.modal_handler_add(self)
-            return {'RUNNING_MODAL'}
-        print("labeladd_modal_finished")
-        if (name == "右耳"):
-            is_labelAdd_modal_start = False
-        elif (name == "左耳"):
-            is_labelAdd_modal_startL = False
-        return {'FINISHED'}
+    # def modal(self, context, event):
+    #     global is_labelAdd_modal_start
+    #     global is_labelAdd_modal_startL
+    #     name = bpy.context.scene.leftWindowObj
+    #     cubename = name + "Text"
+    #     label_obj = bpy.data.objects.get(cubename)
+    #     planename = name + "Plane"
+    #     plane_obj = bpy.data.objects.get(planename)
+    #     cur_obj_name = bpy.context.scene.leftWindowObj
+    #     cur_obj = bpy.data.objects.get(cur_obj_name)
+    #     if bpy.context.screen.areas[0].spaces.active.context == 'MODIFIER':
+    #         if (bpy.context.scene.var == 41):
+    #             # 在数组中更新附件的信息
+    #             updateInfo()
+    #             if (is_mouse_on_object(context, event) and not is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
+    #                 # 公共鼠标行为加双击移动附件位置
+    #                 bpy.ops.wm.tool_set_by_id(name="my_tool.label_mouse")
+    #                 cur_obj.select_set(True)
+    #                 bpy.context.view_layer.objects.active = cur_obj
+    #                 plane_obj.select_set(False)
+    #             elif (is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
+    #                 bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+    #                 plane_obj.select_set(True)
+    #                 bpy.context.view_layer.objects.active = plane_obj
+    #                 cur_obj.select_set(False)
+    #             elif ((not is_mouse_on_object(context, event)) and (is_changed_label(context, event) or is_changed(context, event))):
+    #                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    #                 cur_obj.select_set(True)
+    #                 bpy.context.view_layer.objects.active = cur_obj
+    #                 plane_obj.select_set(False)
+    #             return {'PASS_THROUGH'}
+    #         else:
+    #             print("labeladd_modal_finished")
+    #             if (name == "右耳"):
+    #                 is_labelAdd_modal_start = False
+    #             elif (name == "左耳"):
+    #                 is_labelAdd_modal_startL = False
+    #             return {'FINISHED'}
+    #
+    #     else:
+    #         if get_switch_time() != None and time.time() - get_switch_time() > 0.3 and get_switch_flag():
+    #             print("labeladd_modal_finished")
+    #             if (name == "右耳"):
+    #                 is_labelAdd_modal_start = False
+    #             elif (name == "左耳"):
+    #                 is_labelAdd_modal_startL = False
+    #             set_switch_time(None)
+    #             now_context = bpy.context.screen.areas[0].spaces.active.context
+    #             if not check_modals_running(bpy.context.scene.var, now_context):
+    #                 bpy.context.scene.var = 0
+    #             return {'FINISHED'}
+    #         return {'PASS_THROUGH'}
 
-
-    def modal(self, context, event):
-        global is_labelAdd_modal_start
-        global is_labelAdd_modal_startL
-        name = bpy.context.scene.leftWindowObj
-        cubename = name + "Text"
-        label_obj = bpy.data.objects.get(cubename)
-        planename = name + "Plane"
-        plane_obj = bpy.data.objects.get(planename)
-        cur_obj_name = bpy.context.scene.leftWindowObj
-        cur_obj = bpy.data.objects.get(cur_obj_name)
-        if (bpy.context.scene.var == 11):
-            # 在数组中更新附件的信息
-            updateInfo()
-            if (is_mouse_on_object(context, event) and not is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
-                # 公共鼠标行为加双击移动附件位置
-                bpy.ops.wm.tool_set_by_id(name="my_tool.label_mouse")
-                cur_obj.select_set(True)
-                bpy.context.view_layer.objects.active = cur_obj
-                plane_obj.select_set(False)
-            elif (is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
-                bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
-                plane_obj.select_set(True)
-                bpy.context.view_layer.objects.active = plane_obj
-                cur_obj.select_set(False)
-            elif ((not is_mouse_on_object(context, event)) and (is_changed_label(context, event) or is_changed(context, event))):
-                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                cur_obj.select_set(True)
-                bpy.context.view_layer.objects.active = cur_obj
-                plane_obj.select_set(False)
-            return {'PASS_THROUGH'}
-        else:
-            print("labeladd_modal_finished")
-            if (name == "右耳"):
-                is_labelAdd_modal_start = False
-            elif (name == "左耳"):
-                is_labelAdd_modal_startL = False
-            return {'FINISHED'}
 
 class LabelInitialAdd(bpy.types.Operator):
     bl_idname = "object.labelinitialadd"
     bl_label = "进入附件模块初始化双击添加字体"
 
     def invoke(self, context, event):
-        print("labelinitialadd_modal_invoke")
-        bpy.context.scene.var = 12
-        # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
-        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        self.add_label(context, event)
+        return {'FINISHED'}
+
+        # # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
+        # bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        # global label_index
+        # global label_indexL
+        # name = bpy.context.scene.leftWindowObj
+        # # 创建新的Label
+        # labelText = None
+        # if name == '右耳':
+        #     labelText = bpy.context.scene.labelText
+        # elif name == '左耳':
+        #     labelText = bpy.context.scene.labelTextL
+        # addLabel(labelText)
+        # # 将Plane激活并选中
+        # planename = name + "Plane"
+        # plane_obj = bpy.data.objects.get(planename)
+        # plane_obj.select_set(True)
+        # bpy.context.view_layer.objects.active = plane_obj
+        # co, normal = cal_co(context,event)
+        # if(co != -1):
+        #     # plane_obj.location = co
+        #     label_fit_rotate(normal,co)
+        # # 添加完最初的一个附件之后,将指针置为0
+        # if (name == '右耳'):
+        #     label_index = 0
+        #     print("初始化添加后的指针:", label_index)
+        # elif (name == '左耳'):
+        #     label_indexL = 0
+        #     print("初始化添加后的指针:", label_indexL)
+        #
+        # if bpy.context.scene.var != 42:
+        #     bpy.context.scene.var = 42
+        #     context.window_manager.modal_handler_add(self)
+        #     print("labelinitialadd_modal_invoke")
+        # return {'RUNNING_MODAL'}
+
+    def add_label(self, context, event):
         global label_index
         global label_indexL
         name = bpy.context.scene.leftWindowObj
@@ -2119,12 +2398,78 @@ class LabelInitialAdd(bpy.types.Operator):
         elif (name == '左耳'):
             label_indexL = 0
             print("初始化添加后的指针:", label_indexL)
+        bpy.ops.object.labelswitch('INVOKE_DEFAULT')
+
+    # def modal(self, context, event):
+    #     name = bpy.context.scene.leftWindowObj
+    #     cubename = name + "Text"
+    #     label_obj = bpy.data.objects.get(cubename)
+    #     planename = name + "Plane"
+    #     plane_obj = bpy.data.objects.get(planename)
+    #     cur_obj_name = bpy.context.scene.leftWindowObj
+    #     cur_obj = bpy.data.objects.get(cur_obj_name)
+    #     if bpy.context.screen.areas[0].spaces.active.context == 'MODIFIER':
+    #         if (bpy.context.scene.var == 42):
+    #             # 在数组中更新附件的信息
+    #             updateInfo()
+    #             if (is_mouse_on_object(context, event) and not is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
+    #                 # 公共鼠标行为加双击移动附件位置
+    #                 bpy.ops.wm.tool_set_by_id(name="my_tool.label_mouse")
+    #                 cur_obj.select_set(True)
+    #                 bpy.context.view_layer.objects.active = cur_obj
+    #                 plane_obj.select_set(False)
+    #             elif (is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
+    #                 bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+    #                 plane_obj.select_set(True)
+    #                 bpy.context.view_layer.objects.active = plane_obj
+    #                 cur_obj.select_set(False)
+    #             elif ((not is_mouse_on_object(context, event)) and (is_changed_label(context, event) or is_changed(context, event))):
+    #                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    #                 cur_obj.select_set(True)
+    #                 bpy.context.view_layer.objects.active = cur_obj
+    #                 plane_obj.select_set(False)
+    #             return {'PASS_THROUGH'}
+    #         else:
+    #             print("labelinitialadd_modal_finished")
+    #             return {'FINISHED'}
+    #
+    #     else:
+    #         if get_switch_time() != None and time.time() - get_switch_time() > 0.3 and get_switch_flag():
+    #             print("labelinitialadd_modal_finished")
+    #             set_switch_time(None)
+    #             now_context = bpy.context.screen.areas[0].spaces.active.context
+    #             if not check_modals_running(bpy.context.scene.var, now_context):
+    #                 bpy.context.scene.var = 0
+    #             return {'FINISHED'}
+    #         return {'PASS_THROUGH'}
 
 
-        context.window_manager.modal_handler_add(self)
+class LabelSwitch(bpy.types.Operator):
+    bl_idname = "object.labelswitch"
+    bl_label = "字体鼠标行为"
+
+    def invoke(self, context, event):
+        global is_labelAdd_modal_start, is_labelAdd_modal_startL
+        bpy.context.scene.var = 41
+        # if not is_labelAdd_modal_start and not is_labelAdd_modal_startL:
+        #     name = bpy.context.scene.leftWindowObj
+        #     if name == '右耳':
+        #         is_labelAdd_modal_start = True
+        #     elif name == '左耳':
+        #         is_labelAdd_modal_startL = True
+        #     context.window_manager.modal_handler_add(self)
+        #     print("labelswitch_modal_invoke")
+        if not is_labelAdd_modal_start:
+            is_labelAdd_modal_start = True
+            context.window_manager.modal_handler_add(self)
+            print("labelswitch_modal_invoke")
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
+        override1 = getOverride()
+        area = override1['area']
+
+        global is_labelAdd_modal_start, is_labelAdd_modal_startL
         name = bpy.context.scene.leftWindowObj
         cubename = name + "Text"
         label_obj = bpy.data.objects.get(cubename)
@@ -2132,29 +2477,75 @@ class LabelInitialAdd(bpy.types.Operator):
         plane_obj = bpy.data.objects.get(planename)
         cur_obj_name = bpy.context.scene.leftWindowObj
         cur_obj = bpy.data.objects.get(cur_obj_name)
-        if (bpy.context.scene.var == 12):
-            # 在数组中更新附件的信息
-            updateInfo()
-            if (is_mouse_on_object(context, event) and not is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
-                # 公共鼠标行为加双击移动附件位置
-                bpy.ops.wm.tool_set_by_id(name="my_tool.label_mouse")
-                cur_obj.select_set(True)
-                bpy.context.view_layer.objects.active = cur_obj
-                plane_obj.select_set(False)
-            elif (is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
-                bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
-                plane_obj.select_set(True)
-                bpy.context.view_layer.objects.active = plane_obj
-                cur_obj.select_set(False)
-            elif ((not is_mouse_on_object(context, event)) and (is_changed_label(context, event) or is_changed(context, event))):
-                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                cur_obj.select_set(True)
-                bpy.context.view_layer.objects.active = cur_obj
-                plane_obj.select_set(False)
-            return {'PASS_THROUGH'}
+        if bpy.context.screen.areas[0].spaces.active.context == 'MODIFIER':
+            if get_mirror_context():
+                print('labelswitch_modal_finished')
+                is_labelAdd_modal_start = False
+                set_mirror_context(False)
+                return {'FINISHED'}
+            if (event.mouse_x < area.width and area.y < event.mouse_y < area.y + area.height and bpy.context.scene.var == 41):
+                if cur_obj != None and plane_obj != None:
+                    if event.type == 'WHEELUPMOUSE':
+                        if name == '右耳':
+                            bpy.context.scene.deep += 0.05
+                        else:
+                            bpy.context.scene.deepL += 0.05
+                        return {'RUNNING_MODAL'}
+                    elif event.type == 'WHEELDOWNMOUSE':
+                        if name == '右耳':
+                            bpy.context.scene.deep -= 0.05
+                        else:
+                            bpy.context.scene.deepLL -= 0.05
+                        return {'RUNNING_MODAL'}
+
+                    # 在数组中更新附件的信息
+                    updateInfo()
+                    if (is_mouse_on_object(context, event) and not is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
+                        # 公共鼠标行为加双击移动附件位置
+                        bpy.ops.wm.tool_set_by_id(name="my_tool.label_mouse")
+                        cur_obj.select_set(True)
+                        bpy.context.view_layer.objects.active = cur_obj
+                        plane_obj.select_set(False)
+                    elif (is_mouse_on_label(context, event) and (is_changed_label(context, event) or is_changed(context, event))):
+                        bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+                        plane_obj.select_set(True)
+                        bpy.context.view_layer.objects.active = plane_obj
+                        cur_obj.select_set(False)
+                    elif ((not is_mouse_on_object(context, event)) and (is_changed_label(context, event) or is_changed(context, event))):
+                        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                        cur_obj.select_set(True)
+                        bpy.context.view_layer.objects.active = cur_obj
+                        plane_obj.select_set(False)
+                    return {'PASS_THROUGH'}
+                else:
+                    return {'PASS_THROUGH'}
+
+            elif bpy.context.scene.var != 41 and bpy.context.scene.var in get_process_var_list("编号"):
+                print("labelswitch_modal_finished")
+                is_labelAdd_modal_start = False
+                # if (name == "右耳"):
+                #     is_labelAdd_modal_start = False
+                # elif (name == "左耳"):
+                #     is_labelAdd_modal_startL = False
+                return {'FINISHED'}
+
+            else:
+                return {'PASS_THROUGH'}
+
         else:
-            print("labelinitialadd_modal_finished")
-            return {'FINISHED'}
+            if get_switch_time() != None and time.time() - get_switch_time() > 0.3 and get_switch_flag():
+                print("labelswitch_modal_finished")
+                is_labelAdd_modal_start = False
+                # if (name == "右耳"):
+                #     is_labelAdd_modal_start = False
+                # elif (name == "左耳"):
+                #     is_labelAdd_modal_startL = False
+                set_switch_time(None)
+                now_context = bpy.context.screen.areas[0].spaces.active.context
+                if not check_modals_running(bpy.context.scene.var, now_context):
+                    bpy.context.scene.var = 0
+                return {'FINISHED'}
+            return {'PASS_THROUGH'}
 
 
 class LabelSubmit(bpy.types.Operator):
@@ -2162,7 +2553,7 @@ class LabelSubmit(bpy.types.Operator):
     bl_label = "标签提交"
 
     def invoke(self, context, event):
-        bpy.context.scene.var = 13
+        bpy.context.scene.var = 43
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
@@ -2201,7 +2592,6 @@ class LabelMirror(bpy.types.Operator):
 
     def invoke(self, context, event):
         print('进入镜像了')
-        bpy.context.scene.var = 23
         self.execute(context)
         return {'FINISHED'}
 
@@ -2209,8 +2599,20 @@ class LabelMirror(bpy.types.Operator):
         global label_info_saveL, label_info_save
         global label_indexL, label_index
 
+        left_obj = bpy.data.objects.get(context.scene.leftWindowObj)
+        right_obj = bpy.data.objects.get(context.scene.rightWindowObj)
+
+        # 只操作一个耳朵时，不执行镜像
+        if left_obj == None or right_obj == None:
+            return {'FINISHED'}
+
         tar_obj_name = bpy.context.scene.leftWindowObj
         tar_obj = bpy.data.objects[tar_obj_name]
+
+        if tar_obj_name == '左耳' and label_indexL != -1:
+            return {'FINISHED'}
+        elif tar_obj_name == '右耳' and label_index != -1:
+            return {'FINISHED'}
 
         workspace = context.window.workspace.name
 
@@ -2222,7 +2624,7 @@ class LabelMirror(bpy.types.Operator):
             tar_label_info = label_info_save
 
         # 只在双窗口下执行镜像
-        if workspace == '布局.001' and len(ori_label_info) != 0 and len(tar_label_info) == 0:
+        if len(ori_label_info) != 0 and len(tar_label_info) == 0:
             tar_info = ori_label_info[0]
             text, depth, size, style, l_x, l_y, l_z, r_x, r_y, r_z = tar_info.text, tar_info.depth, tar_info.size, tar_info.style, tar_info.l_x, -tar_info.l_y, tar_info.l_z, tar_info.r_x, tar_info.r_y, tar_info.r_z
             # 将附件数组指针置为末尾
@@ -2230,20 +2632,34 @@ class LabelMirror(bpy.types.Operator):
                 label_indexL = -1
             else:
                 label_index = -1
-            bpy.ops.object.labelinitialadd('INVOKE_DEFAULT')
+
+            # 创建新的Label
+            labelText = None
+            if tar_obj_name == '右耳':
+                labelText = bpy.context.scene.labelTextL
+            elif tar_obj_name == '左耳':
+                labelText = bpy.context.scene.labelText
+            addLabel(labelText)
+            # 将Plane激活并选中
+            planename = tar_obj_name + "Plane"
+            plane_obj = bpy.data.objects.get(planename)
+            plane_obj.select_set(True)
+            bpy.context.view_layer.objects.active = plane_obj
+
+            # 添加完最初的一个附件之后,将指针置为0
+            if (tar_obj_name == '右耳'):
+                label_index = 0
+                print("初始化添加后的指针:", label_index)
+            elif (tar_obj_name == '左耳'):
+                label_indexL = 0
+                print("初始化添加后的指针:", label_indexL)
+
+
+
             # 获取添加后的Handle,并根据参数设置调整offset
             planename = tar_obj_name + "Plane"
             plane_obj = bpy.data.objects.get(planename)
             if plane_obj is not None:
-                if tar_obj_name == '左耳':
-                    bpy.context.scene.deepL = depth
-                    bpy.context.scene.fontSizeL = size
-                    bpy.context.scene.styleEnumL = style
-                else:
-                    bpy.context.scene.deep = depth
-                    bpy.context.scene.fontSize = size
-                    bpy.context.scene.styleEnum = style
-
                 plane_obj.location[0] = l_x
                 plane_obj.location[1] = l_y
                 plane_obj.location[2] = l_z
@@ -2269,7 +2685,21 @@ class LabelMirror(bpy.types.Operator):
                 closest_vertex_normal = tar_obj.matrix_world.to_3x3() @ closest_vertex.normal
 
                 label_fit_rotate(closest_vertex_normal, closest_vertex_world)
+                if tar_obj_name == '左耳':
+                    bpy.context.scene.labelTextL = text
+                    bpy.context.scene.deepL = depth
+                    bpy.context.scene.fontSizeL = size
+                    bpy.context.scene.styleEnumL = style
+                else:
+                    bpy.context.scene.labelText = text
+                    bpy.context.scene.deep = depth
+                    bpy.context.scene.fontSize = size
+                    bpy.context.scene.styleEnum = style
                 bm.free()
+
+        if context.scene.var != 41:
+            bpy.ops.object.labelswitch('INVOKE_DEFAULT')
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
 
 
@@ -2307,7 +2737,8 @@ class MyTool_Label2(WorkSpaceTool):
     bl_icon = "ops.mesh.primitive_torus_add_gizmo"
     bl_widget = None
     bl_keymap = (
-        ("object.labeladdinvoke", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+        ("object.labeladd", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+        # ("object.labeladdinvoke", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
         # ("object.labeladd", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
         # ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
         # ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
@@ -2412,7 +2843,8 @@ _classes = [
     LabelInitialAdd,
     LabelSubmit,
     LabelDoubleClick,
-    LabelMirror
+    LabelMirror,
+    LabelSwitch
 ]
 
 

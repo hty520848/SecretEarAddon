@@ -1,13 +1,17 @@
-# import pymeshlab as ml
+import pymeshlab as ml
 import os
 import shutil
 import bpy
+import bmesh
 from ..tool import moveToRight, moveToLeft, getOverride, getOverride2
 from ..public_operation import draw_font
 from ..damo import register_damo_tools
 from ..jiahou import register_jiahou_tools
 from ..create_tip.qiege import register_qiege_tools
-from ..create_mould.point import register_createmould_tools
+from ..create_mould.point import register_point_tools
+from ..create_mould.create_mould import register_createmould_tools
+from ..create_mould.shell_eardrum.shell_canal import register_shellcanal_tools
+from ..create_mould.collision import register_collision_tools
 from ..sound_canal import register_soundcanal_tools
 from ..vent_canal import register_ventcanal_tools
 from ..label import register_label_tools
@@ -20,6 +24,98 @@ from ..create_tip.cut_mould import register_cutmould_tools
 
 is_initial = False
 
+
+def delete_useless_fragments(cur_obj):
+    '''
+    删除导入导入模型中的一些无用小碎块
+    '''
+    has_fragments = False
+    vertex_indices = [v.index for v in cur_obj.data.vertices]
+    #首先判断是否存在模型小碎片,不存在则不进行处理
+    if(len(vertex_indices) != 0):
+        area_begin_vert_index = vertex_indices[0]  # 处理的初始顶点
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.mode_set(mode='OBJECT')     # 将初始顶点选中并选中连通项
+        if (cur_obj != None and cur_obj.type == 'MESH'):
+            me = cur_obj.data
+            bm = bmesh.new()
+            bm.from_mesh(me)
+            bm.verts.ensure_lookup_table()
+            vert = bm.verts[area_begin_vert_index]
+            vert.select_set(True)
+            bm.to_mesh(me)
+            bm.free()
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_linked()
+        bpy.ops.mesh.select_all(action='INVERT')
+        bpy.ops.object.mode_set(mode='OBJECT')    #反选顶点后若存在选中的顶点,则说明存在碎片
+        me = cur_obj.data
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bm.verts.ensure_lookup_table()
+        for vert in bm.verts:
+            if(vert.select == True):
+                has_fragments = True
+        bm.to_mesh(me)
+        bm.free()
+
+        # 存在加厚区域的时候
+        if (has_fragments):
+
+            #将物体根据连通区域划分为多个部分
+            bpy.ops.object.select_all(action='DESELECT')
+            cur_obj.select_set(True)
+            bpy.context.view_layer.objects.active = cur_obj
+            continuous_area = []  # 存放连续区域对象信息(左右耳模型的顶点索引)
+            unprocessed_vertex_index = vertex_indices  # 获取离散区域中的所有顶点作为未处理顶点
+            # 处理所有选中顶点,一次循环生成一个连通区域
+            while unprocessed_vertex_index:
+                area_index = []  # 存放该区域内的顶点(离散区域的顶点索引)
+                area_begin_vert_index = unprocessed_vertex_index[0]  # 处理的初始顶点
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_all(action='DESELECT')
+                bpy.ops.object.mode_set(mode='OBJECT')  # 将初始顶点选中并选中连通项
+                if (cur_obj != None and cur_obj.type == 'MESH'):
+                    me = cur_obj.data
+                    bm = bmesh.new()
+                    bm.from_mesh(me)
+                    bm.verts.ensure_lookup_table()
+                    vert = bm.verts[area_begin_vert_index]
+                    vert.select_set(True)
+                    bm.to_mesh(me)
+                    bm.free()
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_linked()
+                bpy.ops.object.mode_set(mode='OBJECT')
+                if (cur_obj != None and cur_obj.type == 'MESH'):
+                    me = cur_obj.data
+                    bm = bmesh.new()
+                    bm.from_mesh(me)
+                    bm.verts.ensure_lookup_table()
+                    for vert in bm.verts:
+                        if (vert.select == True):
+                            area_index.append(vert.index)
+                    bm.to_mesh(me)
+                    bm.free()
+                # 将划分过的顶点从未处理顶点数组中移除
+                unprocessed_vertex_index = [x for x in unprocessed_vertex_index if x not in area_index]
+                continuous_area.append(area_index)
+
+            #只保存模型中顶点数最多的部分,将其它碎块部分删除
+            largest_region = max(continuous_area, key=len)
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='DESELECT')
+            mesh = cur_obj.data
+            bm = bmesh.from_edit_mesh(mesh)
+            bm.verts.ensure_lookup_table()
+            for vert_index in largest_region:
+                vert = bm.verts[vert_index]
+                vert.select_set(True)
+            bmesh.update_edit_mesh(mesh)
+            bpy.ops.mesh.select_all(action='INVERT')
+            bpy.ops.mesh.delete(type='VERT')
+            bpy.ops.object.mode_set(mode='OBJECT')
 
 class Huier_OT_Pymesh(bpy.types.Operator):
     bl_idname = "huier.pymesh"
@@ -104,6 +200,7 @@ class Huier_OT_Pymesh(bpy.types.Operator):
             active_obj = context.active_object
             if active_obj.name == 'right':
                 active_obj.name = '右耳'
+                bpy.context.scene.transparent2R = True
                 moveToRight(active_obj)
                 override = getOverride()
                 with bpy.context.temp_override(**override):
@@ -116,6 +213,12 @@ class Huier_OT_Pymesh(bpy.types.Operator):
                     active_obj.lock_location[0] = True
                     active_obj.lock_location[1] = True
                     active_obj.lock_location[2] = True
+                    active_obj.lock_rotation[0] = True
+                    active_obj.lock_rotation[1] = True
+                    active_obj.lock_rotation[2] = True
+
+                    #删除模型中的无用小碎块
+                    delete_useless_fragments(active_obj)
 
                 # 复制一份用于匹配模板位置
                 duplicate_obj = active_obj.copy()
@@ -132,7 +235,6 @@ class Huier_OT_Pymesh(bpy.types.Operator):
                     bpy.context.scene.collection.objects.unlink(duplicate_obj)
 
                 # 复制一份用于最原始物体的展示
-                bpy.context.scene.transparent2R = True
                 duplicate_obj2 = active_obj.copy()
                 duplicate_obj2.data = active_obj.data.copy()
                 duplicate_obj2.animation_data_clear()
@@ -177,18 +279,45 @@ class Huier_OT_Pymesh(bpy.types.Operator):
 
             elif active_obj.name == 'left':
                 active_obj.name = '左耳'
+                bpy.context.scene.transparent2L = True
                 moveToLeft(active_obj)
-                override = getOverride2()
-                with bpy.context.temp_override(**override):
-                    bpy.ops.geometry.color_attribute_add(name="Color", color=(0, 0.25, 1, 1))
-                    # todo: 更改颜色
-                    # bpy.ops.geometry.color_attribute_add(name="Color", color=(0.053, 0.266, 0.436, 1))
-                    active_obj.data.materials.clear()
-                    active_obj.data.materials.append(bpy.data.materials['YellowL'])
+                if os.path.isfile(context.scene.rightEar_path):   # 判断右耳是否存在，如果不存在则左耳目前在主窗口
+                    override = getOverride2()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.geometry.color_attribute_add(name="Color", color=(0, 0.25, 1, 1))
+                        # todo: 更改颜色
+                        # bpy.ops.geometry.color_attribute_add(name="Color", color=(0.053, 0.266, 0.436, 1))
+                        active_obj.data.materials.clear()
+                        active_obj.data.materials.append(bpy.data.materials['YellowL'])
 
-                    active_obj.lock_location[0] = True
-                    active_obj.lock_location[1] = True
-                    active_obj.lock_location[2] = True
+                        active_obj.lock_location[0] = True
+                        active_obj.lock_location[1] = True
+                        active_obj.lock_location[2] = True
+                        active_obj.lock_rotation[0] = True
+                        active_obj.lock_rotation[1] = True
+                        active_obj.lock_rotation[2] = True
+
+                        # 删除模型中的无用小碎块
+                        delete_useless_fragments(active_obj)
+
+                else:
+                    override = getOverride()
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.geometry.color_attribute_add(name="Color", color=(0, 0.25, 1, 1))
+                        # todo: 更改颜色
+                        # bpy.ops.geometry.color_attribute_add(name="Color", color=(0.053, 0.266, 0.436, 1))
+                        active_obj.data.materials.clear()
+                        active_obj.data.materials.append(bpy.data.materials['YellowL'])
+
+                        active_obj.lock_location[0] = True
+                        active_obj.lock_location[1] = True
+                        active_obj.lock_location[2] = True
+                        active_obj.lock_rotation[0] = True
+                        active_obj.lock_rotation[1] = True
+                        active_obj.lock_rotation[2] = True
+
+                        # 删除模型中的无用小碎块
+                        delete_useless_fragments(active_obj)
 
                 # 复制一份用于匹配模板位置
                 duplicate_obj = active_obj.copy()
@@ -205,7 +334,6 @@ class Huier_OT_Pymesh(bpy.types.Operator):
                     bpy.context.scene.collection.objects.unlink(duplicate_obj)
 
                 # 复制一份用于展示最原始物体的展示
-                bpy.context.scene.transparent2L = True
                 duplicate_obj2 = active_obj.copy()
                 duplicate_obj2.data = active_obj.data.copy()
                 duplicate_obj2.animation_data_clear()
@@ -264,11 +392,10 @@ class Huier_OT_Pymesh(bpy.types.Operator):
         if not is_initial:
             is_initial = True
             draw_font()
-            bpy.ops.object.createmouldinit('INVOKE_DEFAULT')
-            bpy.ops.object.createmouldcut('INVOKE_DEFAULT')
-            bpy.ops.object.createmouldfill('INVOKE_DEFAULT')
-            # bpy.ops.object.msgbuscallback('INVOKE_DEFAULT')
-            bpy.ops.switch.init('INVOKE_DEFAULT')
+            # bpy.ops.object.createmouldinit('INVOKE_DEFAULT')
+            # bpy.ops.object.createmouldcut('INVOKE_DEFAULT')
+            # bpy.ops.object.createmouldfill('INVOKE_DEFAULT')
+            bpy.ops.object.msgbuscallback('INVOKE_DEFAULT')
 
             register_damo_tools()
             register_jiahou_tools()
@@ -276,6 +403,7 @@ class Huier_OT_Pymesh(bpy.types.Operator):
             register_label_tools()
             register_handle_tools()
             register_support_tools()
+            register_point_tools()
             register_createmould_tools()
             register_soundcanal_tools()
             register_ventcanal_tools()
@@ -283,6 +411,8 @@ class Huier_OT_Pymesh(bpy.types.Operator):
             register_sprue_tools()
             register_lastdamo_tools()
             register_cutmould_tools()
+            register_shellcanal_tools()
+            register_collision_tools()
 
             override = getOverride()
             with bpy.context.temp_override(**override):

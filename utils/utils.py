@@ -1,8 +1,10 @@
 import bpy
 import bmesh
 import math
-from ..tool import set_vert_group, moveToRight, moveToLeft, delete_vert_group,newColor
+from ..tool import set_vert_group, moveToRight, moveToLeft, delete_vert_group, newColor, recover_and_remind_border
 
+min_z_before_cut = None
+max_z_before_cut = None
 
 # 获取VIEW_3D区域的上下文
 def utils_get_override():
@@ -142,6 +144,8 @@ def utils_copy_object(origin_name, copy_name):
             break
     # 复制一份挖孔前的模型以备用
     if copy_flag:
+        if bpy.data.objects.get(copy_name) != None:
+            bpy.data.objects.remove(bpy.data.objects[copy_name], do_unlink=True)
         duplicate_obj = cur_obj.copy()
         duplicate_obj.data = cur_obj.data.copy()
         duplicate_obj.animation_data_clear()
@@ -271,6 +275,11 @@ def plane_boolean_cut():
     bpy.ops.mesh.select_all(action='SELECT')
     bm = bmesh.from_edit_mesh(obj.data)
     ori_border_index = [v.index for v in bm.verts if v.select]
+    all_index = [v for v in bm.verts]
+    all_index.sort(key=lambda vert: vert.co[2])
+    global min_z_before_cut, max_z_before_cut
+    min_z_before_cut = all_index[0].co[2]
+    max_z_before_cut = all_index[-1].co[2]
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.mode_set(mode='OBJECT')
     set_vert_group("all", ori_border_index)
@@ -361,9 +370,29 @@ def delete_useless_part():
     target_bm = bmesh.new()
     # 将网格数据复制到bmesh对象
     target_bm.from_mesh(target_me)
+    global min_z_before_cut, max_z_before_cut
+    all_verts = [v for v in target_bm.verts]
+    all_verts.sort(key=lambda vert: vert.co[2])
     if len(target_bm.verts) < 100:
         print("切割出错，完全切掉了")
         raise ValueError("切割出错，完全切掉了")
+    elif min_z_before_cut == all_verts[0].co[2]:
+        print("切割出错，没有切掉下半部分")
+        if all_verts[-1].co[2] != max_z_before_cut:
+            print("切反了")
+            # recover_and_remind_border()
+            # # 翻转平面法线
+            # bpy.ops.object.select_all(action='DESELECT')
+            # bpy.context.view_layer.objects.active = bpy.data.objects[name + "CutPlane"]
+            # bpy.data.objects[name + "CutPlane"].select_set(True)
+            # bpy.ops.object.mode_set(mode='EDIT')
+            # bpy.ops.mesh.select_all(action='SELECT')
+            # bpy.ops.mesh.flip_normals()
+            # bpy.ops.object.mode_set(mode='OBJECT')
+            # plane_boolean_cut()
+            # delete_useless_part()
+        else:
+            raise ValueError("切割出错，没有切掉下半部分")
 
     # 最后删掉没用的CutPlane
     bpy.data.objects.remove(bpy.data.objects[name + "CutPlane"], do_unlink=True)

@@ -2,11 +2,12 @@ import bpy
 import bmesh
 import re
 import mathutils
+import time
 from .tool import *
 from bpy.types import WorkSpaceTool
 from bpy_extras import view3d_utils
-from asyncio import Handle
-from venv import create
+from .parameter import get_switch_time, set_switch_time, get_switch_flag, set_switch_flag, check_modals_running,\
+    get_mirror_context, set_mirror_context, get_process_var_list
 
 
 prev_on_object = False    # 判断鼠标在模型上与否的状态是否改变
@@ -353,7 +354,7 @@ def sprue_forward():
     global sprue_indexL
     global sprue_info_save
     global sprue_info_saveL
-    bpy.context.scene.var = 0
+    # bpy.context.scene.var = 0
     name = bpy.context.scene.leftWindowObj
     sprue_index_cur = None
     sprue_info_save_cur = None
@@ -442,7 +443,7 @@ def sprue_backup():
     global sprue_indexL
     global sprue_info_save
     global sprue_info_saveL
-    bpy.context.scene.var = 0
+    # bpy.context.scene.var = 0
     name = bpy.context.scene.leftWindowObj
     sprue_index_cur = None
     sprue_info_save_cur = None
@@ -676,12 +677,8 @@ def frontFromSprue():
         sprue_inner_offset_compare_obj = bpy.data.objects.get(name + "CylinderInnerOffsetCompare")
         sprue_outer_offset_compare_obj = bpy.data.objects.get(name + "CylinderOuterOffsetCompare")
         sprue_inside_offset_compare_obj = bpy.data.objects.get(name + "CylinderInsideOffsetCompare")
-        hard_support_compare_obj = bpy.data.objects.get(name + "ConeCompare")
-        soft_support_compare_obj = bpy.data.objects.get(name + "SoftSupportCompare")
         planename = name + "Plane"
         plane_obj = bpy.data.objects.get(planename)
-        # spherename = bpy.context.scene.leftWindowObj + "SprueSphere"
-        # sphere_obj = bpy.data.objects.get(spherename)
         #存在未提交的Sprue和Plane时
         if (sprue_inner_obj != None):
             bpy.data.objects.remove(sprue_inner_obj, do_unlink=True)
@@ -695,14 +692,8 @@ def frontFromSprue():
             bpy.data.objects.remove(sprue_outer_offset_compare_obj, do_unlink=True)
         if (sprue_inside_offset_compare_obj != None):
             bpy.data.objects.remove(sprue_inside_offset_compare_obj, do_unlink=True)
-        if (hard_support_compare_obj != None):
-            bpy.data.objects.remove(hard_support_compare_obj, do_unlink=True)
-        if (soft_support_compare_obj != None):
-            bpy.data.objects.remove(soft_support_compare_obj, do_unlink=True)
         if (plane_obj != None):
             bpy.data.objects.remove(plane_obj, do_unlink=True)
-        # if (sphere_obj != None):
-        #     bpy.data.objects.remove(sphere_obj, do_unlink=True)
         # 删除排气孔对比物
         for obj in bpy.data.objects:
             if (name == "右耳"):
@@ -1250,6 +1241,7 @@ def initial():
             r_y = sprueInfo.r_y
             r_z = sprueInfo.r_z
             # 添加一个sprue,激活鼠标行为
+            bpy.ops.object.sprueswitch('INVOKE_DEFAULT')
             bpy.ops.object.spruebackforwardadd('INVOKE_DEFAULT')
             # 获取添加后的Sprue,并根据参数设置调整offset
             planename = name + "Plane"
@@ -1287,6 +1279,7 @@ def initial():
             r_y = sprueInfo.r_y
             r_z = sprueInfo.r_z
             # 添加一个sprue,激活鼠标行为
+            bpy.ops.object.sprueswitch('INVOKE_DEFAULT')
             bpy.ops.object.spruebackforwardadd('INVOKE_DEFAULT')
             # 获取添加后的Sprue,并根据参数设置调整offset
             planename = name + "Plane"
@@ -1352,252 +1345,325 @@ def sprueInitial(offset, l_x, l_y, l_z, r_x, r_y, r_z):
     plane_obj.rotation_euler[1] = r_y
     plane_obj.rotation_euler[2] = r_z
 
-    # 1.将排气孔的内壁选中与右耳Compare做布尔的并集
-    # 将排气孔内壁复制出一份用于后续操作(使用Bool Tool将字体铸造法和模型合并之后,字体铸造法模型会被自动删除)
-    sprue_inner_name = sprue_inner_obj.name
-    sprue_inner_obj_temp = sprue_inner_obj.copy()
-    sprue_inner_obj_temp.data = sprue_inner_obj.data.copy()
-    sprue_inner_obj_temp.animation_data_clear()
-    bpy.context.collection.objects.link(sprue_inner_obj_temp)
-    if (name == "右耳"):
-        moveToRight(sprue_inner_obj_temp)
-    elif (name == "左耳"):
-        moveToLeft(sprue_inner_obj_temp)
-    # 为排气孔内壁选中并重新计算法线,提高切割的成功率
-    bpy.ops.object.select_all(action='DESELECT')
-    sprue_inner_obj.select_set(True)
-    bpy.context.view_layer.objects.active = sprue_inner_obj
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.normals_make_consistent(inside=False)
-    bpy.ops.object.mode_set(mode='OBJECT')
-    bpy.ops.object.select_all(action='DESELECT')
-    obj_inner.select_set(True)
-    bpy.context.view_layer.objects.active = obj_inner
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.normals_make_consistent(inside=False)
-    bpy.ops.object.mode_set(mode='OBJECT')
-    # 为铸造法内壁添加布尔修改器,与排气孔内壁合并
-    bpy.ops.object.select_all(action='DESELECT')
-    sprue_inner_obj.select_set(True)
-    obj_inner.select_set(True)
-    bpy.context.view_layer.objects.active = obj_inner
-    bpy.ops.object.booltool_auto_union()
-    sprue_inner_obj_temp.name = sprue_inner_name
-    sprue_inner_obj = sprue_inner_obj_temp
-    # modifierSprueUnionInner = obj_inner.modifiers.new(name="SprueUnionInner", type='BOOLEAN')
-    # modifierSprueUnionInner.object = sprue_inner_obj
-    # modifierSprueUnionInner.operation = 'UNION'
-    # modifierSprueUnionInner.solver = 'FAST'
-    # bpy.ops.object.modifier_apply(modifier="SprueUnionInner")
-
-
-
-    # 2.将排气孔的内芯选中与右耳做布尔的差集,内芯插入模型的部分会和右耳合并形成一块内凹的区域,这块顶点处于选中的状态,直接将其删除在右耳上得到一个孔
-    # 将铸造法内部物体顶点取消选中
-    bpy.ops.object.select_all(action='DESELECT')
-    obj_inner.select_set(True)
-    bpy.context.view_layer.objects.active = obj_inner
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.mode_set(mode='OBJECT')
-    # 将软耳膜支撑内芯尺寸缩小一些并将顶点选中
-    bpy.ops.object.select_all(action='DESELECT')
-    sprue_inside_obj.select_set(True)
-    bpy.context.view_layer.objects.active = sprue_inside_obj
-    sprue_inside_obj.scale[0] = 0.9
-    sprue_inside_obj.scale[1] = 0.9
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.object.mode_set(mode='OBJECT')
-    # 将排气孔内芯复制出一份用于后续操作(使用Bool Tool将字体铸造法和模型合并之后,字体铸造法模型会被自动删除)
-    sprue_inside_name = sprue_inside_obj.name
-    sprue_inside_obj_temp = sprue_inside_obj.copy()
-    sprue_inside_obj_temp.data = sprue_inside_obj.data.copy()
-    sprue_inside_obj_temp.animation_data_clear()
-    bpy.context.collection.objects.link(sprue_inside_obj_temp)
-    if (name == "右耳"):
-        moveToRight(sprue_inside_obj_temp)
-    elif (name == "左耳"):
-        moveToLeft(sprue_inside_obj_temp)
-    # 为铸造法内壁添加布尔修改器,与软耳膜支撑内芯做差集
-    bpy.ops.object.select_all(action='DESELECT')
-    sprue_inside_obj.select_set(True)
-    obj_inner.select_set(True)
-    bpy.context.view_layer.objects.active = obj_inner
-    bpy.ops.object.booltool_auto_difference()
-    sprue_inside_obj_temp.name = sprue_inside_name
-    sprue_inside_obj = sprue_inside_obj_temp
-    # obj_inner.select_set(True)
-    # bpy.context.view_layer.objects.active = obj_inner
-    # modifierSprueDifferenceInside = obj_inner.modifiers.new(name="SprueDifferenceInside", type='BOOLEAN')
-    # modifierSprueDifferenceInside.object = sprue_inside_obj
-    # modifierSprueDifferenceInside.operation = 'DIFFERENCE'
-    # modifierSprueDifferenceInside.solver = 'FAST'
-    # bpy.ops.object.modifier_apply(modifier="SprueDifferenceInside")
-    # 将选中的顶点直接删除在模型上得到软耳膜支撑的孔洞
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_less()
-    bpy.ops.mesh.delete(type='VERT')
-    bpy.ops.object.mode_set(mode='OBJECT')
-
-    # 3.将排气孔的内芯选中与右耳Compare做布尔的差集,内芯插入模型的部分会和右耳Compare合并形成一块内凹的区域,这块顶点处于选中的状态,直接将其删除在右耳上得到一个孔
-    bpy.ops.object.select_all(action='DESELECT')
-    obj_outer.select_set(True)
-    bpy.context.view_layer.objects.active = obj_outer
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.mode_set(mode='OBJECT')
-    obj_outer.select_set(False)
-    # 将软耳膜支撑内芯尺寸恢复正常并将顶点选中
-    bpy.ops.object.select_all(action='DESELECT')
-    sprue_inside_obj.select_set(True)
-    bpy.context.view_layer.objects.active = sprue_inside_obj
-    sprue_inside_obj.scale[0] = 1
-    sprue_inside_obj.scale[1] = 1
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.object.mode_set(mode='OBJECT')
-    # 将排气孔内芯复制出一份用于后续操作(使用Bool Tool将字体铸造法和模型合并之后,字体铸造法模型会被自动删除)
-    sprue_inside_name = sprue_inside_obj.name
-    sprue_inside_obj_temp = sprue_inside_obj.copy()
-    sprue_inside_obj_temp.data = sprue_inside_obj.data.copy()
-    sprue_inside_obj_temp.animation_data_clear()
-    bpy.context.collection.objects.link(sprue_inside_obj_temp)
-    if (name == "右耳"):
-        moveToRight(sprue_inside_obj_temp)
-    elif (name == "左耳"):
-        moveToLeft(sprue_inside_obj_temp)
-    # 为铸造法外壁添加布尔修改器,与软耳膜支撑内芯做差集
-    bpy.ops.object.select_all(action='DESELECT')
-    sprue_inside_obj.select_set(True)
-    obj_outer.select_set(True)
-    bpy.context.view_layer.objects.active = obj_outer
-    bpy.ops.object.booltool_auto_difference()
-    sprue_inside_obj_temp.name = sprue_inside_name
-    sprue_inside_obj = sprue_inside_obj_temp
-    # # 为铸造法内壁添加布尔修改器,与软耳膜支撑内芯做差集
-    # obj_outer.select_set(True)
-    # bpy.context.view_layer.objects.active = obj_outer
-    # modifierSupportDifferenceInside = obj_outer.modifiers.new(name="SupportDifferenceInside", type='BOOLEAN')
-    # modifierSupportDifferenceInside.object = sprue_inside_obj
-    # modifierSupportDifferenceInside.operation = 'DIFFERENCE'
-    # modifierSupportDifferenceInside.solver = 'FAST'
-    # bpy.ops.object.modifier_apply(modifier="SupportDifferenceInside")
-    # 将选中的顶点直接删除在模型上得到软耳膜支撑的孔洞
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_less()
-    bpy.ops.mesh.delete(type='VERT')
-    bpy.ops.object.mode_set(mode='OBJECT')
-
-    # 4.将排气孔外壁与右耳模型做差集,得到排气孔的对比物体。 # 由于排气孔物体和透明的右耳外壳合并后变为透明,因此需要设置一个不透明的参照物,与合并后的右耳对比
-    # 将排气孔外壁复制一份用于布尔生成排气孔对比物
-    sprue_outer_compare_name = name + "SprueCompare"
-    sprue_outer_compare_obj = sprue_outer_obj.copy()
-    sprue_outer_compare_obj.data = sprue_outer_obj.data.copy()
-    sprue_outer_compare_obj.animation_data_clear()
-    bpy.context.collection.objects.link(sprue_outer_compare_obj)
-    sprue_outer_compare_obj.name = sprue_outer_compare_name
-    if (name == "右耳"):
-        moveToRight(sprue_outer_compare_obj)
-    elif (name == "左耳"):
-        moveToLeft(sprue_outer_compare_obj)
-    # 将排气孔对比物的位置移动到与排气孔外壁的位置相同(由于排气孔相关物体都在父物体平面下随着父物体的位置改变而改变,因此其位置信息仍为导入时的为位置,不能直接通过location设置其位置)
-    me = sprue_outer_compare_obj.data
-    bm = bmesh.new()
-    bm.from_mesh(me)
-    bm.verts.ensure_lookup_table()
-    ori_sprue_me = sprue_outer_obj.data
-    ori_sprue_bm = bmesh.new()
-    ori_sprue_bm.from_mesh(ori_sprue_me)
-    ori_sprue_bm.verts.ensure_lookup_table()
-    for vert in bm.verts:
-        vert.co = ori_sprue_bm.verts[vert.index].co
-    bm.to_mesh(me)
-    bm.free()
-    ori_sprue_bm.free()
-    # 将复制出来的排气孔外壁对比物与右耳做布尔差集,将其切割为所需的形状
-    bpy.ops.object.select_all(action='DESELECT')
-    sprue_outer_compare_obj.select_set(True)
-    bpy.context.view_layer.objects.active = sprue_outer_compare_obj
-    modifierSprueCompareDifference = sprue_outer_compare_obj.modifiers.new(name="SprueCompareDifference",
-                                                                           type='BOOLEAN')
-    modifierSprueCompareDifference.object = obj_outer
-    modifierSprueCompareDifference.operation = 'DIFFERENCE'
-    modifierSprueCompareDifference.solver = 'FAST'
-    bpy.ops.object.modifier_apply(modifier="SprueCompareDifference")
-
-
-    # 5.将排气孔的外壁与右耳做布尔的并集
-    # sprue_outer_obj.select_set(True)
-    # bpy.context.view_layer.objects.active = sprue_outer_obj
-    # # 先将排气孔外壁选中,使得其与铸造法外壳合并后被选中分离
+    # # 1.将排气孔的内壁选中与右耳Compare做布尔的并集
+    # # 将排气孔内壁复制出一份用于后续操作(使用Bool Tool将字体铸造法和模型合并之后,字体铸造法模型会被自动删除)
+    # sprue_inner_name = sprue_inner_obj.name
+    # sprue_inner_obj_temp = sprue_inner_obj.copy()
+    # sprue_inner_obj_temp.data = sprue_inner_obj.data.copy()
+    # sprue_inner_obj_temp.animation_data_clear()
+    # bpy.context.collection.objects.link(sprue_inner_obj_temp)
+    # if (name == "右耳"):
+    #     moveToRight(sprue_inner_obj_temp)
+    # elif (name == "左耳"):
+    #     moveToLeft(sprue_inner_obj_temp)
+    # # 为排气孔内壁选中并重新计算法线,提高切割的成功率
+    # bpy.ops.object.select_all(action='DESELECT')
+    # sprue_inner_obj.select_set(True)
+    # bpy.context.view_layer.objects.active = sprue_inner_obj
     # bpy.ops.object.mode_set(mode='EDIT')
     # bpy.ops.mesh.select_all(action='SELECT')
+    # bpy.ops.mesh.normals_make_consistent(inside=False)
     # bpy.ops.object.mode_set(mode='OBJECT')
-    # sprue_outer_obj.select_set(False)
-    # obj_outer.select_set(True)
-    # bpy.context.view_layer.objects.active = obj_outer
-    # # 由于排气孔之前的模块存在布尔操作,会有其他顶点被选中,因此先将模型上选中顶点给取消选中
+    # bpy.ops.object.select_all(action='DESELECT')
+    # obj_inner.select_set(True)
+    # bpy.context.view_layer.objects.active = obj_inner
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.mesh.select_all(action='SELECT')
+    # bpy.ops.mesh.normals_make_consistent(inside=False)
+    # bpy.ops.object.mode_set(mode='OBJECT')
+    # # 为铸造法内壁添加布尔修改器,与排气孔内壁合并
+    # bpy.ops.object.select_all(action='DESELECT')
+    # sprue_inner_obj.select_set(True)
+    # obj_inner.select_set(True)
+    # bpy.context.view_layer.objects.active = obj_inner
+    # bpy.ops.object.booltool_auto_union()
+    # sprue_inner_obj_temp.name = sprue_inner_name
+    # sprue_inner_obj = sprue_inner_obj_temp
+    # # modifierSprueUnionInner = obj_inner.modifiers.new(name="SprueUnionInner", type='BOOLEAN')
+    # # modifierSprueUnionInner.object = sprue_inner_obj
+    # # modifierSprueUnionInner.operation = 'UNION'
+    # # modifierSprueUnionInner.solver = 'FAST'
+    # # bpy.ops.object.modifier_apply(modifier="SprueUnionInner")
+    #
+    #
+    #
+    # # 2.将排气孔的内芯选中与右耳做布尔的差集,内芯插入模型的部分会和右耳合并形成一块内凹的区域,这块顶点处于选中的状态,直接将其删除在右耳上得到一个孔
+    # # 将铸造法内部物体顶点取消选中
+    # bpy.ops.object.select_all(action='DESELECT')
+    # obj_inner.select_set(True)
+    # bpy.context.view_layer.objects.active = obj_inner
     # bpy.ops.object.mode_set(mode='EDIT')
     # bpy.ops.mesh.select_all(action='DESELECT')
     # bpy.ops.object.mode_set(mode='OBJECT')
-    # 将排气孔外壁复制出一份用于后续操作(使用Bool Tool将字体铸造法和模型合并之后,字体铸造法模型会被自动删除)
-    sprue_outer_name = sprue_outer_obj.name
-    sprue_outer_obj_temp = sprue_outer_obj.copy()
-    sprue_outer_obj_temp.data = sprue_outer_obj.data.copy()
-    sprue_outer_obj_temp.animation_data_clear()
-    bpy.context.collection.objects.link(sprue_outer_obj_temp)
-    if (name == "右耳"):
-        moveToRight(sprue_outer_obj_temp)
-    elif (name == "左耳"):
-        moveToLeft(sprue_outer_obj_temp)
-    # 为铸造法外壳添加布尔修改器,与排气孔外壳合并
+    # # 将软耳膜支撑内芯尺寸缩小一些并将顶点选中
+    # bpy.ops.object.select_all(action='DESELECT')
+    # sprue_inside_obj.select_set(True)
+    # bpy.context.view_layer.objects.active = sprue_inside_obj
+    # sprue_inside_obj.scale[0] = 0.9
+    # sprue_inside_obj.scale[1] = 0.9
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.mesh.select_all(action='SELECT')
+    # bpy.ops.object.mode_set(mode='OBJECT')
+    # # 将排气孔内芯复制出一份用于后续操作(使用Bool Tool将字体铸造法和模型合并之后,字体铸造法模型会被自动删除)
+    # sprue_inside_name = sprue_inside_obj.name
+    # sprue_inside_obj_temp = sprue_inside_obj.copy()
+    # sprue_inside_obj_temp.data = sprue_inside_obj.data.copy()
+    # sprue_inside_obj_temp.animation_data_clear()
+    # bpy.context.collection.objects.link(sprue_inside_obj_temp)
+    # if (name == "右耳"):
+    #     moveToRight(sprue_inside_obj_temp)
+    # elif (name == "左耳"):
+    #     moveToLeft(sprue_inside_obj_temp)
+    # # 为铸造法内壁添加布尔修改器,与软耳膜支撑内芯做差集
+    # bpy.ops.object.select_all(action='DESELECT')
+    # sprue_inside_obj.select_set(True)
+    # obj_inner.select_set(True)
+    # bpy.context.view_layer.objects.active = obj_inner
+    # bpy.ops.object.booltool_auto_difference()
+    # sprue_inside_obj_temp.name = sprue_inside_name
+    # sprue_inside_obj = sprue_inside_obj_temp
+    # # obj_inner.select_set(True)
+    # # bpy.context.view_layer.objects.active = obj_inner
+    # # modifierSprueDifferenceInside = obj_inner.modifiers.new(name="SprueDifferenceInside", type='BOOLEAN')
+    # # modifierSprueDifferenceInside.object = sprue_inside_obj
+    # # modifierSprueDifferenceInside.operation = 'DIFFERENCE'
+    # # modifierSprueDifferenceInside.solver = 'FAST'
+    # # bpy.ops.object.modifier_apply(modifier="SprueDifferenceInside")
+    # # 将选中的顶点直接删除在模型上得到软耳膜支撑的孔洞
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.mesh.select_less()
+    # bpy.ops.mesh.delete(type='VERT')
+    # bpy.ops.object.mode_set(mode='OBJECT')
+    #
+    # # 3.将排气孔的内芯选中与右耳Compare做布尔的差集,内芯插入模型的部分会和右耳Compare合并形成一块内凹的区域,这块顶点处于选中的状态,直接将其删除在右耳上得到一个孔
+    # bpy.ops.object.select_all(action='DESELECT')
+    # obj_outer.select_set(True)
+    # bpy.context.view_layer.objects.active = obj_outer
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.mesh.select_all(action='DESELECT')
+    # bpy.ops.object.mode_set(mode='OBJECT')
+    # obj_outer.select_set(False)
+    # # 将软耳膜支撑内芯尺寸恢复正常并将顶点选中
+    # bpy.ops.object.select_all(action='DESELECT')
+    # sprue_inside_obj.select_set(True)
+    # bpy.context.view_layer.objects.active = sprue_inside_obj
+    # sprue_inside_obj.scale[0] = 1
+    # sprue_inside_obj.scale[1] = 1
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.mesh.select_all(action='SELECT')
+    # bpy.ops.object.mode_set(mode='OBJECT')
+    # # 将排气孔内芯复制出一份用于后续操作(使用Bool Tool将字体铸造法和模型合并之后,字体铸造法模型会被自动删除)
+    # sprue_inside_name = sprue_inside_obj.name
+    # sprue_inside_obj_temp = sprue_inside_obj.copy()
+    # sprue_inside_obj_temp.data = sprue_inside_obj.data.copy()
+    # sprue_inside_obj_temp.animation_data_clear()
+    # bpy.context.collection.objects.link(sprue_inside_obj_temp)
+    # if (name == "右耳"):
+    #     moveToRight(sprue_inside_obj_temp)
+    # elif (name == "左耳"):
+    #     moveToLeft(sprue_inside_obj_temp)
+    # # 为铸造法外壁添加布尔修改器,与软耳膜支撑内芯做差集
+    # bpy.ops.object.select_all(action='DESELECT')
+    # sprue_inside_obj.select_set(True)
+    # obj_outer.select_set(True)
+    # bpy.context.view_layer.objects.active = obj_outer
+    # bpy.ops.object.booltool_auto_difference()
+    # sprue_inside_obj_temp.name = sprue_inside_name
+    # sprue_inside_obj = sprue_inside_obj_temp
+    # # # 为铸造法内壁添加布尔修改器,与软耳膜支撑内芯做差集
+    # # obj_outer.select_set(True)
+    # # bpy.context.view_layer.objects.active = obj_outer
+    # # modifierSupportDifferenceInside = obj_outer.modifiers.new(name="SupportDifferenceInside", type='BOOLEAN')
+    # # modifierSupportDifferenceInside.object = sprue_inside_obj
+    # # modifierSupportDifferenceInside.operation = 'DIFFERENCE'
+    # # modifierSupportDifferenceInside.solver = 'FAST'
+    # # bpy.ops.object.modifier_apply(modifier="SupportDifferenceInside")
+    # # 将选中的顶点直接删除在模型上得到软耳膜支撑的孔洞
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.mesh.select_less()
+    # bpy.ops.mesh.delete(type='VERT')
+    # bpy.ops.object.mode_set(mode='OBJECT')
+    #
+    # # 4.将排气孔外壁与右耳模型做差集,得到排气孔的对比物体。 # 由于排气孔物体和透明的右耳外壳合并后变为透明,因此需要设置一个不透明的参照物,与合并后的右耳对比
+    # # 将排气孔外壁复制一份用于布尔生成排气孔对比物
+    # sprue_outer_compare_name = name + "SprueCompare"
+    # sprue_outer_compare_obj = sprue_outer_obj.copy()
+    # sprue_outer_compare_obj.data = sprue_outer_obj.data.copy()
+    # sprue_outer_compare_obj.animation_data_clear()
+    # bpy.context.collection.objects.link(sprue_outer_compare_obj)
+    # sprue_outer_compare_obj.name = sprue_outer_compare_name
+    # if (name == "右耳"):
+    #     moveToRight(sprue_outer_compare_obj)
+    # elif (name == "左耳"):
+    #     moveToLeft(sprue_outer_compare_obj)
+    # # 将排气孔对比物的位置移动到与排气孔外壁的位置相同(由于排气孔相关物体都在父物体平面下随着父物体的位置改变而改变,因此其位置信息仍为导入时的为位置,不能直接通过location设置其位置)
+    # me = sprue_outer_compare_obj.data
+    # bm = bmesh.new()
+    # bm.from_mesh(me)
+    # bm.verts.ensure_lookup_table()
+    # ori_sprue_me = sprue_outer_obj.data
+    # ori_sprue_bm = bmesh.new()
+    # ori_sprue_bm.from_mesh(ori_sprue_me)
+    # ori_sprue_bm.verts.ensure_lookup_table()
+    # for vert in bm.verts:
+    #     vert.co = ori_sprue_bm.verts[vert.index].co
+    # bm.to_mesh(me)
+    # bm.free()
+    # ori_sprue_bm.free()
+    # # 将复制出来的排气孔外壁对比物与右耳做布尔差集,将其切割为所需的形状
+    # bpy.ops.object.select_all(action='DESELECT')
+    # sprue_outer_compare_obj.select_set(True)
+    # bpy.context.view_layer.objects.active = sprue_outer_compare_obj
+    # modifierSprueCompareDifference = sprue_outer_compare_obj.modifiers.new(name="SprueCompareDifference",
+    #                                                                        type='BOOLEAN')
+    # modifierSprueCompareDifference.object = obj_outer
+    # modifierSprueCompareDifference.operation = 'DIFFERENCE'
+    # modifierSprueCompareDifference.solver = 'FAST'
+    # bpy.ops.object.modifier_apply(modifier="SprueCompareDifference")
+    #
+    #
+    # # 5.将排气孔的外壁与右耳做布尔的并集
+    # # sprue_outer_obj.select_set(True)
+    # # bpy.context.view_layer.objects.active = sprue_outer_obj
+    # # # 先将排气孔外壁选中,使得其与铸造法外壳合并后被选中分离
+    # # bpy.ops.object.mode_set(mode='EDIT')
+    # # bpy.ops.mesh.select_all(action='SELECT')
+    # # bpy.ops.object.mode_set(mode='OBJECT')
+    # # sprue_outer_obj.select_set(False)
+    # # obj_outer.select_set(True)
+    # # bpy.context.view_layer.objects.active = obj_outer
+    # # # 由于排气孔之前的模块存在布尔操作,会有其他顶点被选中,因此先将模型上选中顶点给取消选中
+    # # bpy.ops.object.mode_set(mode='EDIT')
+    # # bpy.ops.mesh.select_all(action='DESELECT')
+    # # bpy.ops.object.mode_set(mode='OBJECT')
+    # # 将排气孔外壁复制出一份用于后续操作(使用Bool Tool将字体铸造法和模型合并之后,字体铸造法模型会被自动删除)
+    # sprue_outer_name = sprue_outer_obj.name
+    # sprue_outer_obj_temp = sprue_outer_obj.copy()
+    # sprue_outer_obj_temp.data = sprue_outer_obj.data.copy()
+    # sprue_outer_obj_temp.animation_data_clear()
+    # bpy.context.collection.objects.link(sprue_outer_obj_temp)
+    # if (name == "右耳"):
+    #     moveToRight(sprue_outer_obj_temp)
+    # elif (name == "左耳"):
+    #     moveToLeft(sprue_outer_obj_temp)
+    # # 为铸造法外壳添加布尔修改器,与排气孔外壳合并
+    # bpy.ops.object.select_all(action='DESELECT')
+    # sprue_outer_obj.select_set(True)
+    # obj_outer.select_set(True)
+    # bpy.context.view_layer.objects.active = obj_outer
+    # bpy.ops.object.booltool_auto_union()
+    # sprue_outer_obj_temp.name = sprue_outer_name
+    # sprue_outer_obj = sprue_outer_obj_temp
+    # # #为铸造法外壳添加布尔修改器,与排气孔外壳合并
+    # # modifierSprueUnionOuter = obj_outer.modifiers.new(name="SprueUnionOuter", type='BOOLEAN')
+    # # modifierSprueUnionOuter.object = sprue_outer_obj
+    # # modifierSprueUnionOuter.operation = 'UNION'
+    # # modifierSprueUnionOuter.solver = 'FAST'
+    # # bpy.ops.object.modifier_apply(modifier="SprueUnionOuter")
+    # # # 由于排气孔物体和透明的右耳外壳合并后变为透明,因此需要设置一个不透明的参照物,与合并后的右耳对比,布尔合并后的顶点会被选中,将这些顶点复制一份并分离为独立的物体
+    # # bpy.ops.object.mode_set(mode='EDIT')
+    # # bpy.ops.mesh.duplicate()
+    # # bpy.ops.mesh.separate(type='SELECTED')
+    # # bpy.ops.object.mode_set(mode='OBJECT')
+    # # sprue_compare_obj = bpy.data.objects.get(name + ".001")
+    # # if (sprue_compare_obj != None):
+    # #     sprue_compare_obj.name = name + "SprueCompare"
+    # #     yellow_material = newColor("yellow", 1, 0.319, 0.133, 0, 1)
+    # #     sprue_compare_obj.data.materials.clear()
+    # #     sprue_compare_obj.data.materials.append(yellow_material)
+    # #     if (name == "右耳"):
+    # #         moveToRight(sprue_compare_obj)
+    # #     elif (name == "左耳"):
+    # #         moveToLeft(sprue_compare_obj)
+    #
+    # # 删除父物体平面之后,排气孔对比物体会恢复到初始位置,需要保存为位置信息
+    # bpy.ops.object.select_all(action='DESELECT')
+    # plane_obj.select_set(True)
+    # bpy.context.view_layer.objects.active = plane_obj
+    # bpy.ops.view3d.snap_cursor_to_active()  # 将3D游标位置设置为激活物体的原点位置
+    # bpy.ops.object.select_all(action='DESELECT')
+    # sprue_outer_compare_obj.select_set(True)
+    # bpy.context.view_layer.objects.active = sprue_outer_compare_obj
+    # bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='MEDIAN')  # 将排气孔对比物的原点位置设置为游标位置,即平面的原点位置
+    # sprue_outer_compare_obj.location = plane_obj.location  # 将排气孔位置信息设置为平面位置信息
+    # sprue_outer_compare_obj.rotation_euler = plane_obj.rotation_euler
+    # bpy.ops.view3d.snap_cursor_to_center()  # 将游标位置恢复为世界中心
+    # sprue_compare_yellow_material = newColor("SprueCompareYellow", 1, 0.319, 0.133, 1, 0.4)  # 将排气孔对比物设置为模型的颜色
+    # sprue_outer_compare_obj.data.materials.clear()
+    # sprue_outer_compare_obj.data.materials.append(sprue_compare_yellow_material)
+
+    # 为排气孔外壁添加顶点组保存 排气孔外壁的边缘顶点
+    # 选中这些顶点补面,用于后续的布尔切割合并
     bpy.ops.object.select_all(action='DESELECT')
     sprue_outer_obj.select_set(True)
+    bpy.context.view_layer.objects.active = sprue_outer_obj
+    sprue_outer_top_edge_vertex = sprue_outer_obj.vertex_groups.get("SprueOuterTopEdge")
+    if (sprue_outer_top_edge_vertex != None):
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.object.vertex_group_set_active(group="SprueOuterTopEdge")
+        bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
+        bpy.ops.object.mode_set(mode='OBJECT')
+    sprue_outer_top_edge_vertex = sprue_outer_obj.vertex_groups.new(name="SprueOuterTopEdge")
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.region_to_loop()
+    bpy.ops.object.vertex_group_set_active(group="SprueOuterTopEdge")
+    bpy.ops.object.vertex_group_assign()
+    bpy.ops.mesh.edge_face_add()  # 选中这些顶点补面,将软耳膜外部支撑变为封闭物体用于后续的布尔切割合并
+    bpy.ops.object.mode_set(mode='OBJECT')
+    # 为排气孔内壁添加顶点组保存 排气孔内壁的边缘顶点
+    # 选中这些顶点补面,用于后续的布尔切割合并
+    bpy.ops.object.select_all(action='DESELECT')
+    sprue_inner_obj.select_set(True)
+    bpy.context.view_layer.objects.active = sprue_inner_obj
+    sprue_inner_top_edge_vertex = sprue_inner_obj.vertex_groups.get("SprueInnerTopEdge")
+    if (sprue_inner_top_edge_vertex != None):
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.object.vertex_group_set_active(group="SprueInnerTopEdge")
+        bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
+        bpy.ops.object.mode_set(mode='OBJECT')
+    sprue_inner_top_edge_vertex = sprue_inner_obj.vertex_groups.new(name="SprueInnerTopEdge")
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.region_to_loop()
+    bpy.ops.object.vertex_group_set_active(group="SprueInnerTopEdge")
+    bpy.ops.object.vertex_group_assign()
+    bpy.ops.mesh.edge_face_add()  # 选中这些顶点补面,将软耳膜外部支撑变为封闭物体用于后续的布尔切割合并
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    # 将排气孔外壁与左右耳合并
+    bpy.ops.object.select_all(action='DESELECT')
     obj_outer.select_set(True)
     bpy.context.view_layer.objects.active = obj_outer
-    bpy.ops.object.booltool_auto_union()
-    sprue_outer_obj_temp.name = sprue_outer_name
-    sprue_outer_obj = sprue_outer_obj_temp
-    # #为铸造法外壳添加布尔修改器,与排气孔外壳合并
-    # modifierSprueUnionOuter = obj_outer.modifiers.new(name="SprueUnionOuter", type='BOOLEAN')
-    # modifierSprueUnionOuter.object = sprue_outer_obj
-    # modifierSprueUnionOuter.operation = 'UNION'
-    # modifierSprueUnionOuter.solver = 'FAST'
-    # bpy.ops.object.modifier_apply(modifier="SprueUnionOuter")
-    # # 由于排气孔物体和透明的右耳外壳合并后变为透明,因此需要设置一个不透明的参照物,与合并后的右耳对比,布尔合并后的顶点会被选中,将这些顶点复制一份并分离为独立的物体
-    # bpy.ops.object.mode_set(mode='EDIT')
-    # bpy.ops.mesh.duplicate()
-    # bpy.ops.mesh.separate(type='SELECTED')
-    # bpy.ops.object.mode_set(mode='OBJECT')
-    # sprue_compare_obj = bpy.data.objects.get(name + ".001")
-    # if (sprue_compare_obj != None):
-    #     sprue_compare_obj.name = name + "SprueCompare"
-    #     yellow_material = newColor("yellow", 1, 0.319, 0.133, 0, 1)
-    #     sprue_compare_obj.data.materials.clear()
-    #     sprue_compare_obj.data.materials.append(yellow_material)
-    #     if (name == "右耳"):
-    #         moveToRight(sprue_compare_obj)
-    #     elif (name == "左耳"):
-    #         moveToLeft(sprue_compare_obj)
+    bpy.ops.object.mode_set(mode='EDIT')  # 将模型上的顶点全部取消选中
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    bool_modifier = obj_outer.modifiers.new(name="SprueOuterUnionBooleanModifier", type='BOOLEAN')
+    bool_modifier.operation = 'UNION'
+    bool_modifier.solver = 'FAST'
+    bool_modifier.object = sprue_outer_obj
+    bpy.ops.object.modifier_apply(modifier="SprueOuterUnionBooleanModifier", single_user=True)
+    bpy.ops.object.mode_set(mode='EDIT')  # 布尔合并前左右耳模型上没有顶点被选中,排气孔外壁上边缘被选中
+    bpy.ops.mesh.delete(type='ONLY_FACE')  # 布尔合并后排气孔外壁边缘顶点被选中,将面删除
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    # 将排气孔内壁与左右耳Casting合并
+    bpy.ops.object.select_all(action='DESELECT')
+    obj_inner.select_set(True)
+    bpy.context.view_layer.objects.active = obj_inner
+    bpy.ops.object.mode_set(mode='EDIT')  # 将模型上的顶点全部取消选中
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    bool_modifier = obj_inner.modifiers.new(name="SprueInnerUnionBooleanModifier", type='BOOLEAN')
+    bool_modifier.operation = 'UNION'
+    bool_modifier.solver = 'FAST'
+    bool_modifier.object = sprue_inner_obj
+    bpy.ops.object.modifier_apply(modifier="SprueInnerUnionBooleanModifier", single_user=True)
+    bpy.ops.object.mode_set(mode='EDIT')  # 布尔合并前左右耳模型上没有顶点被选中,排气孔外壁上边缘被选中
+    bpy.ops.mesh.delete(type='ONLY_FACE')  # 布尔合并后排气孔外壁边缘顶点被选中,将面删除
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
 
-    # 删除父物体平面之后,排气孔对比物体会恢复到初始位置,需要保存为位置信息
-    bpy.ops.object.select_all(action='DESELECT')
-    plane_obj.select_set(True)
-    bpy.context.view_layer.objects.active = plane_obj
-    bpy.ops.view3d.snap_cursor_to_active()  # 将3D游标位置设置为激活物体的原点位置
-    bpy.ops.object.select_all(action='DESELECT')
-    sprue_outer_compare_obj.select_set(True)
-    bpy.context.view_layer.objects.active = sprue_outer_compare_obj
-    bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='MEDIAN')  # 将排气孔对比物的原点位置设置为游标位置,即平面的原点位置
-    sprue_outer_compare_obj.location = plane_obj.location  # 将排气孔位置信息设置为平面位置信息
-    sprue_outer_compare_obj.rotation_euler = plane_obj.rotation_euler
-    bpy.ops.view3d.snap_cursor_to_center()  # 将游标位置恢复为世界中心
-    sprue_compare_yellow_material = newColor("SprueCompareYellow", 1, 0.319, 0.133, 0, 1)  # 将排气孔对比物设置为模型的颜色
-    sprue_outer_compare_obj.data.materials.clear()
-    sprue_outer_compare_obj.data.materials.append(sprue_compare_yellow_material)
 
     # 删除排气管相关物体
     bpy.data.objects.remove(plane_obj, do_unlink=True)
@@ -1726,262 +1792,77 @@ def sprueSubmit():
         # 先将该Sprue的相关信息保存下来,用于模块切换时的初始化。
         # saveInfo()
 
-        # 1.将排气孔的内壁选中与右耳Compare做布尔的并集
-        # 将排气孔内壁复制出一份用于后续操作(使用Bool Tool将排气孔外壁作并集之后,排气孔内芯模型会被自动删除)
-        sprue_inner_name = sprue_inner_obj.name
-        sprue_inner_obj_temp = sprue_inner_obj.copy()
-        sprue_inner_obj_temp.data = sprue_inner_obj.data.copy()
-        sprue_inner_obj_temp.animation_data_clear()
-        bpy.context.collection.objects.link(sprue_inner_obj_temp)
-        if (name == "右耳"):
-            moveToRight(sprue_inner_obj_temp)
-        elif (name == "左耳"):
-            moveToLeft(sprue_inner_obj_temp)
-        # 为铸造法内壁选中并重新计算法线,提高切割的成功率
-        bpy.ops.object.select_all( action='DESELECT')
-        obj_inner.select_set(True)
-        bpy.context.view_layer.objects.active = obj_inner
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.normals_make_consistent(inside=False)
-        bpy.ops.object.mode_set(mode='OBJECT')
-        # 为铸造法内壁添加布尔修改器,与排气孔内壁合并
-        bpy.ops.object.select_all(action='DESELECT')
-        sprue_inner_obj.select_set(True)
-        obj_inner.select_set(True)
-        bpy.context.view_layer.objects.active = obj_inner
-        bpy.ops.object.booltool_auto_union()
-        sprue_inner_obj_temp.name = sprue_inner_name
-        sprue_inner_obj = sprue_inner_obj_temp
-        # modifierSprueUnionInner = obj_inner.modifiers.new(name="SprueUnionInner", type='BOOLEAN')
-        # modifierSprueUnionInner.object = sprue_inner_obj
-        # modifierSprueUnionInner.operation = 'UNION'
-        # modifierSprueUnionInner.solver = 'FAST'
-        # bpy.ops.object.modifier_apply(modifier="SprueUnionInner")
-
-
-        # 2.将排气孔的内芯选中与右耳做布尔的差集,内芯插入模型的部分会和右耳合并形成一块内凹的区域,这块顶点处于选中的状态,直接将其删除在右耳上得到一个孔
-        # 将铸造法内部物体顶点取消选中
-        bpy.ops.object.select_all(action='DESELECT')
-        obj_inner.select_set(True)
-        bpy.context.view_layer.objects.active = obj_inner
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-        # 将软耳膜支撑内芯尺寸缩小一些并将顶点选中
-        bpy.ops.object.select_all(action='DESELECT')
-        sprue_inside_obj.select_set(True)
-        bpy.context.view_layer.objects.active = sprue_inside_obj
-        sprue_inside_obj.scale[0] = 0.9
-        sprue_inside_obj.scale[1] = 0.9
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-        # 将排气孔内芯复制出一份用于后续操作(使用Bool Tool将排气孔内芯作差集之后,排气孔内芯模型会被自动删除)
-        sprue_inside_name = sprue_inside_obj.name
-        sprue_inside_obj_temp = sprue_inside_obj.copy()
-        sprue_inside_obj_temp.data = sprue_inside_obj.data.copy()
-        sprue_inside_obj_temp.animation_data_clear()
-        bpy.context.collection.objects.link(sprue_inside_obj_temp)
-        if (name == "右耳"):
-            moveToRight(sprue_inside_obj_temp)
-        elif (name == "左耳"):
-            moveToLeft(sprue_inside_obj_temp)
-        # 为铸造法内壁添加布尔修改器,与排气孔内芯做差集
-        bpy.ops.object.select_all(action='DESELECT')
-        sprue_inside_obj.select_set(True)
-        obj_inner.select_set(True)
-        bpy.context.view_layer.objects.active = obj_inner
-        bpy.ops.object.booltool_auto_difference()
-        sprue_inside_obj_temp.name = sprue_inside_name
-        sprue_inside_obj = sprue_inside_obj_temp
-        # obj_inner.select_set(True)
-        # bpy.context.view_layer.objects.active = obj_inner
-        # modifierSprueDifferenceInside = obj_inner.modifiers.new(name="SprueDifferenceInside", type='BOOLEAN')
-        # modifierSprueDifferenceInside.object = sprue_inside_obj
-        # modifierSprueDifferenceInside.operation = 'DIFFERENCE'
-        # modifierSprueDifferenceInside.solver = 'FAST'
-        # bpy.ops.object.modifier_apply(modifier="SprueDifferenceInside")
-        # 将选中的顶点直接删除在模型上得到软耳膜支撑的孔洞
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_less()
-        bpy.ops.mesh.delete(type='VERT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-        # 3.将排气孔的内芯选中与右耳Compare做布尔的差集,内芯插入模型的部分会和右耳Compare合并形成一块内凹的区域,这块顶点处于选中的状态,直接将其删除在右耳上得到一个孔
-        bpy.ops.object.select_all(action='DESELECT')
-        obj_outer.select_set(True)
-        bpy.context.view_layer.objects.active = obj_outer
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-        obj_outer.select_set(False)
-        # 将排气孔内芯尺寸恢复正常并将顶点选中
-        bpy.ops.object.select_all(action='DESELECT')
-        sprue_inside_obj.select_set(True)
-        bpy.context.view_layer.objects.active = sprue_inside_obj
-        sprue_inside_obj.scale[0] = 1
-        sprue_inside_obj.scale[1] = 1
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-        # 将排气孔内芯复制出一份用于后续操作(使用Bool Tool将排气孔内芯作差集之后,排气孔内芯模型会被自动删除)
-        sprue_inside_name = sprue_inside_obj.name
-        sprue_inside_obj_temp = sprue_inside_obj.copy()
-        sprue_inside_obj_temp.data = sprue_inside_obj.data.copy()
-        sprue_inside_obj_temp.animation_data_clear()
-        bpy.context.collection.objects.link(sprue_inside_obj_temp)
-        if (name == "右耳"):
-            moveToRight(sprue_inside_obj_temp)
-        elif (name == "左耳"):
-            moveToLeft(sprue_inside_obj_temp)
-        # 为铸造法外壁添加布尔修改器,与软耳膜支撑内芯做差集
-        bpy.ops.object.select_all(action='DESELECT')
-        sprue_inside_obj.select_set(True)
-        obj_outer.select_set(True)
-        bpy.context.view_layer.objects.active = obj_outer
-        bpy.ops.object.booltool_auto_difference()
-        sprue_inside_obj_temp.name = sprue_inside_name
-        sprue_inside_obj = sprue_inside_obj_temp
-        # # 为铸造法内壁添加布尔修改器,与软耳膜支撑内芯做差集
-        # obj_outer.select_set(True)
-        # bpy.context.view_layer.objects.active = obj_outer
-        # modifierSupportDifferenceInside = obj_outer.modifiers.new(name="SupportDifferenceInside", type='BOOLEAN')
-        # modifierSupportDifferenceInside.object = sprue_inside_obj
-        # modifierSupportDifferenceInside.operation = 'DIFFERENCE'
-        # modifierSupportDifferenceInside.solver = 'FAST'
-        # bpy.ops.object.modifier_apply(modifier="SupportDifferenceInside")
-        # 将选中的顶点直接删除在模型上得到软耳膜支撑的孔洞
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_less()
-        bpy.ops.mesh.delete(type='VERT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-        #4.将排气孔外壁与右耳模型做差集,得到排气孔的对比物体。 # 由于排气孔物体和透明的右耳外壳合并后变为透明,因此需要设置一个不透明的参照物,与合并后的右耳对比
-        #将排气孔外壁复制一份用于布尔生成排气孔对比物
-        sprue_outer_compare_name = name + "SprueCompare"
-        sprue_outer_compare_obj = sprue_outer_obj.copy()
-        sprue_outer_compare_obj.data = sprue_outer_obj.data.copy()
-        sprue_outer_compare_obj.animation_data_clear()
-        bpy.context.collection.objects.link(sprue_outer_compare_obj)
-        sprue_outer_compare_obj.name = sprue_outer_compare_name
-        if (name == "右耳"):
-            moveToRight(sprue_outer_compare_obj)
-        elif (name == "左耳"):
-            moveToLeft(sprue_outer_compare_obj)
-        #将排气孔对比物的位置移动到与排气孔外壁的位置相同(由于排气孔相关物体都在父物体平面下随着父物体的位置改变而改变,因此其位置信息仍为导入时的为位置,不能直接通过location设置其位置)
-        me = sprue_outer_compare_obj.data
-        bm = bmesh.new()
-        bm.from_mesh(me)
-        bm.verts.ensure_lookup_table()
-        ori_sprue_me = sprue_outer_obj.data
-        ori_sprue_bm = bmesh.new()
-        ori_sprue_bm.from_mesh(ori_sprue_me)
-        ori_sprue_bm.verts.ensure_lookup_table()
-        for vert in bm.verts:
-            vert.co = ori_sprue_bm.verts[vert.index].co
-        bm.to_mesh(me)
-        bm.free()
-        ori_sprue_bm.free()
-        # 为铸造法外壁选中并重新计算法线,提高切割的成功率
-        bpy.ops.object.select_all(action='DESELECT')
-        obj_outer.select_set(True)
-        bpy.context.view_layer.objects.active = obj_outer
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.normals_make_consistent(inside=False)
-        bpy.ops.object.mode_set(mode='OBJECT')
-        # 将复制出来的排气孔外壁对比物与右耳做布尔差集,将其切割为所需的形状
-        bpy.ops.object.select_all(action='DESELECT')
-        sprue_outer_compare_obj.select_set(True)
-        bpy.context.view_layer.objects.active = sprue_outer_compare_obj
-        modifierSprueCompareDifference = sprue_outer_compare_obj.modifiers.new(name="SprueCompareDifference", type='BOOLEAN')
-        modifierSprueCompareDifference.object = obj_outer
-        modifierSprueCompareDifference.operation = 'DIFFERENCE'
-        modifierSprueCompareDifference.solver = 'FAST'
-        bpy.ops.object.modifier_apply(modifier="SprueCompareDifference")
-
-
-
-        # 5.将排气孔的外壁与右耳做布尔的并集
-        # sprue_outer_obj.select_set(True)
-        # bpy.context.view_layer.objects.active = sprue_outer_obj
-        # # 先将排气孔外壁选中,使得其与铸造法外壳合并后被选中分离
-        # bpy.ops.object.mode_set(mode='EDIT')
-        # bpy.ops.mesh.select_all(action='SELECT')
-        # bpy.ops.object.mode_set(mode='OBJECT')
-        # sprue_outer_obj.select_set(False)
-        # obj_outer.select_set(True)
-        # bpy.context.view_layer.objects.active = obj_outer
-        # # 由于排气孔之前的模块存在布尔操作,会有其他顶点被选中,因此先将模型上选中顶点给取消选中
-        # bpy.ops.object.mode_set(mode='EDIT')
-        # bpy.ops.mesh.select_all(action='DESELECT')
-        # bpy.ops.object.mode_set(mode='OBJECT')
-        # 将排气孔外壁复制出一份用于后续操作(使用Bool Tool将排气孔外壁作并集之后,排气孔内芯模型会被自动删除)
-        sprue_outer_name = sprue_outer_obj.name
-        sprue_outer_obj_temp = sprue_outer_obj.copy()
-        sprue_outer_obj_temp.data = sprue_outer_obj.data.copy()
-        sprue_outer_obj_temp.animation_data_clear()
-        bpy.context.collection.objects.link(sprue_outer_obj_temp)
-        if (name == "右耳"):
-            moveToRight(sprue_outer_obj_temp)
-        elif (name == "左耳"):
-            moveToLeft(sprue_outer_obj_temp)
-        # 为铸造法外壁选中并重新计算法线,提高切割的成功率
-        bpy.ops.object.select_all(action='DESELECT')
-        obj_outer.select_set(True)
-        bpy.context.view_layer.objects.active = obj_outer
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.normals_make_consistent(inside=False)
-        bpy.ops.object.mode_set(mode='OBJECT')
-        # 为铸造法外壳添加布尔修改器,与排气孔外壳合并
+        # 为排气孔外壁添加顶点组保存 排气孔外壁的边缘顶点
+        # 选中这些顶点补面,用于后续的布尔切割合并
         bpy.ops.object.select_all(action='DESELECT')
         sprue_outer_obj.select_set(True)
+        bpy.context.view_layer.objects.active = sprue_outer_obj
+        sprue_outer_top_edge_vertex = sprue_outer_obj.vertex_groups.get("SprueOuterTopEdge")
+        if (sprue_outer_top_edge_vertex != None):
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.object.vertex_group_set_active(group="SprueOuterTopEdge")
+            bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
+            bpy.ops.object.mode_set(mode='OBJECT')
+        sprue_outer_top_edge_vertex = sprue_outer_obj.vertex_groups.new(name="SprueOuterTopEdge")
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.region_to_loop()
+        bpy.ops.object.vertex_group_set_active(group="SprueOuterTopEdge")
+        bpy.ops.object.vertex_group_assign()
+        bpy.ops.mesh.edge_face_add()  # 选中这些顶点补面,将软耳膜外部支撑变为封闭物体用于后续的布尔切割合并
+        bpy.ops.object.mode_set(mode='OBJECT')
+        # 为排气孔内壁添加顶点组保存 排气孔内壁的边缘顶点
+        # 选中这些顶点补面,用于后续的布尔切割合并
+        bpy.ops.object.select_all(action='DESELECT')
+        sprue_inner_obj.select_set(True)
+        bpy.context.view_layer.objects.active = sprue_inner_obj
+        sprue_inner_top_edge_vertex = sprue_inner_obj.vertex_groups.get("SprueInnerTopEdge")
+        if (sprue_inner_top_edge_vertex != None):
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.object.vertex_group_set_active(group="SprueInnerTopEdge")
+            bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
+            bpy.ops.object.mode_set(mode='OBJECT')
+        sprue_inner_top_edge_vertex = sprue_inner_obj.vertex_groups.new(name="SprueInnerTopEdge")
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.region_to_loop()
+        bpy.ops.object.vertex_group_set_active(group="SprueInnerTopEdge")
+        bpy.ops.object.vertex_group_assign()
+        bpy.ops.mesh.edge_face_add()  # 选中这些顶点补面,将软耳膜外部支撑变为封闭物体用于后续的布尔切割合并
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        # 将排气孔外壁与左右耳合并
+        bpy.ops.object.select_all(action='DESELECT')
         obj_outer.select_set(True)
         bpy.context.view_layer.objects.active = obj_outer
-        bpy.ops.object.booltool_auto_union()
-        sprue_outer_obj_temp.name = sprue_outer_name
-        sprue_outer_obj = sprue_outer_obj_temp
-        # #为铸造法外壳添加布尔修改器,与排气孔外壳合并
-        # modifierSprueUnionOuter = obj_outer.modifiers.new(name="SprueUnionOuter", type='BOOLEAN')
-        # modifierSprueUnionOuter.object = sprue_outer_obj
-        # modifierSprueUnionOuter.operation = 'UNION'
-        # modifierSprueUnionOuter.solver = 'FAST'
-        # bpy.ops.object.modifier_apply(modifier="SprueUnionOuter")
-        # # 由于排气孔物体和透明的右耳外壳合并后变为透明,因此需要设置一个不透明的参照物,与合并后的右耳对比,布尔合并后的顶点会被选中,将这些顶点复制一份并分离为独立的物体
-        # bpy.ops.object.mode_set(mode='EDIT')
-        # bpy.ops.mesh.duplicate()
-        # bpy.ops.mesh.separate(type='SELECTED')
-        # bpy.ops.object.mode_set(mode='OBJECT')
-        # sprue_compare_obj = bpy.data.objects.get(name + ".001")
-        # if (sprue_compare_obj != None):
-        #     sprue_compare_obj.name = name + "SprueCompare"
-        #     yellow_material = newColor("yellow", 1, 0.319, 0.133, 0, 1)
-        #     sprue_compare_obj.data.materials.clear()
-        #     sprue_compare_obj.data.materials.append(yellow_material)
-        #     if (name == "右耳"):
-        #         moveToRight(sprue_compare_obj)
-        #     elif (name == "左耳"):
-        #         moveToLeft(sprue_compare_obj)
-
-
-
-        # 删除父物体平面之后,排气孔对比物体会恢复到初始位置,需要保存为位置信息
+        bpy.ops.object.mode_set(mode='EDIT')                 # 将模型上的顶点全部取消选中
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        bool_modifier = obj_outer.modifiers.new(name="SprueOuterUnionBooleanModifier", type='BOOLEAN')
+        bool_modifier.operation = 'UNION'
+        bool_modifier.solver = 'FAST'
+        bool_modifier.object = sprue_outer_obj
+        bpy.ops.object.modifier_apply(modifier="SprueOuterUnionBooleanModifier", single_user=True)
+        bpy.ops.object.mode_set(mode='EDIT')                # 布尔合并前左右耳模型上没有顶点被选中,排气孔外壁上边缘被选中
+        bpy.ops.mesh.delete(type='ONLY_FACE')               # 布尔合并后排气孔外壁边缘顶点被选中,将面删除
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        # 将排气孔内壁与左右耳Casting合并
         bpy.ops.object.select_all(action='DESELECT')
-        plane_obj.select_set(True)
-        bpy.context.view_layer.objects.active = plane_obj
-        bpy.ops.view3d.snap_cursor_to_active()                            #将3D游标位置设置为激活物体的原点位置
-        bpy.ops.object.select_all(action='DESELECT')
-        sprue_outer_compare_obj.select_set(True)
-        bpy.context.view_layer.objects.active = sprue_outer_compare_obj
-        bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='MEDIAN')  #将排气孔对比物的原点位置设置为游标位置,即平面的原点位置
-        sprue_outer_compare_obj.location = plane_obj.location             #将排气孔位置信息设置为平面位置信息
-        sprue_outer_compare_obj.rotation_euler = plane_obj.rotation_euler
-        bpy.ops.view3d.snap_cursor_to_center()                            #将游标位置恢复为世界中心
-        sprue_compare_yellow_material = newColor("SprueCompareYellow", 1, 0.319, 0.133, 0, 1) #将排气孔对比物设置为模型的颜色
-        sprue_outer_compare_obj.data.materials.clear()
-        sprue_outer_compare_obj.data.materials.append(sprue_compare_yellow_material)
+        obj_inner.select_set(True)
+        bpy.context.view_layer.objects.active = obj_inner
+        bpy.ops.object.mode_set(mode='EDIT')                 # 将模型上的顶点全部取消选中
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        bool_modifier = obj_inner.modifiers.new(name="SprueInnerUnionBooleanModifier", type='BOOLEAN')
+        bool_modifier.operation = 'UNION'
+        bool_modifier.solver = 'FAST'
+        bool_modifier.object = sprue_inner_obj
+        bpy.ops.object.modifier_apply(modifier="SprueInnerUnionBooleanModifier", single_user=True)
+        bpy.ops.object.mode_set(mode='EDIT')               # 布尔合并前左右耳模型上没有顶点被选中,排气孔外壁上边缘被选中
+        bpy.ops.mesh.delete(type='ONLY_FACE')              # 布尔合并后排气孔外壁边缘顶点被选中,将面删除
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.mode_set(mode='OBJECT')
 
         #删除排气管相关物体
         bpy.data.objects.remove(plane_obj, do_unlink=True)
@@ -2001,6 +1882,9 @@ def sprueSubmit():
 
         # 合并后Sprue会被去除材质,因此需要重置一下模型颜色为黄色
         utils_re_color(name, (1, 0.319, 0.133))
+        if obj_outer.vertex_groups.get('TransformBorder') != None:
+            transform_obj_name = bpy.context.scene.leftWindowObj + "SprueReset"
+            transform_normal(transform_obj_name, [])
 
 
 def addSprue():
@@ -2043,7 +1927,7 @@ class SprueReset(bpy.types.Operator):
     bl_label = "排气孔重置"
 
     def invoke(self, context, event):
-        bpy.context.scene.var = 16
+        bpy.context.scene.var = 86
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         global is_on_rotate
         global is_on_rotateL
@@ -2076,11 +1960,71 @@ class SprueBackForwardAdd(bpy.types.Operator):
     bl_label = "单步撤回过程中添加排气孔"
 
     def invoke(self, context, event):
+        self.execute(context)
+        return {'FINISHED'}
 
-        bpy.context.scene.var = 20
-        # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
-        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        # # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
+        # bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        #
+        # global sprue_index
+        # global sprue_indexL
+        # global sprue_info_save
+        # global sprue_info_saveL
+        # name = bpy.context.scene.leftWindowObj
+        # sprue_info_save_cur = None
+        # if name == '右耳':
+        #     sprue_info_save_cur = sprue_info_save
+        # elif name == '左耳':
+        #     sprue_info_save_cur = sprue_info_saveL
+        #
+        # #将可能存在的排气孔先提交
+        # sprueSubmit()
+        # # 双击添加过一个排气孔之后,才能够继续添加排气孔
+        # if (len(sprue_info_save_cur) == 0):
+        #     bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_initial")
+        #     return {'FINISHED'}
+        # #添加排气孔
+        # addSprue()
+        # # 将Plane激活并选中
+        # name = bpy.context.scene.leftWindowObj
+        # planename = name + "Plane"
+        # plane_obj = bpy.data.objects.get(planename)
+        # cur_obj = bpy.data.objects.get(name)
+        # bpy.ops.object.select_all(action='DESELECT')
+        # plane_obj.select_set(True)
+        # bpy.context.view_layer.objects.active = plane_obj
+        # #将排气孔位置设置为上一个排气孔的位置
+        # sprueInfo = sprue_info_save_cur[len(sprue_info_save_cur) - 1]
+        # if name == '右耳':
+        #     sprue_index = sprue_index + 1
+        #     print("添加排气孔后:", sprue_index)
+        # elif name == '左耳':
+        #     sprue_indexL = sprue_indexL + 1
+        #     print("添加排气孔后:", sprue_indexL)
+        # l_x = sprueInfo.l_x
+        # l_y = sprueInfo.l_y
+        # l_z = sprueInfo.l_z
+        # r_x = sprueInfo.r_x
+        # r_y = sprueInfo.r_y
+        # r_z = sprueInfo.r_z
+        # plane_obj.location[0] = l_x
+        # plane_obj.location[1] = l_y
+        # plane_obj.location[2] = l_z
+        # plane_obj.rotation_euler[0] = r_x
+        # plane_obj.rotation_euler[1] = r_y
+        # plane_obj.rotation_euler[2] = r_z
+        # #设置旋转中心
+        # bpy.ops.object.select_all(action='DESELECT')
+        # cur_obj.select_set(True)
+        # bpy.context.view_layer.objects.active = cur_obj
+        #
+        # if bpy.context.scene.var != 80:
+        #     bpy.context.scene.var = 80
+        #     context.window_manager.modal_handler_add(self)
+        #     print("spruebackforwordadd_modal_invoke")
+        # return {'RUNNING_MODAL'}
 
+    def execute(self, context):
         global sprue_index
         global sprue_indexL
         global sprue_info_save
@@ -2092,15 +2036,13 @@ class SprueBackForwardAdd(bpy.types.Operator):
         elif name == '左耳':
             sprue_info_save_cur = sprue_info_saveL
 
-        print("spruebackforwordadd_modal_invoke")
-        #将可能存在的排气孔先提交
+        # 将可能存在的排气孔先提交
         sprueSubmit()
         # 双击添加过一个排气孔之后,才能够继续添加排气孔
         if (len(sprue_info_save_cur) == 0):
             bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_initial")
-            print("spruebackforwordadd_modal_finished")
             return {'FINISHED'}
-        #添加排气孔
+        # 添加排气孔
         addSprue()
         # 将Plane激活并选中
         name = bpy.context.scene.leftWindowObj
@@ -2110,7 +2052,7 @@ class SprueBackForwardAdd(bpy.types.Operator):
         bpy.ops.object.select_all(action='DESELECT')
         plane_obj.select_set(True)
         bpy.context.view_layer.objects.active = plane_obj
-        #将排气孔位置设置为上一个排气孔的位置
+        # 将排气孔位置设置为上一个排气孔的位置
         sprueInfo = sprue_info_save_cur[len(sprue_info_save_cur) - 1]
         if name == '右耳':
             sprue_index = sprue_index + 1
@@ -2130,14 +2072,10 @@ class SprueBackForwardAdd(bpy.types.Operator):
         plane_obj.rotation_euler[0] = r_x
         plane_obj.rotation_euler[1] = r_y
         plane_obj.rotation_euler[2] = r_z
-        #设置旋转中心
+        # 设置旋转中心
         bpy.ops.object.select_all(action='DESELECT')
         cur_obj.select_set(True)
         bpy.context.view_layer.objects.active = cur_obj
-
-
-        context.window_manager.modal_handler_add(self)
-        return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
         global is_on_rotate
@@ -2158,144 +2096,155 @@ class SprueBackForwardAdd(bpy.types.Operator):
         plane_obj = bpy.data.objects.get(planename)
         cur_obj_name = name
         cur_obj = bpy.data.objects.get(cur_obj_name)
-        if (bpy.context.scene.var == 20):
-            # 在数组中更新附件的信息
-            updateInfo()
-            if(not is_on_rotate_cur):
-                if(sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
-                    if (is_mouse_on_object(context, event) and not is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
-                        # 公共鼠标行为加双击移动附件位置
-                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(red_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(red_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(red_material)
-                        bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
-                        cur_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = cur_obj
-                        plane_obj.select_set(False)
-                    elif (is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
-                        # 调用sprue的鼠标行为
-                        yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(yellow_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(yellow_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(yellow_material)
-                        bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
-                        plane_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = plane_obj
-                        cur_obj.select_set(False)
-                        sprue_inner_obj.select_set(False)
-                        sprue_outer_obj.select_set(False)
-                        sprue_inside_obj.select_set(False)
-                    elif ((not is_mouse_on_object(context, event)) and (is_changed_sprue(context, event) or is_changed(context, event))):
-                        # 调用公共鼠标行为
-                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(red_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(red_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(red_material)
-                        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                        cur_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = cur_obj
-                        plane_obj.select_set(False)
-                        sprue_inner_obj.select_set(False)
-                        sprue_outer_obj.select_set(False)
-                        sprue_inside_obj.select_set(False)
-            elif(is_on_rotate_cur):
-                if (sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
-                    if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
-                            is_changed_sphere(context, event) or is_changed(context, event))):
-                        # 公共鼠标行为加双击移动附件位置
-                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(red_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(red_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(red_material)
-                        bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
-                        cur_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = cur_obj
-                        plane_obj.select_set(False)
-                    elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
-                        # 调用sprue的三维旋转鼠标行为
-                        yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(yellow_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(yellow_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(yellow_material)
-                        bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
-                        plane_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = plane_obj
-                        cur_obj.select_set(False)
-                        sprue_inner_obj.select_set(False)
-                        sprue_outer_obj.select_set(False)
-                        sprue_inside_obj.select_set(False)
-                    elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
-                        # 调用公共鼠标行为
-                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(red_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(red_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(red_material)
-                        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                        cur_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = cur_obj
-                        plane_obj.select_set(False)
-                        sprue_inner_obj.select_set(False)
-                        sprue_outer_obj.select_set(False)
-                        sprue_inside_obj.select_set(False)
-            return {'PASS_THROUGH'}
+        if bpy.context.screen.areas[0].spaces.active.context == 'CONSTRAINT':
+            if (bpy.context.scene.var == 80):
+                # 在数组中更新附件的信息
+                updateInfo()
+                if(not is_on_rotate_cur):
+                    if(sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
+                        if (is_mouse_on_object(context, event) and not is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
+                            # 公共鼠标行为加双击移动附件位置
+                            red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+                            # sprue_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inner_obj
+                            sprue_inner_obj.data.materials.clear()
+                            sprue_inner_obj.data.materials.append(red_material)
+                            # sprue_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_outer_obj
+                            sprue_outer_obj.data.materials.clear()
+                            sprue_outer_obj.data.materials.append(red_material)
+                            # sprue_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inside_obj
+                            sprue_inside_obj.data.materials.clear()
+                            sprue_inside_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                        elif (is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
+                            # 调用sprue的鼠标行为
+                            yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
+                            # sprue_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inner_obj
+                            sprue_inner_obj.data.materials.clear()
+                            sprue_inner_obj.data.materials.append(yellow_material)
+                            # sprue_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_outer_obj
+                            sprue_outer_obj.data.materials.clear()
+                            sprue_outer_obj.data.materials.append(yellow_material)
+                            # sprue_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inside_obj
+                            sprue_inside_obj.data.materials.clear()
+                            sprue_inside_obj.data.materials.append(yellow_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+                            plane_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = plane_obj
+                            cur_obj.select_set(False)
+                            sprue_inner_obj.select_set(False)
+                            sprue_outer_obj.select_set(False)
+                            sprue_inside_obj.select_set(False)
+                        elif ((not is_mouse_on_object(context, event)) and (is_changed_sprue(context, event) or is_changed(context, event))):
+                            # 调用公共鼠标行为
+                            red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+                            # sprue_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inner_obj
+                            sprue_inner_obj.data.materials.clear()
+                            sprue_inner_obj.data.materials.append(red_material)
+                            # sprue_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_outer_obj
+                            sprue_outer_obj.data.materials.clear()
+                            sprue_outer_obj.data.materials.append(red_material)
+                            # sprue_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inside_obj
+                            sprue_inside_obj.data.materials.clear()
+                            sprue_inside_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                            sprue_inner_obj.select_set(False)
+                            sprue_outer_obj.select_set(False)
+                            sprue_inside_obj.select_set(False)
+                elif(is_on_rotate_cur):
+                    if (sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
+                        if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
+                                is_changed_sphere(context, event) or is_changed(context, event))):
+                            # 公共鼠标行为加双击移动附件位置
+                            red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+                            # sprue_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inner_obj
+                            sprue_inner_obj.data.materials.clear()
+                            sprue_inner_obj.data.materials.append(red_material)
+                            # sprue_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_outer_obj
+                            sprue_outer_obj.data.materials.clear()
+                            sprue_outer_obj.data.materials.append(red_material)
+                            # sprue_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inside_obj
+                            sprue_inside_obj.data.materials.clear()
+                            sprue_inside_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                        elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+                            # 调用sprue的三维旋转鼠标行为
+                            yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
+                            # sprue_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inner_obj
+                            sprue_inner_obj.data.materials.clear()
+                            sprue_inner_obj.data.materials.append(yellow_material)
+                            # sprue_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_outer_obj
+                            sprue_outer_obj.data.materials.clear()
+                            sprue_outer_obj.data.materials.append(yellow_material)
+                            # sprue_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inside_obj
+                            sprue_inside_obj.data.materials.clear()
+                            sprue_inside_obj.data.materials.append(yellow_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
+                            plane_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = plane_obj
+                            cur_obj.select_set(False)
+                            sprue_inner_obj.select_set(False)
+                            sprue_outer_obj.select_set(False)
+                            sprue_inside_obj.select_set(False)
+                        elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+                            # 调用公共鼠标行为
+                            red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+                            # sprue_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inner_obj
+                            sprue_inner_obj.data.materials.clear()
+                            sprue_inner_obj.data.materials.append(red_material)
+                            # sprue_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_outer_obj
+                            sprue_outer_obj.data.materials.clear()
+                            sprue_outer_obj.data.materials.append(red_material)
+                            # sprue_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inside_obj
+                            sprue_inside_obj.data.materials.clear()
+                            sprue_inside_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                            sprue_inner_obj.select_set(False)
+                            sprue_outer_obj.select_set(False)
+                            sprue_inside_obj.select_set(False)
+                return {'PASS_THROUGH'}
+            else:
+                print("spruebackforwordadd_modal_finished")
+                return {'FINISHED'}
+
         else:
-            print("spruebackforwordadd_modal_finished")
-            return {'FINISHED'}
+            if get_switch_time() != None and time.time() - get_switch_time() > 0.3 and get_switch_flag():
+                print("spruebackforwordadd_modal_finished")
+                set_switch_time(None)
+                now_context = bpy.context.screen.areas[0].spaces.active.context
+                if not check_modals_running(bpy.context.scene.var, now_context):
+                    bpy.context.scene.var = 0
+                return {'FINISHED'}
+            return {'PASS_THROUGH'}
 
 
 class SprueAddInvoke(bpy.types.Operator):
@@ -2311,7 +2260,7 @@ class SprueAddInvoke(bpy.types.Operator):
         elif (name == "左耳"):
             is_on_rotateL = False
 
-        bpy.context.scene.var = 21
+        bpy.context.scene.var = 81
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
@@ -2342,12 +2291,91 @@ class SprueAdd(bpy.types.Operator):
     bl_label = "点击加号按钮添加排气孔"
 
     def invoke(self, context, event):
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        self.execute(context)
+        return {'FINISHED'}
+
+        # global is_sprueAdd_modal_start
+        # global is_sprueAdd_modal_startL
+        # # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
+        # bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        #
+        # global sprue_index
+        # global sprue_indexL
+        # global sprue_info_save
+        # global sprue_info_saveL
+        # name = bpy.context.scene.leftWindowObj
+        # sprue_index_cur = None
+        # sprue_info_save_cur = None
+        # if name == '右耳':
+        #     sprue_index_cur = sprue_index
+        #     sprue_info_save_cur = sprue_info_save
+        #     is_sprueAdd_modal_start = True
+        # elif name == '左耳':
+        #     sprue_index_cur = sprue_indexL
+        #     sprue_info_save_cur = sprue_info_saveL
+        #     is_sprueAdd_modal_startL = True
+        #
+        # #将可能存在的排气孔先提交
+        # sprueSubmit()
+        # # 双击添加过一个排气孔之后,才能够继续添加排气孔
+        # if (len(sprue_info_save_cur) == 0):
+        #     bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_initial")
+        #     if (name == "右耳"):
+        #         is_sprueAdd_modal_start = False
+        #     elif (name == "左耳"):
+        #         is_sprueAdd_modal_startL = False
+        #     return {'FINISHED'}
+        # if(sprue_index_cur == len(sprue_info_save_cur) - 1):
+        #     #添加排气孔
+        #     addSprue()
+        #     # 将Plane激活并选中
+        #     name = bpy.context.scene.leftWindowObj
+        #     planename = name + "Plane"
+        #     plane_obj = bpy.data.objects.get(planename)
+        #     cur_obj = bpy.data.objects.get(name)
+        #     bpy.ops.object.select_all(action='DESELECT')
+        #     plane_obj.select_set(True)
+        #     bpy.context.view_layer.objects.active = plane_obj
+        #     #将排气孔位置设置为上一个排气孔的位置
+        #     sprueInfo = sprue_info_save_cur[len(sprue_info_save_cur) - 1]
+        #     if name == '右耳':
+        #         sprue_index = sprue_index + 1
+        #         print("添加排气孔后:", sprue_index)
+        #     elif name == '左耳':
+        #         sprue_indexL = sprue_indexL + 1
+        #         print("添加排气孔后:", sprue_indexL)
+        #     l_x = sprueInfo.l_x
+        #     l_y = sprueInfo.l_y
+        #     l_z = sprueInfo.l_z
+        #     r_x = sprueInfo.r_x
+        #     r_y = sprueInfo.r_y
+        #     r_z = sprueInfo.r_z
+        #     offset = sprueInfo.offset
+        #     plane_obj.location[0] = l_x
+        #     plane_obj.location[1] = l_y
+        #     plane_obj.location[2] = l_z
+        #     plane_obj.rotation_euler[0] = r_x
+        #     plane_obj.rotation_euler[1] = r_y
+        #     plane_obj.rotation_euler[2] = r_z
+        #     if name == '右耳':
+        #         bpy.context.scene.paiQiKongOffset = offset
+        #     elif name == '左耳':
+        #         bpy.context.scene.paiQiKongOffsetL = offset
+        #     #设置旋转中心
+        #     bpy.ops.object.select_all(action='DESELECT')
+        #     cur_obj.select_set(True)
+        #     bpy.context.view_layer.objects.active = cur_obj
+        #
+        #     if bpy.context.scene.var != 87:
+        #         bpy.context.scene.var = 87
+        #         context.window_manager.modal_handler_add(self)
+        #         print("sprueadd_modal_invoke")
+        #     return {'RUNNING_MODAL'}
+
+    def execute(self, context):
         global is_sprueAdd_modal_start
         global is_sprueAdd_modal_startL
-        bpy.context.scene.var = 17
-        # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
-        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-
         global sprue_index
         global sprue_indexL
         global sprue_info_save
@@ -2358,26 +2386,24 @@ class SprueAdd(bpy.types.Operator):
         if name == '右耳':
             sprue_index_cur = sprue_index
             sprue_info_save_cur = sprue_info_save
-            is_sprueAdd_modal_start = True
+            # is_sprueAdd_modal_start = True
         elif name == '左耳':
             sprue_index_cur = sprue_indexL
             sprue_info_save_cur = sprue_info_saveL
-            is_sprueAdd_modal_startL = True
+            # is_sprueAdd_modal_startL = True
 
-        print("sprueadd_modal_invoke")
-        #将可能存在的排气孔先提交
+        # 将可能存在的排气孔先提交
         sprueSubmit()
         # 双击添加过一个排气孔之后,才能够继续添加排气孔
         if (len(sprue_info_save_cur) == 0):
             bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_initial")
-            print("sprueadd_modal_finished")
             if (name == "右耳"):
                 is_sprueAdd_modal_start = False
             elif (name == "左耳"):
                 is_sprueAdd_modal_startL = False
             return {'FINISHED'}
-        if(sprue_index_cur == len(sprue_info_save_cur) - 1):
-            #添加排气孔
+        if (sprue_index_cur == len(sprue_info_save_cur) - 1):
+            # 添加排气孔
             addSprue()
             # 将Plane激活并选中
             name = bpy.context.scene.leftWindowObj
@@ -2387,7 +2413,7 @@ class SprueAdd(bpy.types.Operator):
             bpy.ops.object.select_all(action='DESELECT')
             plane_obj.select_set(True)
             bpy.context.view_layer.objects.active = plane_obj
-            #将排气孔位置设置为上一个排气孔的位置
+            # 将排气孔位置设置为上一个排气孔的位置
             sprueInfo = sprue_info_save_cur[len(sprue_info_save_cur) - 1]
             if name == '右耳':
                 sprue_index = sprue_index + 1
@@ -2412,183 +2438,191 @@ class SprueAdd(bpy.types.Operator):
                 bpy.context.scene.paiQiKongOffset = offset
             elif name == '左耳':
                 bpy.context.scene.paiQiKongOffsetL = offset
-            #设置旋转中心
+            # 设置旋转中心
             bpy.ops.object.select_all(action='DESELECT')
             cur_obj.select_set(True)
             bpy.context.view_layer.objects.active = cur_obj
+            if context.scene.var != 87:
+                bpy.ops.object.sprueswitch('INVOKE_DEFAULT')
 
-            context.window_manager.modal_handler_add(self)
-            return {'RUNNING_MODAL'}
-        print("sprueadd_modal_finished")
-        if (name == "右耳"):
-            is_sprueAdd_modal_start = False
-        elif (name == "左耳"):
-            is_sprueAdd_modal_startL = False
-        return {'FINISHED'}
-
-    def modal(self, context, event):
-        global is_on_rotate
-        global is_on_rotateL
-        global is_sprueAdd_modal_start
-        global is_sprueAdd_modal_startL
-        name = bpy.context.scene.leftWindowObj
-        is_on_rotate_cur = False
-        if (name == '右耳'):
-            is_on_rotate_cur = is_on_rotate
-        elif (name == '左耳'):
-            is_on_rotate_cur = is_on_rotateL
-        sprue_inner_obj = bpy.data.objects.get(name + "CylinderInner")
-        sprue_outer_obj = bpy.data.objects.get(name + "CylinderOuter")
-        sprue_inside_obj = bpy.data.objects.get(name + "CylinderInside")
-        sprue_inner_offset_compare_obj = bpy.data.objects.get(name + "CylinderInnerOffsetCompare")
-        sprue_outer_offset_compare_obj = bpy.data.objects.get(name + "CylinderOuterOffsetCompare")
-        sprue_inside_offset_compare_obj = bpy.data.objects.get(name + "CylinderInsideOffsetCompare")
-        planename = name + "Plane"
-        plane_obj = bpy.data.objects.get(planename)
-        cur_obj_name = name
-        cur_obj = bpy.data.objects.get(cur_obj_name)
-        if (bpy.context.scene.var == 17):
-            # 在数组中更新附件的信息
-            updateInfo()
-            if(not is_on_rotate_cur):
-                if(sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
-                    if (is_mouse_on_object(context, event) and not is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
-                        # 公共鼠标行为加双击移动附件位置
-                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(red_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(red_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(red_material)
-                        bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
-                        cur_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = cur_obj
-                        plane_obj.select_set(False)
-                    elif (is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
-                        # 调用sprue的鼠标行为
-                        yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(yellow_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(yellow_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(yellow_material)
-                        bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
-                        plane_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = plane_obj
-                        cur_obj.select_set(False)
-                        sprue_inner_obj.select_set(False)
-                        sprue_outer_obj.select_set(False)
-                        sprue_inside_obj.select_set(False)
-                    elif ((not is_mouse_on_object(context, event)) and (is_changed_sprue(context, event) or is_changed(context, event))):
-                        # 调用公共鼠标行为
-                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(red_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(red_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(red_material)
-                        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                        cur_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = cur_obj
-                        plane_obj.select_set(False)
-                        sprue_inner_obj.select_set(False)
-                        sprue_outer_obj.select_set(False)
-                        sprue_inside_obj.select_set(False)
-            elif(is_on_rotate_cur):
-                if (sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
-                    if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
-                            is_changed_sphere(context, event) or is_changed(context, event))):
-                        # 公共鼠标行为加双击移动附件位置
-                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(red_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(red_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(red_material)
-                        bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
-                        cur_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = cur_obj
-                        plane_obj.select_set(False)
-                    elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
-                        # 调用sprue的三维旋转鼠标行为
-                        yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(yellow_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(yellow_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(yellow_material)
-                        bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
-                        plane_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = plane_obj
-                        cur_obj.select_set(False)
-                        sprue_inner_obj.select_set(False)
-                        sprue_outer_obj.select_set(False)
-                        sprue_inside_obj.select_set(False)
-                    elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
-                        # 调用公共鼠标行为
-                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(red_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(red_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(red_material)
-                        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                        cur_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = cur_obj
-                        plane_obj.select_set(False)
-                        sprue_inner_obj.select_set(False)
-                        sprue_outer_obj.select_set(False)
-                        sprue_inside_obj.select_set(False)
-            return {'PASS_THROUGH'}
-        else:
-            if (name == "右耳"):
-                is_sprueAdd_modal_start = False
-            elif (name == "左耳"):
-                is_sprueAdd_modal_startL = False
-            print("sprueadd_modal_finished")
-            return {'FINISHED'}
+    # def modal(self, context, event):
+    #     global is_on_rotate
+    #     global is_on_rotateL
+    #     global is_sprueAdd_modal_start
+    #     global is_sprueAdd_modal_startL
+    #     name = bpy.context.scene.leftWindowObj
+    #     is_on_rotate_cur = False
+    #     if (name == '右耳'):
+    #         is_on_rotate_cur = is_on_rotate
+    #     elif (name == '左耳'):
+    #         is_on_rotate_cur = is_on_rotateL
+    #     sprue_inner_obj = bpy.data.objects.get(name + "CylinderInner")
+    #     sprue_outer_obj = bpy.data.objects.get(name + "CylinderOuter")
+    #     sprue_inside_obj = bpy.data.objects.get(name + "CylinderInside")
+    #     sprue_inner_offset_compare_obj = bpy.data.objects.get(name + "CylinderInnerOffsetCompare")
+    #     sprue_outer_offset_compare_obj = bpy.data.objects.get(name + "CylinderOuterOffsetCompare")
+    #     sprue_inside_offset_compare_obj = bpy.data.objects.get(name + "CylinderInsideOffsetCompare")
+    #     planename = name + "Plane"
+    #     plane_obj = bpy.data.objects.get(planename)
+    #     cur_obj_name = name
+    #     cur_obj = bpy.data.objects.get(cur_obj_name)
+    #     if bpy.context.screen.areas[0].spaces.active.context == 'CONSTRAINT':
+    #         if (bpy.context.scene.var == 87):
+    #             # 在数组中更新附件的信息
+    #             updateInfo()
+    #             if(not is_on_rotate_cur):
+    #                 if(sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
+    #                     if (is_mouse_on_object(context, event) and not is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
+    #                         # 公共鼠标行为加双击移动附件位置
+    #                         red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+    #                         # sprue_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inner_obj
+    #                         sprue_inner_obj.data.materials.clear()
+    #                         sprue_inner_obj.data.materials.append(red_material)
+    #                         # sprue_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_outer_obj
+    #                         sprue_outer_obj.data.materials.clear()
+    #                         sprue_outer_obj.data.materials.append(red_material)
+    #                         # sprue_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inside_obj
+    #                         sprue_inside_obj.data.materials.clear()
+    #                         sprue_inside_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #                     elif (is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
+    #                         # 调用sprue的鼠标行为
+    #                         yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
+    #                         # sprue_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inner_obj
+    #                         sprue_inner_obj.data.materials.clear()
+    #                         sprue_inner_obj.data.materials.append(yellow_material)
+    #                         # sprue_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_outer_obj
+    #                         sprue_outer_obj.data.materials.clear()
+    #                         sprue_outer_obj.data.materials.append(yellow_material)
+    #                         # sprue_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inside_obj
+    #                         sprue_inside_obj.data.materials.clear()
+    #                         sprue_inside_obj.data.materials.append(yellow_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+    #                         plane_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = plane_obj
+    #                         cur_obj.select_set(False)
+    #                         sprue_inner_obj.select_set(False)
+    #                         sprue_outer_obj.select_set(False)
+    #                         sprue_inside_obj.select_set(False)
+    #                     elif ((not is_mouse_on_object(context, event)) and (is_changed_sprue(context, event) or is_changed(context, event))):
+    #                         # 调用公共鼠标行为
+    #                         red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+    #                         # sprue_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inner_obj
+    #                         sprue_inner_obj.data.materials.clear()
+    #                         sprue_inner_obj.data.materials.append(red_material)
+    #                         # sprue_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_outer_obj
+    #                         sprue_outer_obj.data.materials.clear()
+    #                         sprue_outer_obj.data.materials.append(red_material)
+    #                         # sprue_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inside_obj
+    #                         sprue_inside_obj.data.materials.clear()
+    #                         sprue_inside_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #                         sprue_inner_obj.select_set(False)
+    #                         sprue_outer_obj.select_set(False)
+    #                         sprue_inside_obj.select_set(False)
+    #             elif(is_on_rotate_cur):
+    #                 if (sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
+    #                     if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
+    #                             is_changed_sphere(context, event) or is_changed(context, event))):
+    #                         # 公共鼠标行为加双击移动附件位置
+    #                         red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+    #                         # sprue_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inner_obj
+    #                         sprue_inner_obj.data.materials.clear()
+    #                         sprue_inner_obj.data.materials.append(red_material)
+    #                         # sprue_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_outer_obj
+    #                         sprue_outer_obj.data.materials.clear()
+    #                         sprue_outer_obj.data.materials.append(red_material)
+    #                         # sprue_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inside_obj
+    #                         sprue_inside_obj.data.materials.clear()
+    #                         sprue_inside_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #                     elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+    #                         # 调用sprue的三维旋转鼠标行为
+    #                         yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
+    #                         # sprue_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inner_obj
+    #                         sprue_inner_obj.data.materials.clear()
+    #                         sprue_inner_obj.data.materials.append(yellow_material)
+    #                         # sprue_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_outer_obj
+    #                         sprue_outer_obj.data.materials.clear()
+    #                         sprue_outer_obj.data.materials.append(yellow_material)
+    #                         # sprue_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inside_obj
+    #                         sprue_inside_obj.data.materials.clear()
+    #                         sprue_inside_obj.data.materials.append(yellow_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
+    #                         plane_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = plane_obj
+    #                         cur_obj.select_set(False)
+    #                         sprue_inner_obj.select_set(False)
+    #                         sprue_outer_obj.select_set(False)
+    #                         sprue_inside_obj.select_set(False)
+    #                     elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+    #                         # 调用公共鼠标行为
+    #                         red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+    #                         # sprue_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inner_obj
+    #                         sprue_inner_obj.data.materials.clear()
+    #                         sprue_inner_obj.data.materials.append(red_material)
+    #                         # sprue_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_outer_obj
+    #                         sprue_outer_obj.data.materials.clear()
+    #                         sprue_outer_obj.data.materials.append(red_material)
+    #                         # sprue_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inside_obj
+    #                         sprue_inside_obj.data.materials.clear()
+    #                         sprue_inside_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #                         sprue_inner_obj.select_set(False)
+    #                         sprue_outer_obj.select_set(False)
+    #                         sprue_inside_obj.select_set(False)
+    #             return {'PASS_THROUGH'}
+    #         else:
+    #             if (name == "右耳"):
+    #                 is_sprueAdd_modal_start = False
+    #             elif (name == "左耳"):
+    #                 is_sprueAdd_modal_startL = False
+    #             print("sprueadd_modal_finished")
+    #             return {'FINISHED'}
+    #
+    #     else:
+    #         if get_switch_time() != None and time.time() - get_switch_time() > 0.3 and get_switch_flag():
+    #             print("sprueadd_modal_finished")
+    #             if (name == "右耳"):
+    #                 is_sprueAdd_modal_start = False
+    #             elif (name == "左耳"):
+    #                 is_sprueAdd_modal_startL = False
+    #             set_switch_time(None)
+    #             now_context = bpy.context.screen.areas[0].spaces.active.context
+    #             if not check_modals_running(bpy.context.scene.var, now_context):
+    #                 bpy.context.scene.var = 0
+    #             return {'FINISHED'}
+    #         return {'PASS_THROUGH'}
 
 
 class SprueInitialAdd(bpy.types.Operator):
@@ -2596,15 +2630,51 @@ class SprueInitialAdd(bpy.types.Operator):
     bl_label = "进入附件模块初始化双击添加排气孔"
 
     def invoke(self, context, event):
+        self.add_spure(context, event)
+        return {'FINISHED'}
 
-        bpy.context.scene.var = 18
-        # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
-        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        # # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
+        # bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        # global sprue_index
+        # global sprue_indexL
+        #
+        # #添加排气孔
+        # addSprue()
+        # # 将Plane激活并选中
+        # name = bpy.context.scene.leftWindowObj
+        # planename = name + "Plane"
+        # plane_obj = bpy.data.objects.get(planename)
+        # cur_obj = bpy.data.objects.get(name)
+        # bpy.ops.object.select_all(action='DESELECT')
+        # plane_obj.select_set(True)
+        # bpy.context.view_layer.objects.active = plane_obj
+        # #将添加的排气孔位置设置未双击的位置
+        # co, normal = cal_co(context, event)
+        # if (co != -1):
+        #     sprue_fit_rotate(normal, co)
+        # # 添加完最初的一个附件之后,将指针置为0
+        # if (name == '右耳'):
+        #     sprue_index = 0
+        #     print("初始化添加后的指针:", sprue_index)
+        # elif (name == '左耳'):
+        #     sprue_indexL = 0
+        #     print("初始化添加后的指针:", sprue_indexL)
+        # #设置旋转中心
+        # bpy.ops.object.select_all(action='DESELECT')
+        # cur_obj.select_set(True)
+        # bpy.context.view_layer.objects.active = cur_obj
+        #
+        # if bpy.context.scene.var != 88:
+        #     bpy.context.scene.var = 88
+        #     context.window_manager.modal_handler_add(self)
+        #     print("sprueinitialadd_modal_initial")
+        # return {'RUNNING_MODAL'}
+
+    def add_spure(self, context, event):
         global sprue_index
         global sprue_indexL
 
-        print("sprueinitialadd_modal_initial")
-        #添加排气孔
+        # 添加排气孔
         addSprue()
         # 将Plane激活并选中
         name = bpy.context.scene.leftWindowObj
@@ -2614,7 +2684,7 @@ class SprueInitialAdd(bpy.types.Operator):
         bpy.ops.object.select_all(action='DESELECT')
         plane_obj.select_set(True)
         bpy.context.view_layer.objects.active = plane_obj
-        #将添加的排气孔位置设置未双击的位置
+        # 将添加的排气孔位置设置未双击的位置
         co, normal = cal_co(context, event)
         if (co != -1):
             sprue_fit_rotate(normal, co)
@@ -2625,18 +2695,210 @@ class SprueInitialAdd(bpy.types.Operator):
         elif (name == '左耳'):
             sprue_indexL = 0
             print("初始化添加后的指针:", sprue_indexL)
-        #设置旋转中心
+        # 设置旋转中心
         bpy.ops.object.select_all(action='DESELECT')
         cur_obj.select_set(True)
         bpy.context.view_layer.objects.active = cur_obj
+        bpy.ops.object.sprueswitch('INVOKE_DEFAULT')
+
+    # def modal(self, context, event):
+    #     global is_on_rotate
+    #     global is_on_rotateL
+    #     name = bpy.context.scene.leftWindowObj
+    #     is_on_rotate_cur = False
+    #     if (name == '右耳'):
+    #         is_on_rotate_cur = is_on_rotate
+    #     elif (name == '左耳'):
+    #         is_on_rotate_cur = is_on_rotateL
+    #     sprue_inner_obj = bpy.data.objects.get(name + "CylinderInner")
+    #     sprue_outer_obj = bpy.data.objects.get(name + "CylinderOuter")
+    #     sprue_inside_obj = bpy.data.objects.get(name + "CylinderInside")
+    #     sprue_inner_offset_compare_obj = bpy.data.objects.get(name + "CylinderInnerOffsetCompare")
+    #     sprue_outer_offset_compare_obj = bpy.data.objects.get(name + "CylinderOuterOffsetCompare")
+    #     sprue_inside_offset_compare_obj = bpy.data.objects.get(name + "CylinderInsideOffsetCompare")
+    #     planename = name + "Plane"
+    #     plane_obj = bpy.data.objects.get(planename)
+    #     cur_obj_name = name
+    #     cur_obj = bpy.data.objects.get(cur_obj_name)
+    #     if bpy.context.screen.areas[0].spaces.active.context == 'CONSTRAINT':
+    #         if (bpy.context.scene.var == 88):
+    #             # 在数组中更新附件的信息
+    #             updateInfo()
+    #             if(not is_on_rotate_cur):
+    #                 if(sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
+    #                     if (is_mouse_on_object(context, event) and not is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
+    #                         # 公共鼠标行为加双击移动附件位置
+    #                         red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+    #                         # sprue_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inner_obj
+    #                         sprue_inner_obj.data.materials.clear()
+    #                         sprue_inner_obj.data.materials.append(red_material)
+    #                         # sprue_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_outer_obj
+    #                         sprue_outer_obj.data.materials.clear()
+    #                         sprue_outer_obj.data.materials.append(red_material)
+    #                         # sprue_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inside_obj
+    #                         sprue_inside_obj.data.materials.clear()
+    #                         sprue_inside_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #                     elif (is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
+    #                         # 调用sprue的鼠标行为
+    #                         yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
+    #                         # sprue_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inner_obj
+    #                         sprue_inner_obj.data.materials.clear()
+    #                         sprue_inner_obj.data.materials.append(yellow_material)
+    #                         # sprue_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_outer_obj
+    #                         sprue_outer_obj.data.materials.clear()
+    #                         sprue_outer_obj.data.materials.append(yellow_material)
+    #                         # sprue_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inside_obj
+    #                         sprue_inside_obj.data.materials.clear()
+    #                         sprue_inside_obj.data.materials.append(yellow_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+    #                         plane_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = plane_obj
+    #                         cur_obj.select_set(False)
+    #                         sprue_inner_obj.select_set(False)
+    #                         sprue_outer_obj.select_set(False)
+    #                         sprue_inside_obj.select_set(False)
+    #                     elif ((not is_mouse_on_object(context, event)) and (is_changed_sprue(context, event) or is_changed(context, event))):
+    #                         # 调用公共鼠标行为
+    #                         red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+    #                         # sprue_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inner_obj
+    #                         sprue_inner_obj.data.materials.clear()
+    #                         sprue_inner_obj.data.materials.append(red_material)
+    #                         # sprue_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_outer_obj
+    #                         sprue_outer_obj.data.materials.clear()
+    #                         sprue_outer_obj.data.materials.append(red_material)
+    #                         # sprue_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inside_obj
+    #                         sprue_inside_obj.data.materials.clear()
+    #                         sprue_inside_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #                         sprue_inner_obj.select_set(False)
+    #                         sprue_outer_obj.select_set(False)
+    #                         sprue_inside_obj.select_set(False)
+    #             elif(is_on_rotate_cur):
+    #                 if (sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
+    #                     if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
+    #                             is_changed_sphere(context, event) or is_changed(context, event))):
+    #                         # 公共鼠标行为加双击移动附件位置
+    #                         red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+    #                         # sprue_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inner_obj
+    #                         sprue_inner_obj.data.materials.clear()
+    #                         sprue_inner_obj.data.materials.append(red_material)
+    #                         # sprue_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_outer_obj
+    #                         sprue_outer_obj.data.materials.clear()
+    #                         sprue_outer_obj.data.materials.append(red_material)
+    #                         # sprue_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inside_obj
+    #                         sprue_inside_obj.data.materials.clear()
+    #                         sprue_inside_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #                     elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+    #                         # 调用sprue的三维旋转鼠标行为
+    #                         yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
+    #                         # sprue_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inner_obj
+    #                         sprue_inner_obj.data.materials.clear()
+    #                         sprue_inner_obj.data.materials.append(yellow_material)
+    #                         # sprue_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_outer_obj
+    #                         sprue_outer_obj.data.materials.clear()
+    #                         sprue_outer_obj.data.materials.append(yellow_material)
+    #                         # sprue_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inside_obj
+    #                         sprue_inside_obj.data.materials.clear()
+    #                         sprue_inside_obj.data.materials.append(yellow_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
+    #                         plane_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = plane_obj
+    #                         cur_obj.select_set(False)
+    #                         sprue_inner_obj.select_set(False)
+    #                         sprue_outer_obj.select_set(False)
+    #                         sprue_inside_obj.select_set(False)
+    #                     elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+    #                         # 调用公共鼠标行为
+    #                         red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+    #                         # sprue_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inner_obj
+    #                         sprue_inner_obj.data.materials.clear()
+    #                         sprue_inner_obj.data.materials.append(red_material)
+    #                         # sprue_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_outer_obj
+    #                         sprue_outer_obj.data.materials.clear()
+    #                         sprue_outer_obj.data.materials.append(red_material)
+    #                         # sprue_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = sprue_inside_obj
+    #                         sprue_inside_obj.data.materials.clear()
+    #                         sprue_inside_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #                         sprue_inner_obj.select_set(False)
+    #                         sprue_outer_obj.select_set(False)
+    #                         sprue_inside_obj.select_set(False)
+    #             return {'PASS_THROUGH'}
+    #         else:
+    #             print("sprueinitialadd_modal_finished")
+    #             return {'FINISHED'}
+    #
+    #     else:
+    #         if get_switch_time() != None and time.time() - get_switch_time() > 0.3 and get_switch_flag():
+    #             print("sprueinitialadd_modal_finished")
+    #             set_switch_time(None)
+    #             now_context = bpy.context.screen.areas[0].spaces.active.context
+    #             if not check_modals_running(bpy.context.scene.var, now_context):
+    #                 bpy.context.scene.var = 0
+    #             return {'FINISHED'}
+    #         return {'PASS_THROUGH'}
 
 
-        context.window_manager.modal_handler_add(self)
+class SprueSwitch(bpy.types.Operator):
+    bl_idname = "object.sprueswitch"
+    bl_label = "排气孔鼠标行为"
+
+    def invoke(self, context, event):
+        global is_sprueAdd_modal_start, is_sprueAdd_modal_startL
+        bpy.context.scene.var = 87
+        # if not is_sprueAdd_modal_start and not is_sprueAdd_modal_startL:
+        #     name = bpy.context.scene.leftWindowObj
+        #     if name == '右耳':
+        #         is_sprueAdd_modal_start = True
+        #     elif name == '左耳':
+        #         is_sprueAdd_modal_startL = True
+        #     context.window_manager.modal_handler_add(self)
+        #     print("sprueswitch_modal_invoke")
+        if not is_sprueAdd_modal_start:
+            is_sprueAdd_modal_start = True
+            context.window_manager.modal_handler_add(self)
+            print("sprueswitch_modal_invoke")
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
+        override1 = getOverride()
+        area = override1['area']
+
         global is_on_rotate
         global is_on_rotateL
+        global is_sprueAdd_modal_start, is_sprueAdd_modal_startL
         name = bpy.context.scene.leftWindowObj
         is_on_rotate_cur = False
         if (name == '右耳'):
@@ -2653,144 +2915,188 @@ class SprueInitialAdd(bpy.types.Operator):
         plane_obj = bpy.data.objects.get(planename)
         cur_obj_name = name
         cur_obj = bpy.data.objects.get(cur_obj_name)
-        if (bpy.context.scene.var == 18):
-            # 在数组中更新附件的信息
-            updateInfo()
-            if(not is_on_rotate_cur):
-                if(sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
-                    if (is_mouse_on_object(context, event) and not is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
-                        # 公共鼠标行为加双击移动附件位置
-                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(red_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(red_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(red_material)
-                        bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
-                        cur_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = cur_obj
-                        plane_obj.select_set(False)
-                    elif (is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
-                        # 调用sprue的鼠标行为
-                        yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(yellow_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(yellow_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(yellow_material)
-                        bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
-                        plane_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = plane_obj
-                        cur_obj.select_set(False)
-                        sprue_inner_obj.select_set(False)
-                        sprue_outer_obj.select_set(False)
-                        sprue_inside_obj.select_set(False)
-                    elif ((not is_mouse_on_object(context, event)) and (is_changed_sprue(context, event) or is_changed(context, event))):
-                        # 调用公共鼠标行为
-                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(red_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(red_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(red_material)
-                        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                        cur_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = cur_obj
-                        plane_obj.select_set(False)
-                        sprue_inner_obj.select_set(False)
-                        sprue_outer_obj.select_set(False)
-                        sprue_inside_obj.select_set(False)
-            elif(is_on_rotate_cur):
-                if (sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
-                    if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
-                            is_changed_sphere(context, event) or is_changed(context, event))):
-                        # 公共鼠标行为加双击移动附件位置
-                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(red_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(red_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(red_material)
-                        bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
-                        cur_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = cur_obj
-                        plane_obj.select_set(False)
-                    elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
-                        # 调用sprue的三维旋转鼠标行为
-                        yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(yellow_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(yellow_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(yellow_material)
-                        bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
-                        plane_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = plane_obj
-                        cur_obj.select_set(False)
-                        sprue_inner_obj.select_set(False)
-                        sprue_outer_obj.select_set(False)
-                        sprue_inside_obj.select_set(False)
-                    elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
-                        # 调用公共鼠标行为
-                        red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
-                        # sprue_inner_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inner_obj
-                        sprue_inner_obj.data.materials.clear()
-                        sprue_inner_obj.data.materials.append(red_material)
-                        # sprue_outer_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_outer_obj
-                        sprue_outer_obj.data.materials.clear()
-                        sprue_outer_obj.data.materials.append(red_material)
-                        # sprue_inside_obj.select_set(True)
-                        # bpy.context.view_layer.objects.active = sprue_inside_obj
-                        sprue_inside_obj.data.materials.clear()
-                        sprue_inside_obj.data.materials.append(red_material)
-                        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                        cur_obj.select_set(True)
-                        bpy.context.view_layer.objects.active = cur_obj
-                        plane_obj.select_set(False)
-                        sprue_inner_obj.select_set(False)
-                        sprue_outer_obj.select_set(False)
-                        sprue_inside_obj.select_set(False)
-            return {'PASS_THROUGH'}
+        if bpy.context.screen.areas[0].spaces.active.context == 'CONSTRAINT':
+            if get_mirror_context():
+                print('sprueswitch_modal_finished')
+                is_sprueAdd_modal_start = False
+                set_mirror_context(False)
+                return {'FINISHED'}
+            if (event.mouse_x < area.width and area.y < event.mouse_y < area.y + area.height and bpy.context.scene.var == 87):
+                if event.type == 'WHEELUPMOUSE':
+                    if name == '右耳':
+                        bpy.context.scene.paiQiKongOffset += 0.05
+                    else:
+                        bpy.context.scene.paiQiKongOffsetL += 0.05
+                    return {'RUNNING_MODAL'}
+                elif event.type == 'WHEELDOWNMOUSE':
+                    if name == '右耳':
+                        bpy.context.scene.paiQiKongOffset -= 0.05
+                    else:
+                        bpy.context.scene.paiQiKongOffsetL -= 0.05
+                    return {'RUNNING_MODAL'}
+
+                # 在数组中更新附件的信息
+                updateInfo()
+                if(not is_on_rotate_cur):
+                    if(sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
+                        if (is_mouse_on_object(context, event) and not is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
+                            # 公共鼠标行为加双击移动附件位置
+                            red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+                            # sprue_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inner_obj
+                            sprue_inner_obj.data.materials.clear()
+                            sprue_inner_obj.data.materials.append(red_material)
+                            # sprue_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_outer_obj
+                            sprue_outer_obj.data.materials.clear()
+                            sprue_outer_obj.data.materials.append(red_material)
+                            # sprue_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inside_obj
+                            sprue_inside_obj.data.materials.clear()
+                            sprue_inside_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                        elif (is_mouse_on_sprue(context, event) and (is_changed_sprue(context, event) or is_changed(context, event))):
+                            # 调用sprue的鼠标行为
+                            yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
+                            # sprue_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inner_obj
+                            sprue_inner_obj.data.materials.clear()
+                            sprue_inner_obj.data.materials.append(yellow_material)
+                            # sprue_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_outer_obj
+                            sprue_outer_obj.data.materials.clear()
+                            sprue_outer_obj.data.materials.append(yellow_material)
+                            # sprue_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inside_obj
+                            sprue_inside_obj.data.materials.clear()
+                            sprue_inside_obj.data.materials.append(yellow_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+                            plane_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = plane_obj
+                            cur_obj.select_set(False)
+                            sprue_inner_obj.select_set(False)
+                            sprue_outer_obj.select_set(False)
+                            sprue_inside_obj.select_set(False)
+                        elif ((not is_mouse_on_object(context, event)) and (is_changed_sprue(context, event) or is_changed(context, event))):
+                            # 调用公共鼠标行为
+                            red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+                            # sprue_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inner_obj
+                            sprue_inner_obj.data.materials.clear()
+                            sprue_inner_obj.data.materials.append(red_material)
+                            # sprue_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_outer_obj
+                            sprue_outer_obj.data.materials.clear()
+                            sprue_outer_obj.data.materials.append(red_material)
+                            # sprue_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inside_obj
+                            sprue_inside_obj.data.materials.clear()
+                            sprue_inside_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                            sprue_inner_obj.select_set(False)
+                            sprue_outer_obj.select_set(False)
+                            sprue_inside_obj.select_set(False)
+                elif(is_on_rotate_cur):
+                    if (sprue_inner_obj != None and sprue_outer_obj != None and sprue_inside_obj != None):
+                        if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
+                                is_changed_sphere(context, event) or is_changed(context, event))):
+                            # 公共鼠标行为加双击移动附件位置
+                            red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+                            # sprue_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inner_obj
+                            sprue_inner_obj.data.materials.clear()
+                            sprue_inner_obj.data.materials.append(red_material)
+                            # sprue_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_outer_obj
+                            sprue_outer_obj.data.materials.clear()
+                            sprue_outer_obj.data.materials.append(red_material)
+                            # sprue_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inside_obj
+                            sprue_inside_obj.data.materials.clear()
+                            sprue_inside_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="my_tool.sprue_mouse")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                        elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+                            # 调用sprue的三维旋转鼠标行为
+                            yellow_material = newColor("SprueYellow", 1, 1, 0, 0, 1)
+                            # sprue_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inner_obj
+                            sprue_inner_obj.data.materials.clear()
+                            sprue_inner_obj.data.materials.append(yellow_material)
+                            # sprue_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_outer_obj
+                            sprue_outer_obj.data.materials.clear()
+                            sprue_outer_obj.data.materials.append(yellow_material)
+                            # sprue_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inside_obj
+                            sprue_inside_obj.data.materials.clear()
+                            sprue_inside_obj.data.materials.append(yellow_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
+                            plane_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = plane_obj
+                            cur_obj.select_set(False)
+                            sprue_inner_obj.select_set(False)
+                            sprue_outer_obj.select_set(False)
+                            sprue_inside_obj.select_set(False)
+                        elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+                            # 调用公共鼠标行为
+                            red_material = newColor("SprueRed", 1, 0, 0, 0, 1)
+                            # sprue_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inner_obj
+                            sprue_inner_obj.data.materials.clear()
+                            sprue_inner_obj.data.materials.append(red_material)
+                            # sprue_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_outer_obj
+                            sprue_outer_obj.data.materials.clear()
+                            sprue_outer_obj.data.materials.append(red_material)
+                            # sprue_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = sprue_inside_obj
+                            sprue_inside_obj.data.materials.clear()
+                            sprue_inside_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                            sprue_inner_obj.select_set(False)
+                            sprue_outer_obj.select_set(False)
+                            sprue_inside_obj.select_set(False)
+                return {'PASS_THROUGH'}
+
+            elif bpy.context.scene.var != 87 and bpy.context.scene.var in get_process_var_list("排气孔"):
+                print("sprueswitch_modal_finished")
+                is_sprueAdd_modal_start = False
+                # if (name == "右耳"):
+                #     is_sprueAdd_modal_start = False
+                # elif (name == "左耳"):
+                #     is_sprueAdd_modal_startL = False
+                return {'FINISHED'}
+
+            else:
+                return {'PASS_THROUGH'}
+
         else:
-            print("sprueinitialadd_modal_finished")
-            return {'FINISHED'}
+            if get_switch_time() != None and time.time() - get_switch_time() > 0.3 and get_switch_flag():
+                print("sprueswitch_modal_finished")
+                is_sprueAdd_modal_start = False
+                # if (name == "右耳"):
+                #     is_sprueAdd_modal_start = False
+                # elif (name == "左耳"):
+                #     is_sprueAdd_modal_startL = False
+                set_switch_time(None)
+                now_context = bpy.context.screen.areas[0].spaces.active.context
+                if not check_modals_running(bpy.context.scene.var, now_context):
+                    bpy.context.scene.var = 0
+                return {'FINISHED'}
+            return {'PASS_THROUGH'}
+
 
 class SprueSubmit(bpy.types.Operator):
     bl_idname = "object.spruesubmit"
@@ -2805,7 +3111,7 @@ class SprueSubmit(bpy.types.Operator):
         elif (name == "左耳"):
             is_on_rotateL = False
 
-        bpy.context.scene.var = 19
+        bpy.context.scene.var = 89
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         self.execute(context)
@@ -2870,6 +3176,91 @@ class SprueDoubleClick(bpy.types.Operator):
     def execute(self, context):
         return {'FINISHED'}
 
+
+class SprueMirror(bpy.types.Operator):
+    bl_idname = 'object.spruemirror'
+    bl_label = '排气孔镜像'
+
+    def invoke(self, context, event):
+        print('进入镜像了')
+        self.execute(context)
+        return {'FINISHED'}
+
+    def execute(self, context):
+        global sprue_info_saveL, sprue_info_save
+        global sprue_indexL, sprue_index
+
+        left_obj = bpy.data.objects.get(context.scene.leftWindowObj)
+        right_obj = bpy.data.objects.get(context.scene.rightWindowObj)
+
+        # 只操作一个耳朵时，不执行镜像
+        if left_obj == None or right_obj == None:
+            return {'FINISHED'}
+
+        tar_obj_name = bpy.context.scene.leftWindowObj
+        tar_obj = bpy.data.objects[tar_obj_name]
+
+        workspace = context.window.workspace.name
+
+        if tar_obj_name == '左耳':
+            ori_sprue_info = sprue_info_save
+            tar_sprue_info = sprue_info_saveL
+        else:
+            ori_sprue_info = sprue_info_saveL
+            tar_sprue_info = sprue_info_save
+
+        # 只在双窗口下执行镜像
+        if len(ori_sprue_info) != 0 and len(tar_sprue_info) == 0:
+            tar_info = ori_sprue_info[0]
+            offset, l_x, l_y, l_z, r_x, r_y, r_z = tar_info.offset, tar_info.l_x, -tar_info.l_y, tar_info.l_z, tar_info.r_x, tar_info.r_y, tar_info.r_z
+            # 将附件数组指针置为末尾
+            if tar_obj_name == '左耳':
+                sprue_indexL = -1
+            else:
+                sprue_index = -1
+            bpy.ops.object.sprueinitialadd('INVOKE_DEFAULT')
+            # 获取添加后的Handle,并根据参数设置调整offset
+            planename = tar_obj_name + "Plane"
+            plane_obj = bpy.data.objects.get(planename)
+            if plane_obj is not None:
+                plane_obj.location[0] = l_x
+                plane_obj.location[1] = l_y
+                plane_obj.location[2] = l_z
+                plane_obj.rotation_euler[0] = r_x
+                plane_obj.rotation_euler[1] = r_y
+                plane_obj.rotation_euler[2] = r_z
+
+                bm = bmesh.new()
+                bm.from_mesh(tar_obj.data)
+
+                closest_vertex = None
+                min_distance = float('inf')
+                target_point = mathutils.Vector((l_x,l_y,l_z))
+
+                for vert in bm.verts:
+                    # 将顶点坐标转换到世界坐标系
+                    vertex_world = tar_obj.matrix_world @ vert.co
+                    distance = (vertex_world - target_point).length
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_vertex = vert
+                closest_vertex_world = tar_obj.matrix_world @ closest_vertex.co
+                closest_vertex_normal = tar_obj.matrix_world.to_3x3() @ closest_vertex.normal
+
+                sprue_fit_rotate(closest_vertex_normal, closest_vertex_world)
+                if tar_obj_name == '左耳':
+                    bpy.context.scene.paiQiKongOffsetL = offset
+                elif tar_obj_name == '右耳':
+                    bpy.context.scene.paiQiKongOffset = offset
+                bm.free()
+
+        if context.scene.var != 87:
+            bpy.ops.object.sprueswitch('INVOKE_DEFAULT')
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+
+
+
+
 class MyTool_Sprue1(WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
     bl_context_mode = 'OBJECT'
@@ -2904,7 +3295,8 @@ class MyTool_Sprue2(WorkSpaceTool):
     bl_icon = "brush.sculpt.boundary"
     bl_widget = None
     bl_keymap = (
-        ("object.sprueaddinvoke", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+        ("object.sprueadd", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+        # ("object.sprueaddinvoke", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
         # ("object.sprueadd", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
         # ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
         # ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
@@ -3031,6 +3423,8 @@ _classes = [
     SprueSubmit,
     SprueDoubleClick,
     SprueRotate,
+    SprueMirror,
+    SprueSwitch
 ]
 
 

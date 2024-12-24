@@ -540,14 +540,14 @@ def castingInitial():
 
     cur_obj.select_set(True)
     bpy.context.view_layer.objects.active = cur_obj
-    if bpy.context.scene.leftWindowObj == '右耳':
-        mat = bpy.data.materials.get("YellowR")
-        mat.blend_method = 'BLEND'
-        bpy.context.scene.transparent3EnumR = 'OP3'
-    elif bpy.context.scene.leftWindowObj == '左耳':
-        mat = bpy.data.materials.get("YellowL")
-        mat.blend_method = 'BLEND'
-        bpy.context.scene.transparent3EnumL = 'OP3'
+    # if bpy.context.scene.leftWindowObj == '右耳':
+    #     mat = bpy.data.materials.get("YellowR")
+    #     mat.blend_method = 'BLEND'
+    #     bpy.context.scene.transparent3EnumR = 'OP3'
+    # elif bpy.context.scene.leftWindowObj == '左耳':
+    #     mat = bpy.data.materials.get("YellowL")
+    #     mat.blend_method = 'BLEND'
+    #     bpy.context.scene.transparent3EnumL = 'OP3'
 
     # 为操作物体添加实体化修改器,通过参数实现铸造厚度
     modifier_name = "CastingModifier"
@@ -633,7 +633,7 @@ def castingSubmit():
             cur_obj.select_set(False)
             compare_obj.select_set(True)
             bpy.context.view_layer.objects.active = compare_obj
-            yellow_material = newColor("yellowcompare", 1, 0.319, 0.133, 0, 1)  # 创建材质
+            yellow_material = newColor("yellowcompare", 1, 0.319, 0.133, 1, 0.4)  # 创建材质
             compare_obj.data.materials.clear()
             compare_obj.data.materials.append(yellow_material)
 
@@ -679,9 +679,11 @@ def castingSubmit():
 
         #若之前的模块若添加过附件
         for obj in bpy.data.objects:
-            patternR = r'右耳软耳膜附件Casting'
-            patternL = r'左耳软耳膜附件Casting'
-            if re.match(patternR, obj.name) or re.match(patternL, obj.name):
+            if (name == "右耳"):
+                pattern = r'右耳软耳膜附件Casting'
+            elif (name == "左耳"):
+                pattern = r'左耳软耳膜附件Casting'
+            if re.match(pattern, obj.name):
                 handle_obj = obj
                 bpy.ops.object.select_all(action='DESELECT')
                 handle_obj.select_set(True)
@@ -691,7 +693,7 @@ def castingSubmit():
                 duplicate_obj1 = handle_obj.copy()
                 duplicate_obj1.data = handle_obj.data.copy()
                 duplicate_obj1.animation_data_clear()
-                duplicate_obj1.name = name + "软耳膜附件CastingReplace"
+                duplicate_obj1.name = name + "软耳膜附件CastReplace"
                 bpy.context.scene.collection.objects.link(duplicate_obj1)
                 if (name == "右耳"):
                     moveToRight(duplicate_obj1)
@@ -743,10 +745,10 @@ def castingSubmit():
                 # bpy.ops.paint.vertex_color_set()
                 # bpy.ops.object.mode_set(mode='OBJECT')
 
-        #将上述生成的软耳膜附件CastingReplace更名为软耳膜附件Casting
+        #将上述生成的软耳膜附件CastReplace更名为软耳膜附件Casting
         for obj in bpy.data.objects:
-            patternR = r'右耳软耳膜附件CastingReplace'
-            patternL = r'左耳软耳膜附件CastingReplace'
+            patternR = r'右耳软耳膜附件CastReplace'
+            patternL = r'左耳软耳膜附件CastReplace'
             if re.match(patternR, obj.name) or re.match(patternL, obj.name):
                 handle_replace_obj = obj
                 handle_replace_obj.name = name + "软耳膜附件Casting"
@@ -756,9 +758,11 @@ def castingSubmit():
 
         #之前的模块若添加过外凸的字体
         for obj in bpy.data.objects:
-            patternR = r'右耳LabelPlaneForCasting'
-            patternL = r'左耳LabelPlaneForCasting'
-            if re.match(patternR, obj.name) or re.match(patternL, obj.name):
+            if (name == "右耳"):
+                pattern = r'右耳LabelPlaneForCasting'
+            elif (name == "左耳"):
+                pattern = r'左耳LabelPlaneForCasting'
+            if re.match(pattern, obj.name):
                 label_obj = obj
                 #将字体铸造法显示出来
                 label_obj.hide_set(False)
@@ -834,7 +838,7 @@ class CastingSubmit(bpy.types.Operator):
     bl_label = "铸造法提交"
 
     def invoke(self, context, event):
-        bpy.context.scene.var == 101
+        bpy.context.scene.var = 101
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         self.execute(context)
@@ -847,8 +851,30 @@ class CastingSubmit(bpy.types.Operator):
 
 
 
+class CastingMirror(bpy.types.Operator):
+    bl_idname = "object.castingmirror"
+    bl_label = "铸造法镜像"
 
+    def invoke(self, context, event):
+        # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
+        self.execute(context)
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        return {'FINISHED'}
 
+    def execute(self, context):
+        print("铸造法镜像")
+        left_obj = bpy.data.objects.get(context.scene.leftWindowObj)
+        right_obj = bpy.data.objects.get(context.scene.rightWindowObj)
+
+        # 只操作一个耳朵时，不执行镜像
+        if left_obj == None or right_obj == None:
+            return {'FINISHED'}
+
+        tar_obj = bpy.context.scene.leftWindowObj
+        if tar_obj == "右耳":
+            bpy.context.scene.ruanErMoHouDu = bpy.context.scene.ruanErMoHouDuL
+        elif tar_obj == "左耳":
+            bpy.context.scene.ruanErMoHouDuL = bpy.context.scene.ruanErMoHouDu
 
 
 
@@ -906,13 +932,18 @@ class MyTool_Casting3(WorkSpaceTool):
     )
     bl_icon = "ops.gpencil.sculpt_smooth"
     bl_widget = None
+    bl_keymap = (
+        ("object.castingmirror", {"type": 'MOUSEMOVE', "value": 'ANY'},
+         {}),
+    )
     def draw_settings(context, layout, tool):
         pass
 
     # 注册类
 _classes = [
     CastingReset,
-    CastingSubmit
+    CastingSubmit,
+    CastingMirror
 ]
 
 

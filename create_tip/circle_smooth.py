@@ -34,6 +34,7 @@ class Circle_Smooth(bpy.types.Operator):
     solver: EnumProperty(name="Solver", items=boolean_solver_items)
     center_border_group_name: bpy.props.StringProperty(name="CenterBorderGroupName", default="CenterBorder")
     max_smooth_width: FloatProperty(name="max_width", default=0)
+    circle_radius: FloatProperty(name="circle_radius", default=0)
 
     shade_smooth: BoolProperty(default=False)
     mark_sharp: BoolProperty(default=False)
@@ -216,7 +217,11 @@ class Circle_Smooth(bpy.types.Operator):
         bpy.ops.object.vertex_group_assign()
 
         vert_layer = bm.verts.layers.int.get('OffsetCutVerts')
-        scale_factor = 0.1 + (self.max_smooth_width - self.width) / self.max_smooth_width * 0.8
+        if self.max_smooth_width < self.circle_radius:
+            max_scale_factor = (self.max_smooth_width / self.circle_radius) * 0.9 - 0.1
+        else:
+            max_scale_factor = 0.8
+        scale_factor = 0.1 + (self.max_smooth_width - self.width) / self.max_smooth_width * max_scale_factor
         scale_border(scale_factor, self.center_border_group_name, vert_layer)
 
         bridge_border(self.width, self.center_border_group_name)
@@ -249,6 +254,7 @@ class Circle_Smooth(bpy.types.Operator):
         delete_vert_group("CircleCutOuter")
         delete_vert_group(self.center_border_group_name)
         delete_vert_group("CircleCutInner")
+        delete_vert_group("All_Vertex")
 
         bpy.ops.object.shade_smooth()
 
@@ -378,6 +384,10 @@ class Circle_Smooth(bpy.types.Operator):
 
     def boolean_pipe(self, bm, face_layer, pipe_idx):
 
+        active = bpy.context.active_object
+        bpy.ops.mesh.select_all(action='SELECT')
+        active.vertex_groups.new(name="All_Vertex")
+        bpy.ops.object.vertex_group_assign()
         bpy.ops.mesh.select_all(action='DESELECT')
 
         for f in bm.faces:
@@ -1074,6 +1084,12 @@ def pipe_cut():
     # 使用布尔插件
     bpy.ops.object.booltool_auto_difference()
     bpy.ops.object.mode_set(mode='EDIT')
+    bm = bmesh.from_edit_mesh(active_obj.data)
+    all_border_vert_index = [v.index for v in bm.verts if v.select]
+    if len(all_border_vert_index) == 0:
+        bpy.ops.object.vertex_group_set_active(group='All_Vertex')
+        bpy.ops.object.vertex_group_select()
+        bpy.ops.mesh.select_all(action='INVERT')
     active_obj.vertex_groups.new(name="CircleCutOuter")
     bpy.ops.object.vertex_group_assign()
 
@@ -1307,6 +1323,10 @@ def bridge_border(width, center_border_group_name):
     # 进行倒角
     bpy.ops.mesh.bevel(offset_type='PERCENT', offset_pct=80, segments=int(width / 0.1), profile=0.4,
                        release_confirm=True)
+    bpy.ops.object.vertex_group_set_active(group='CircleCutInner')
+    bpy.ops.object.vertex_group_remove_from()
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
 
 
 def filter_error_data(v_index_layer_value_dict, outer_border_index_set, center_border_index_set):
@@ -1428,8 +1448,9 @@ def resample_mesh(obj, resample_num):
 
 
 def fill_inner_part():
-    bpy.ops.mesh.select_non_manifold(extend=False, use_wire=False, use_multi_face=False, use_non_contiguous=False,
-                                     use_verts=False)
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='CircleCutInner')
+    bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.fill()
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.mode_set(mode='OBJECT')

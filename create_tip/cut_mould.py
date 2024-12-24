@@ -2,7 +2,7 @@ import bpy
 import bmesh
 from bpy_extras import view3d_utils
 from ..tool import moveToRight, moveToLeft, newMaterial, get_region_and_space, set_vert_group, delete_vert_group, \
-                    utils_re_color, change_mat_mould
+                    utils_re_color, change_mat_mould, laplacian_smooth
 import mathutils
 from mathutils import Vector
 from math import sqrt
@@ -45,7 +45,9 @@ def frontToCutMould(mode=0):
     bpy.ops.wm.tool_set_by_id(name="tool.cutmouldswitch1")
 
 
-def frontFromCutMould():
+def frontFromCutMould(mode=0):
+    global color_mode
+    color_mode = mode
     name = bpy.context.scene.leftWindowObj
     sprue_compare_obj = bpy.data.objects.get(name + "SprueCompare")
     hard_support_compare_obj = bpy.data.objects.get(name + "ConeCompare")
@@ -59,12 +61,14 @@ def frontFromCutMould():
 
     if name == '右耳':
         collections = bpy.data.collections['Right']
-        bpy.context.scene.transparent2R = False
-        bpy.context.scene.transparent3R = True
+        if color_mode == 0:
+            bpy.context.scene.transparent2R = False
+            bpy.context.scene.transparent3R = True
     elif name == '左耳':
         collections = bpy.data.collections['Left']
-        bpy.context.scene.transparent2L = False
-        bpy.context.scene.transparent3L = True
+        if color_mode == 0:
+            bpy.context.scene.transparent2L = False
+            bpy.context.scene.transparent3L = True
     for obj in collections.objects:
         if obj.type == 'MESH':
             # 获取网格数据
@@ -84,7 +88,14 @@ def frontFromCutMould():
             bm.to_mesh(me)
             bm.free()
 
-    submit_cut_mould()
+    submit_cut_mould(mode)
+
+    # 激活右耳或左耳为当前活动物体
+    bpy.context.view_layer.objects.active = bpy.data.objects[bpy.context.scene.leftWindowObj]
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.data.objects[bpy.context.scene.leftWindowObj].select_set(True)
+    # 调用公共鼠标行为
+    bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
 
 def get_co():
@@ -159,58 +170,102 @@ def newColor(id, r, g, b, is_transparency, transparency_degree, is_use_backface_
     return mat
 
 
-def submit_cut_mould():
-    obj = bpy.data.objects[bpy.context.scene.leftWindowObj]
+def apply_cut_mould(mode):
+    main_obj = bpy.data.objects[bpy.context.scene.leftWindowObj]
+    cut_obj = bpy.data.objects.get(bpy.context.scene.leftWindowObj + 'cutmouldpoint_mesh_obj')
+    # 切割
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = main_obj
+    main_obj.select_set(True)
+    cut_obj.select_set(True)
+    # 使用布尔插件
+    bpy.ops.object.booltool_auto_difference()
+    bpy.ops.object.mode_set(mode='EDIT')
+    main_obj.vertex_groups.new(name="CutVertex")
+    bpy.ops.object.vertex_group_assign()
+    bpy.ops.mesh.delete(type='FACE')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.remove_doubles(threshold=0.5)
+    bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='25', regular=True)
+    # bpy.ops.mesh.looptools_space(influence=100, input='selected', interpolation='cubic', lock_x=False, lock_y=False, lock_z=False)
+    bpy.ops.mesh.separate(type='SELECTED')
+    for obj in bpy.data.objects:
+        if obj.select_get() and obj != main_obj:
+            inner_obj = obj
+            break
+    bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.ops.object.select_all(action='DESELECT')
+    inner_obj.select_set(True)
+    bpy.context.view_layer.objects.active = inner_obj
+    inner_obj.name = main_obj.name + "切割边界"
+    if main_obj.name == '右耳':
+        moveToRight(inner_obj)
+    elif main_obj.name == '左耳':
+        moveToLeft(inner_obj)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.fill(use_beauty=False)
+    bm = bmesh.from_edit_mesh(inner_obj.data)
+    edges = [e for e in bm.edges if e.select]
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.mesh.select_mode(type='EDGE')
+    for e in edges:
+        if not e.is_boundary:
+            e.select_set(True)
+    bpy.ops.mesh.subdivide(number_cuts=10, ngon=False, quadcorner='INNERVERT')
+
+    bpy.ops.mesh.select_mode(type='VERT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    verts = [v for v in bm.verts if v.select]
+    bpy.ops.mesh.select_all(action='DESELECT')
+    for v in verts:
+        if not v.is_boundary:
+            v.select_set(True)
+    bm = bmesh.from_edit_mesh(inner_obj.data)
+    verts_index = [v.index for v in bm.verts if v.select]
+    laplacian_smooth(verts_index, 0.5, 10)
+
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = main_obj
+    main_obj.select_set(True)
+    inner_obj.select_set(True)
+    bpy.ops.object.join()
+
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.remove_doubles()
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    delete_vert_group("CutVertex")
+    # 删除用不到的物体
+    del_objs = [bpy.context.scene.leftWindowObj + 'cutmouldpoint',
+                bpy.context.scene.leftWindowObj + 'cutmouldpoint_extruded',
+                bpy.context.scene.leftWindowObj + 'cutmouldpoint_extruded2',
+                bpy.context.scene.leftWindowObj + 'cut_mould_sphere']
+    for obj in del_objs:
+        if (bpy.data.objects.get(obj)):
+            bpy.data.objects.remove(bpy.data.objects.get(obj), do_unlink=True)
+    if mode == 1:
+        utils_re_color(bpy.context.scene.leftWindowObj, (0, 0.25, 1))
+    else:
+        utils_re_color(bpy.context.scene.leftWindowObj, (1, 0.319, 0.133))
+
+
+def submit_cut_mould(mode):
     cut_obj = bpy.data.objects.get(bpy.context.scene.leftWindowObj + 'cutmouldpoint_mesh_obj')
     if cut_obj:     # 如果没有应用切割将其提交
-        # 重新计算圆环法线用于切割
-        bpy.ops.object.select_all(action='DESELECT')
-        bpy.context.view_layer.objects.active = cut_obj
-        cut_obj.select_set(True)
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.normals_make_consistent(inside=False)
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-        # 切割
-        bpy.ops.object.select_all(action='DESELECT')
-        bpy.context.view_layer.objects.active = obj
-        obj.select_set(True)
-        cut_obj.select_set(True)
-        # 使用布尔插件
-        bpy.ops.object.booltool_auto_difference()
-        # 删除用不到的物体
-        del_objs = [bpy.context.scene.leftWindowObj + 'cutmouldpoint',
-                    bpy.context.scene.leftWindowObj + 'cutmouldpoint_extruded',
-                    bpy.context.scene.leftWindowObj + 'cutmouldpoint_extruded2']
-        for obj in del_objs:
-            if (bpy.data.objects.get(obj)):
-                bpy.data.objects.remove(bpy.data.objects.get(obj), do_unlink=True)
-        if color_mode == 1:
-            utils_re_color(bpy.context.scene.leftWindowObj, (0, 0.25, 1))
-        else:
-            utils_re_color(bpy.context.scene.leftWindowObj, (1, 0.319, 133))
+        apply_cut_mould(mode)
 
     else:
         point_obj = bpy.data.objects.get(bpy.context.scene.leftWindowObj + 'cutmouldpoint')
         if point_obj:
             bpy.data.objects.remove(point_obj, do_unlink=True)
+        sphere_obj = bpy.data.objects.get(bpy.context.scene.leftWindowObj + 'cut_mould_sphere')
+        if sphere_obj:
+            bpy.data.objects.remove(sphere_obj, do_unlink=True)
 
     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-
-
-def judge_if_need_invert():
-    name = bpy.context.scene.leftWindowObj
-    obj = bpy.data.objects[name]
-    bm = bmesh.from_edit_mesh(obj.data)
-
-    # 获取最低点
-    vert_order_by_z = []
-    for vert in bm.verts:
-        vert_order_by_z.append(vert)
-    # 按z坐标排列
-    vert_order_by_z.sort(key=lambda vert: vert.co[2])
-    return not vert_order_by_z[0].select
 
 
 # 获取当前3D视图的方向
@@ -299,30 +354,48 @@ def extrude_curve_and_generate_faces(curve_obj, distance):
     newColor('blue2', 0, 0, 1, 0, 1, False)
     mesh_obj.data.materials.append(bpy.data.materials['blue2'])
 
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = mesh_obj
+    mesh_obj.select_set(True)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    # bpy.ops.mesh.subdivide(number_cuts=10)
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
     # 隐藏物体
     curve_obj.hide_set(True)
     new_curve_obj.hide_set(True)
     new_curve_obj2.hide_set(True)
 
 
-def start_curve(mode):
-    """ 在点加蓝线只剩一个点时将曲线延长方便查看 """
+def start_curve():
+    """ 在点加蓝线初始只有一个点时在点击的位置生成圆球 """
     name = bpy.context.scene.leftWindowObj
     curve_obj = bpy.data.objects.get(name + 'cutmouldpoint')
     # 先在点加位置添加一个新点
-    spline = curve_obj.data.splines[0]
-    spline.points.add(1)
-    first_co = spline.points[0].co
-    direction = get_view_direction()
-    spline.points[-1].co = (first_co[0] - direction[0] * 3, first_co[1] - direction[1] * 3, first_co[2] - direction[2] * 3, 1)
-    if mode == 0:
-        newColor('green', 0, 1, 0, 0, 1)
-        curve_obj.data.materials.clear()
-        curve_obj.data.materials.append(bpy.data.materials['green'])
-    if mode == 1:
-        newColor('red', 1, 0, 0, 0, 1)
-        curve_obj.data.materials.clear()
-        curve_obj.data.materials.append(bpy.data.materials['red'])
+    first_co = curve_obj.data.splines[0].points[0].co[0:3]
+
+    name = bpy.context.scene.leftWindowObj
+    mesh = bpy.data.meshes.new(name + "cut_mould_sphere")
+    obj = bpy.data.objects.new(name + "cut_mould_sphere", mesh)
+    bpy.context.collection.objects.link(obj)
+    if name == '右耳':
+        moveToRight(obj)
+    elif name == '左耳':
+        moveToLeft(obj)
+    me = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    # 设置圆球的参数
+    radius = 0.3  # 半径
+    segments = 16  # 分段数
+    bmesh.ops.create_uvsphere(bm, u_segments=segments, v_segments=segments, radius=radius*2)
+    bm.to_mesh(me)
+    bm.free()
+    obj.location = first_co
+    newColor('red', 1, 0, 0, 1, 1)
+    obj.data.materials.append(bpy.data.materials['red'])
 
 
 class Reset_CutMould(bpy.types.Operator):
@@ -330,14 +403,16 @@ class Reset_CutMould(bpy.types.Operator):
     bl_label = "重置切割"
 
     def invoke(self, context, event):
-        self.excute(context)
+        bpy.context.scene.var = 90
+        self.execute(context)
         return {'FINISHED'}
 
-    def excute(self, context):
+    def execute(self, context):
         del_objs = [context.scene.leftWindowObj + 'cutmouldpoint',
                     context.scene.leftWindowObj + 'cutmouldpoint_extruded',
                     context.scene.leftWindowObj + 'cutmouldpoint_extruded2',
-                    context.scene.leftWindowObj + 'cutmouldpoint_mesh_obj']
+                    context.scene.leftWindowObj + 'cutmouldpoint_mesh_obj',
+                    context.scene.leftWindowObj + 'cut_mould_sphere']
         for obj in del_objs:
             if (bpy.data.objects.get(obj)):
                 bpy.data.objects.remove(bpy.data.objects.get(obj), do_unlink=True)
@@ -347,7 +422,6 @@ class Reset_CutMould(bpy.types.Operator):
         obj.select_set(True)
 
         # 重新初始化
-        # initial_cut_mould()
         bpy.ops.wm.tool_set_by_id(name="tool.cutmouldswitch1")
 
 
@@ -356,42 +430,16 @@ class Finish_CutMould(bpy.types.Operator):
     bl_label = "完成切割"
 
     def invoke(self, context, event):
-        self.excute(context)
+        bpy.context.scene.var = 91
+        self.execute(context)
         return {'FINISHED'}
 
-    def excute(self, context):
+    def execute(self, context):
+        global color_mode
         # 应用切割
         cut_obj = bpy.data.objects.get(context.scene.leftWindowObj + 'cutmouldpoint_mesh_obj')
         if cut_obj:
-            obj = bpy.data.objects[context.scene.leftWindowObj]
-
-            # 重新计算圆环法线用于切割
-            bpy.ops.object.select_all(action='DESELECT')
-            bpy.context.view_layer.objects.active = cut_obj
-            cut_obj.select_set(True)
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.mesh.select_all(action='SELECT')
-            bpy.ops.mesh.normals_make_consistent(inside=False)
-            bpy.ops.object.mode_set(mode='OBJECT')
-
-            # 切割
-            bpy.ops.object.select_all(action='DESELECT')
-            bpy.context.view_layer.objects.active = obj
-            obj.select_set(True)
-            cut_obj.select_set(True)
-            # 使用布尔插件
-            bpy.ops.object.booltool_auto_difference()
-            # 删除用不到的物体
-            del_objs = [context.scene.leftWindowObj + 'cutmouldpoint',
-                        context.scene.leftWindowObj + 'cutmouldpoint_extruded',
-                        context.scene.leftWindowObj + 'cutmouldpoint_extruded2']
-            for obj in del_objs:
-                if (bpy.data.objects.get(obj)):
-                    bpy.data.objects.remove(bpy.data.objects.get(obj), do_unlink=True)
-            if color_mode == 1:
-                utils_re_color(context.scene.leftWindowObj, (0, 0.25, 1))
-            else:
-                utils_re_color(context.scene.leftWindowObj, (1, 0.319, 133))
+            apply_cut_mould(color_mode)
             bpy.ops.wm.tool_set_by_id(name="tool.cutmouldswitch1")
         else:
             bpy.ops.wm.tool_set_by_id(name="tool.cutmouldswitch2")
@@ -403,10 +451,10 @@ class TEST_OT_cutmouldstart(bpy.types.Operator):
     bl_description = "开始切割模具"
 
     def invoke(self, context, event):  # 初始化
-        self.excute(context, event)
+        self.execute(context)
         return {'FINISHED'}
 
-    def excute(self, context, event):
+    def execute(self, context):
         name = bpy.context.scene.leftWindowObj
         co = get_co()
         new_curve_data = bpy.data.curves.new(
@@ -428,7 +476,7 @@ class TEST_OT_cutmouldstart(bpy.types.Operator):
         new_spline.order_u = 2
         new_curve_data.splines[0].points[0].co[0:3] = co
         new_curve_data.splines[0].points[0].co[3] = 1
-        start_curve(0)
+        start_curve()
         bpy.ops.wm.tool_set_by_id(name="tool.cutmouldswitch2")
 
 
@@ -438,34 +486,40 @@ class TEST_OT_cutmouldfinish(bpy.types.Operator):
     bl_description = "结束切割模具"
 
     def invoke(self, context, event):  # 初始化
-        self.excute(context, event)
+        self.execute(context)
         return {'FINISHED'}
 
-    def excute(self, context, event):
+    def execute(self, context):
+        co = get_co()
         add_curve_name = context.scene.leftWindowObj + 'cutmouldpoint'
         curve_obj = bpy.data.objects[add_curve_name]
-        curve_obj.data.splines[0].use_cyclic_u = True
-        bpy.ops.object.select_all(action='DESELECT')
-        bpy.context.view_layer.objects.active = curve_obj
-        curve_obj.select_set(True)
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.curve.select_all(action='DESELECT')
-        curve_obj.data.splines[0].points[-1].select = True
-        bpy.ops.curve.delete(type='VERT')
-        bpy.ops.curve.select_all(action='SELECT')
-        # 细分
-        bpy.ops.curve.subdivide(number_cuts=10)
-        # 平滑
-        for _ in range(10):
-            bpy.ops.curve.smooth()
-        bpy.ops.object.mode_set(mode='OBJECT')
+        if ((co - Vector(curve_obj.data.splines[0].points[0].co[0:3])).length < 1 and
+                len(curve_obj.data.splines[0].points) > 2):
+            sphere_obj = bpy.data.objects.get(context.scene.leftWindowObj + 'cut_mould_sphere')
+            if sphere_obj:
+                bpy.data.objects.remove(sphere_obj, do_unlink=True)
+            curve_obj.data.splines[0].use_cyclic_u = True
+            # bpy.ops.object.select_all(action='DESELECT')
+            # bpy.context.view_layer.objects.active = curve_obj
+            # curve_obj.select_set(True)
+            # bpy.ops.object.mode_set(mode='EDIT')
+            # bpy.ops.curve.select_all(action='SELECT')
+            # # 细分
+            # bpy.ops.curve.subdivide(number_cuts=10)
+            # # 平滑
+            # for _ in range(10):
+            #     bpy.ops.curve.smooth()
+            # bpy.ops.object.mode_set(mode='OBJECT')
 
-        # 生成切割用的物体
-        extrude_curve_and_generate_faces(curve_obj, 20)
-        bpy.ops.object.select_all(action='DESELECT')
-        bpy.context.view_layer.objects.active = bpy.data.objects[context.scene.leftWindowObj]
-        bpy.data.objects[context.scene.leftWindowObj].select_set(True)
-        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+            # 生成切割用的物体
+            extrude_curve_and_generate_faces(curve_obj, 20)
+            bpy.ops.object.select_all(action='DESELECT')
+            bpy.context.view_layer.objects.active = bpy.data.objects[context.scene.leftWindowObj]
+            bpy.data.objects[context.scene.leftWindowObj].select_set(True)
+            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+
+        else:
+            pass
 
 
 class TEST_OT_cutmouldaddpoint(bpy.types.Operator):
@@ -474,27 +528,15 @@ class TEST_OT_cutmouldaddpoint(bpy.types.Operator):
     bl_description = "单击左键添加控制点"
 
     def invoke(self, context, event):
-        self.excute(context, event)
+        self.addpoint(context, event)
         return {'FINISHED'}
 
-    def excute(self, context, event):
+    def addpoint(self, context, event):
         name = context.scene.leftWindowObj
         add_curve_name = name + 'cutmouldpoint'
+        curve_obj = bpy.data.objects.get(add_curve_name)
         co = get_co()
-        if bpy.data.objects.get(add_curve_name) != None and cal_co(add_curve_name, context, event) == -1:
-            curve_obj = bpy.data.objects.get(add_curve_name)
-            if curve_obj.data.materials[0].name == 'green' or curve_obj.data.materials[0].name == 'red':
-                bpy.ops.object.select_all(action='DESELECT')
-                bpy.context.view_layer.objects.active = curve_obj
-                curve_obj.select_set(True)
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.curve.select_all(action='DESELECT')
-                curve_obj.data.splines[0].points[-1].select = True
-                bpy.ops.curve.delete(type='VERT')
-                bpy.ops.object.mode_set(mode='OBJECT')
-                curve_obj.data.materials.clear()
-                curve_obj.data.materials.append(bpy.data.materials['blue'])
-
+        if curve_obj != None:
             spline = curve_obj.data.splines[0]
             spline.points.add(1)
             spline.points[-1].co = (co[0], co[1], co[2], 1)
@@ -506,15 +548,15 @@ class TEST_OT_cutmoulddeletepoint(bpy.types.Operator):
     bl_description = "单击右键删除控制点"
 
     def invoke(self, context, event):
-        self.excute(context, event)
+        self.deletepoint(context, event)
         return {'FINISHED'}
 
-    def excute(self, context, event):
+    def deletepoint(self, context, event):
         name = context.scene.leftWindowObj
         add_curve_name = name + 'cutmouldpoint'
         if bpy.data.objects.get(add_curve_name) != None:
             curve_len = len(bpy.data.objects[add_curve_name].data.splines[0].points)
-            if bpy.data.objects[add_curve_name].data.materials[0].name == 'blue' and curve_len > 1:
+            if curve_len > 1:
                 bpy.ops.object.select_all(action='DESELECT')
                 bpy.context.view_layer.objects.active = bpy.data.objects[add_curve_name]
                 bpy.data.objects[add_curve_name].select_set(True)
@@ -523,12 +565,12 @@ class TEST_OT_cutmoulddeletepoint(bpy.types.Operator):
                 bpy.data.objects[add_curve_name].data.splines[0].points[-1].select = True
                 bpy.ops.curve.delete(type='VERT')
                 bpy.ops.object.mode_set(mode='OBJECT')
-                if len(bpy.data.objects[add_curve_name].data.splines[0].points) == 1:
-                    start_curve(1)
 
             # 删除最后一个控制点
-            elif bpy.data.objects[add_curve_name].data.materials[0].name == 'red' or \
-                    bpy.data.objects[add_curve_name].data.materials[0].name == 'green':
+            elif curve_len == 1:
+                sphere_obj = bpy.data.objects.get(context.scene.leftWindowObj + 'cut_mould_sphere')
+                if sphere_obj:
+                    bpy.data.objects.remove(sphere_obj, do_unlink=True)
                 bpy.ops.object.select_all(action='DESELECT')
                 bpy.context.view_layer.objects.active = bpy.data.objects[add_curve_name]
                 bpy.data.objects[add_curve_name].select_set(True)
@@ -536,6 +578,9 @@ class TEST_OT_cutmoulddeletepoint(bpy.types.Operator):
                 bpy.context.view_layer.objects.active = bpy.data.objects[name]
                 bpy.data.objects[name].select_set(True)
                 bpy.ops.wm.tool_set_by_id(name="tool.cutmouldswitch1")
+
+            else:
+                pass
 
 
 class Tool_ResetCutMould(bpy.types.WorkSpaceTool):

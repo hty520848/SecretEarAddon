@@ -1204,3 +1204,16 @@ def get_actual_co_y(origin_co, target_high, target_low):
     yy_co = (target_high[1] - target_low[1]) * high_percent_y + target_low[1]
 
     return yy_co
+
+
+class Huier_OT_Startmodal(bpy.types.Operator):
+    bl_idname = "start.modal"
+    bl_label = "注册"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        # bpy.ops.object.createmouldinit('INVOKE_DEFAULT')
+        # bpy.ops.object.createmouldcut('INVOKE_DEFAULT')
+        # bpy.ops.object.createmouldfill('INVOKE_DEFAULT')
+        bpy.ops.object.msgbuscallback('INVOKE_DEFAULT')
+        return {'FINISHED'}

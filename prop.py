@@ -1,15 +1,27 @@
 import bpy.props
 
-from .damo import remember_vertex_change, get_modal_start, get_is_back, get_is_dialog
+from .damo import get_is_operator, get_is_back, get_is_dialog
 from .jiahou import *
 from .create_tip.qiege import *
 from .create_tip.cut_mould import get_color_mode
 from .label import *
 from .support import *
-from .create_mould.soft_eardrum.thickness_and_fill import reset_and_refill, re_smooth
+from .create_mould.parameters_for_create_mould import set_right_soft_eardrum_border_template, \
+    set_left_soft_eardrum_border_template, get_left_soft_eardrum_border_template, get_right_soft_eardrum_border_template
+from .create_mould.parameters_for_create_mould import set_right_frame_style_eardrum_border_template, \
+    set_left_frame_style_eardrum_border_template, get_left_frame_style_eardrum_border_template, get_right_frame_style_eardrum_border_template
+from .create_mould.soft_eardrum.thickness_and_fill import reset_and_refill, re_smooth, soft_smooth_initial, \
+    soft_smooth_initial1, soft_extrude_smooth_initial, refill_after_cavity_smooth, refill_after_upper_smooth, \
+    reset_to_after_cut, set_finish, draw_cut_plane_upper
+from .create_mould.frame_style_eardrum.frame_style_eardrum_dig_hole import dig_hole, reset_and_dig_and_refill
 from .create_mould.frame_style_eardrum.frame_fill_inner_face import recover_and_refill
+from .create_mould.frame_style_eardrum.frame_eardrum_smooth import frame_extrude_smooth_initial
 from .create_mould.hard_eardrum.hard_eardrum_bottom_fill import smooth_initial, hard_eardrum_smooth
-from .create_mould.create_mould import recover, set_is_cut_finish
+from .create_mould.shell_eardrum.shell_canal import updateshellCanalState, updateshellCanalOffset, updateshellCanalDiameter, updateshellCanalThickness
+from .create_mould.shell_eardrum.shell_eardrum_bottom_fill import useMiddleTrous, update_top_circle_cut, \
+    update_middle_circle_offset, update_middle_circle_cut, update_xiafangxian, update_mianban, \
+    update_top_circle_smooth, update_middle_circle_smooth, reset_after_bottom_curve_change, update_smooth_factor
+from .create_mould.create_mould import recover, get_type, set_type, create_mould_cut, create_mould_fill
 from .sound_canal import initial_hornpipe, update_hornpipe_offset, update_hornpipe_enum, convert_soundcanal
 from .vent_canal import convert_ventcanal
 from .casting import castingThicknessUpdate
@@ -27,10 +39,24 @@ font_info = {
 def My_Properties():
     # 全局变量,多个模块的文件共享该全局变量,各个模式的按钮都会有一个var值,当该按钮处于其对应的值时,会运行其操作符,不再其对应值时,会自动结束该操作符
     # 默认var值为0,各个操作符都未启动
-    # todo:整理每个模块中var的值
+    # todo:整理每个模块中var的值，按照模块顺序+按钮顺序编号（比如打磨加厚为11，局部加厚缩小为22），保证不重复
+    # todo:考虑重置modal是否需要设置var值
     # 打磨模块:       打磨加厚按钮: 1        打磨打薄按钮:  2      打磨平滑按钮:  3       打磨重置按钮:  4
-    # 局部加厚模块:   局部加厚重置: 9        局部加厚扩大区域: 5       局部加厚缩小区域: 6        局部加厚加厚: 7    局部加厚提交: 8
-    # 切割模块:由于切割模式在初始化时会自动进入切割模态,退出时自动退出切割模块,故切割模块未使用该变量
+    # 局部加厚模块:    局部加厚扩大区域: 5    局部加厚缩小区域: 6    局部加厚加厚: 7    局部加厚提交: 8   局部加厚重置: 9
+    # 切割模块:       环切modal: 55   侧切modal: 56   完成切割: 57   重置切割: 58
+    # 创建模具模块:    点加蓝线: 19     拖拽蓝线: 20   平滑蓝线:  21   重置模具: 32    确认模具: 31
+    # 通气孔模块:      通气孔鼠标行为modal: 23    通气孔提交: 24   通气孔重置: 25
+    # 传声孔模块:      传声孔鼠标行为modal: 26    传声孔提交: 27   传声孔重置: 28
+    # 附件模块:        附件重置: 13    附件初始化双击: 15   添加附件: 14(防止开启多个modal: 18)   附件单步撤回和前进: 17  附件提交: 16
+    # 附件模块:        附件重置: 13    附件鼠标行为: 14   附件提交: 16
+    # 字体模块:        字体重置: 40    字体初始化双击: 42   添加字体: 41(防止开启多个modal: 45)   字体单步撤回和前进: 44  字体提交: 43
+    # 字体模块:        字体重置: 40    字体鼠标行为: 41   字体提交: 43
+    # 铸造法模块:      铸造法重置: 100    铸造法提交: 101
+    # 支撑模块:       支撑重置: 76    支撑提交: 78     支撑鼠标行为:77
+    # 排气孔模块:     排气孔重置: 86  排气孔初始化双击: 88   添加排气孔: 87(防止开启多个modal: 81)  附件单步撤回和前进: 80  排气孔提交: 89
+    # 排气孔模块:      排气孔重置: 86    排气孔鼠标行为: 87   排气孔提交: 89
+    # 切割磨具模块:    切割模具重置: 90    切割模具完成: 91
+    # 后期打磨模块:    打磨加厚按钮: 111       打磨打薄按钮:  112     打磨平滑按钮:  113      打磨重置按钮:  114
     bpy.types.Scene.var = bpy.props.IntProperty(
         name="var", default=0, description="每个模块的按钮都会对应一个var值,用于结束按钮的modal"
     )
@@ -65,15 +91,15 @@ def My_Properties():
         name="laHouDUL", min=-2.0, max=2.0, step=5,
         description="调整蜡厚度的大小", update=Houdu)
     bpy.types.Scene.localLaHouDuR = bpy.props.BoolProperty(
-        name="localLaHouDu", default=False, update=localLaHouDu)
+        name="localLaHouDu", default=False)
     bpy.types.Scene.maxLaHouDuR = bpy.props.FloatProperty(
         name="maxLaHouDu", min=-1.0, max=1.0, step=1, default=0.5,
-        description="最大蜡厚度的值", update=localLaHouDu)
+        description="最大蜡厚度的值")
     bpy.types.Scene.minLaHouDuR = bpy.props.FloatProperty(
         name="minLaHouDu", min=-1.0, max=1.0, step=1, default=-0.5,
-        description="最小蜡厚度的值", update=localLaHouDu)
+        description="最小蜡厚度的值")
     bpy.types.Scene.localLaHouDuL = bpy.props.BoolProperty(
-        name="localLaHouDuL", default=False, update=localLaHouDu)
+        name="localLaHouDuL", default=False)
     bpy.types.Scene.damo_circleRadius_R = bpy.props.FloatProperty(
         name="damo_circleRadius",  default=50)
     bpy.types.Scene.damo_strength_R = bpy.props.FloatProperty(
@@ -83,10 +109,10 @@ def My_Properties():
         description="调整笔刷的强度", update=scale_strength)
     bpy.types.Scene.maxLaHouDuL = bpy.props.FloatProperty(
         name="maxLaHouDuL", min=-1.0, max=1.0, step=1, default=0.5,
-        description="最大蜡厚度的值", update=localLaHouDu)
+        description="最大蜡厚度的值")
     bpy.types.Scene.minLaHouDuL = bpy.props.FloatProperty(
         name="minLaHouDuL", min=-1.0, max=1.0, step=1, default=-0.5,
-        description="最小蜡厚度的值", update=localLaHouDu)
+        description="最小蜡厚度的值")
     bpy.types.Scene.damo_circleRadius_L = bpy.props.FloatProperty(
         name="damo_circleRadius_L",  default=50)
     bpy.types.Scene.damo_strength_L = bpy.props.FloatProperty(
@@ -126,7 +152,7 @@ def My_Properties():
         update=qiegeenum
     )
     bpy.types.Scene.qiegesheRuPianYiR = bpy.props.FloatProperty(
-        name="sheRuPianYi", min=0.0, max=3, step=10, default=0.5, update=sheru)
+        name="sheRuPianYi", min=0.0, max=3, step=10, default=0, update=sheru)
 
     bpy.types.Scene.qiegewaiBianYuanR = bpy.props.FloatProperty(
         name="qiegewaiBianYuanR", min=0.1, max=1,
@@ -143,7 +169,7 @@ def My_Properties():
         update=qiegeenum
     )
     bpy.types.Scene.qiegesheRuPianYiL = bpy.props.FloatProperty(
-        name="sheRuPianYi", min=0.0, max=3, step=10, default=0.5, update=sheru)
+        name="sheRuPianYi", min=0.0, max=3, step=10, default=0, update=sheru)
 
     bpy.types.Scene.qiegewaiBianYuanL = bpy.props.FloatProperty(
         name="qiegewaiBianYuanL", min=0.1, max=1,
@@ -277,7 +303,7 @@ def My_Properties():
     # 模板属性
     bpy.types.Scene.muJuNameEnum = bpy.props.StringProperty(name="",
                                                             description="",
-                                                            default="框架式耳膜",
+                                                            default="硬耳膜",
                                                             maxlen=1024)
 
     bpy.types.Scene.muJuTypeEnum = bpy.props.EnumProperty(
@@ -286,41 +312,74 @@ def My_Properties():
         items=[
             ('OP1', '软耳模', '', 'RUANERMO', 1),
             ('OP2', '硬耳膜', '', 'YINGERMO', 2),
-            ('OP3', '一体外壳', '', 'YITI', 3),
+            ('OP3', '常规外壳', '', 'CHANGGUI', 3),
             ('OP4', '框架式耳膜', '', 'KUANGJIA', 4),
-            ('OP5', '常规外壳', '', 'CHANGGUI', 5),
+            ('OP5', '一体外壳', '', 'YITI', 5),
             ('OP6', '实心面板', '', 'SHIXIN', 6)],
         update=ChangeMouldType,
-        default='OP4'
+        default='OP2'
     )
 
-    # 创建模具属性
-    # todo：左右耳适配
-    bpy.types.Scene.neiBianJiXian = bpy.props.BoolProperty(
-        name="neiBianJiXian", default=True)
-    bpy.types.Scene.waiBianYuanSheRuPianYi = bpy.props.FloatProperty(
-        name="waiBianYuanSheRuPianYi", min=0.0, max=3.0, default=2, update=CreateMouldOuterSmooth)
-    bpy.types.Scene.neiBianYuanSheRuPianYi = bpy.props.FloatProperty(
-        name="neiBianYuanSheRuPianYi", min=0.0, max=3.0, default=2, update=CreateMouldInnerSmooth)
+    bpy.types.Scene.createmouldinitR = bpy.props.BoolProperty(
+        name="createmouldinitR", default=False)
+    bpy.types.Scene.createmouldinitL = bpy.props.BoolProperty(
+        name="createmouldinitL", default=False)
 
-    bpy.types.Scene.zongHouDu = bpy.props.FloatProperty(
-        name="zongHouDu", min=0.5, max=3.0, default=1, update=CreateMouldThicknessUpdate)
-    bpy.types.Scene.zongHouDuUpdateCompleled = bpy.props.BoolProperty(
-        name="zongHouDuUpdateCompleled", default=True)
-    bpy.types.Scene.jiHuoBianYuanHouDu = bpy.props.BoolProperty(
-        name="jiHuoBianYuanHouDu")
-    bpy.types.Scene.waiBuHouDu = bpy.props.FloatProperty(
-        name="waiBuHouDu", min=-1.0, max=1.0)
-    bpy.types.Scene.waiBuQuYuKuanDu = bpy.props.FloatProperty(
-        name="waiBuQuYuKuanDu", min=-1.0, max=1.0)
-    bpy.types.Scene.zhongJianHouDu = bpy.props.FloatProperty(
-        name="zhongJianHouDu", min=-1.0, max=1.0)
-    bpy.types.Scene.shiFouShiYongNeiBu = bpy.props.BoolProperty(
-        name="shiFouShiYongNeiBu")
-    bpy.types.Scene.zhongJianQuYuKuanDu = bpy.props.FloatProperty(
-        name="zhongJianQuYuKuanDu", min=-1.0, max=1.0)
-    bpy.types.Scene.neiBuHouDu = bpy.props.FloatProperty(
-        name="neiBuHouDu", min=-1.0, max=1.0)
+    # 创建模具属性
+    bpy.types.Scene.neiBianJiXianR = bpy.props.BoolProperty(
+        name="neiBianJiXianR", default=False, update=HoleBorder)
+    bpy.types.Scene.waiBianYuanSheRuPianYiR = bpy.props.FloatProperty(
+        name="waiBianYuanSheRuPianYiR", min=0.0, max=5.0, default=0, update=CreateMouldOuterSmooth)
+    bpy.types.Scene.neiBianYuanSheRuPianYiR = bpy.props.FloatProperty(
+        name="neiBianYuanSheRuPianYiR", min=0.0, max=5.0, default=0, update=CreateMouldInnerSmooth)
+
+    bpy.types.Scene.zongHouDuR = bpy.props.FloatProperty(
+        name="zongHouDuR", min=0.5, max=3.0, default=2, update=CreateMouldThicknessUpdate)
+    bpy.types.Scene.zongHouDuUpdateCompleledR = bpy.props.BoolProperty(
+        name="zongHouDuUpdateCompleledR", default=True)
+    bpy.types.Scene.jiHuoBianYuanHouDuR = bpy.props.BoolProperty(
+        name="jiHuoBianYuanHouDuR")
+    bpy.types.Scene.waiBuHouDuR = bpy.props.FloatProperty(
+        name="waiBuHouDuR", min=-1.0, max=1.0)
+    bpy.types.Scene.waiBuQuYuKuanDuR = bpy.props.FloatProperty(
+        name="waiBuQuYuKuanDuR", min=-1.0, max=1.0)
+    bpy.types.Scene.zhongJianHouDuR = bpy.props.FloatProperty(
+        name="zhongJianHouDuR", min=-1.0, max=1.0)
+    bpy.types.Scene.shiFouShiYongNeiBuR = bpy.props.BoolProperty(
+        name="shiFouShiYongNeiBuR")
+    bpy.types.Scene.zhongJianQuYuKuanDuR = bpy.props.FloatProperty(
+        name="zhongJianQuYuKuanDuR", min=-1.0, max=1.0)
+    bpy.types.Scene.neiBuHouDuR = bpy.props.FloatProperty(
+        name="neiBuHouDuR", min=-1.0, max=1.0)
+
+    bpy.types.Scene.neiBianJiXianL = bpy.props.BoolProperty(
+        name="neiBianJiXianL", default=False, update=HoleBorder)
+    bpy.types.Scene.waiBianYuanSheRuPianYiL = bpy.props.FloatProperty(
+        name="waiBianYuanSheRuPianYiL", min=0.0, max=5.0, default=0, update=CreateMouldOuterSmooth)
+    bpy.types.Scene.neiBianYuanSheRuPianYiL = bpy.props.FloatProperty(
+        name="neiBianYuanSheRuPianYiL", min=0.0, max=5.0, default=0, update=CreateMouldInnerSmooth)
+
+    bpy.types.Scene.zongHouDuL = bpy.props.FloatProperty(
+        name="zongHouDuL", min=0.5, max=3.0, default=2, update=CreateMouldThicknessUpdate)
+    bpy.types.Scene.zongHouDuUpdateCompleledL = bpy.props.BoolProperty(
+        name="zongHouDuUpdateCompleledL", default=True)
+    bpy.types.Scene.jiHuoBianYuanHouDuL = bpy.props.BoolProperty(
+        name="jiHuoBianYuanHouDuL")
+    bpy.types.Scene.waiBuHouDuL = bpy.props.FloatProperty(
+        name="waiBuHouDuL", min=-1.0, max=1.0)
+    bpy.types.Scene.waiBuQuYuKuanDuL = bpy.props.FloatProperty(
+        name="waiBuQuYuKuanDuL", min=-1.0, max=1.0)
+    bpy.types.Scene.zhongJianHouDuL = bpy.props.FloatProperty(
+        name="zhongJianHouDuL", min=-1.0, max=1.0)
+    bpy.types.Scene.shiFouShiYongNeiBuL = bpy.props.BoolProperty(
+        name="shiFouShiYongNeiBuL")
+    bpy.types.Scene.zhongJianQuYuKuanDuL = bpy.props.FloatProperty(
+        name="zhongJianQuYuKuanDuL", min=-1.0, max=1.0)
+    bpy.types.Scene.neiBuHouDuL = bpy.props.FloatProperty(
+        name="neiBuHouDuL", min=-1.0, max=1.0)
+
+
+
 
     bpy.types.Scene.mianBanTypeEnum = bpy.props.EnumProperty(
         name="",
@@ -347,45 +406,132 @@ def My_Properties():
             ('OP1', 'E7111', '')]
     )
 
-    bpy.types.Scene.mianBanPianYi = bpy.props.FloatProperty(
-        name="mianBanPianYi", min=-1.0, max=1.0)
-    bpy.types.Scene.xiaFangYangXianPianYi = bpy.props.FloatProperty(
-        name="xiaFangYangXianPianYi", min=-1.0, max=1.0)
-    bpy.types.Scene.shangSheRuYinZi = bpy.props.FloatProperty(
-        name="shangSheRuYinZi", min=-1.0, max=1.0)
-    bpy.types.Scene.xiaSheRuYinZi = bpy.props.FloatProperty(
-        name="xiaSheRuYinZi", min=-1.0, max=1.0)
-
-    bpy.types.Scene.shiFouShangBuQieGeMianBan = bpy.props.BoolProperty(
-        name="shiFouShangBuQieGeMianBan")
-    bpy.types.Scene.shangBuQieGeMianBanPianYi = bpy.props.FloatProperty(
-        name="shangBuQieGeMianBanPianYi", min=-1.0, max=1.0)
-    bpy.types.Scene.shiFouKongQiangMianBan = bpy.props.BoolProperty(
-        name="shiFouKongQiangMianBan", default=True)
-    bpy.types.Scene.KongQiangMianBanSheRuPianYi = bpy.props.FloatProperty(
-        name="KongQiangMianBanSheRuPianYi", min=-1.0, max=1.0)
-    bpy.types.Scene.ShangBuQieGeBanPianYi = bpy.props.FloatProperty(
-        name="ShangBuQieGeBanPianYi", min=-1.0, max=1.0)
-    bpy.types.Scene.gongXingMianBan = bpy.props.FloatProperty(
-        name="gongXingMianBan", min=-1.0, max=1.0)
-    bpy.types.Scene.gongKuan = bpy.props.FloatProperty(
-        name="gongKuan", min=-1.0, max=1.0)
-    bpy.types.Scene.gongGao = bpy.props.FloatProperty(
-        name="gongGao", min=-1.0, max=1.0)
-
     bpy.types.Scene.yingErMoSheRuPianYiL = bpy.props.FloatProperty(
         name="yingErMoSheRuPianYi", min=0.0, max=3.0, step=10, default=0, update=CreateMouldHardDrumSmooth)
     bpy.types.Scene.yingErMoSheRuPianYiR = bpy.props.FloatProperty(
         name="yingErMoSheRuPianYi", min=0.0, max=3.0, step=10, default=0, update=CreateMouldHardDrumSmooth)
 
-    bpy.types.Scene.shiFouTongFengGuan = bpy.props.BoolProperty(
-        name="shiFouTongFengGuan")
-    bpy.types.Scene.tongFengGuanZhiJing = bpy.props.FloatProperty(
-        name="tongFengGuanZhiJing", min=-1.0, max=1.0)
-    bpy.types.Scene.tongFengGuanHouDu = bpy.props.FloatProperty(
-        name="tongFengGuanHouDu", min=-1.0, max=1.0)
-    bpy.types.Scene.tongFengGuanWaiBuHouDu = bpy.props.FloatProperty(
-        name="tongFengGuanWaiBuHouDu", min=-1.0, max=1.0)
+
+
+    # 外壳蓝线相关
+    bpy.types.Scene.mianBanPianYiR = bpy.props.FloatProperty(
+        name="mianBanPianYiR", min=0.0, max=5, step=10, default=1, update=mianBanPianYi)
+    bpy.types.Scene.xiaFangYangXianPianYiR = bpy.props.FloatProperty(
+        name="xiaFangYangXianPianYiR", min=0.0, max=5, step=10, default=1, update=xiaFangYangXianPianYi)
+    bpy.types.Scene.shangSheRuYinZiR = bpy.props.FloatProperty(
+        name="shangSheRuYinZiR", min=0, max=100, step=100, default=0, update=smooth_loft_part)
+    bpy.types.Scene.xiaSheRuYinZiR = bpy.props.FloatProperty(
+        name="xiaSheRuYinZiR", min=0, max=100, step=100, default=0, update=smooth_loft_part)
+
+    # 上部切割面板
+    bpy.types.Scene.shiFouShangBuQieGeMianBanR = bpy.props.BoolProperty(
+        name="shiFouShangBuQieGeMianBanR", default=False, update=UpperPlane)
+    bpy.types.Scene.shangBuQieGeMianBanPianYiR = bpy.props.FloatProperty(
+        name="shangBuQieGeMianBanPianYiR", min=0.0, max=3,
+        step=10, update=upper_border_smooth, default=0)
+
+    # 空腔面板
+    # bpy.types.Scene.shiFouKongQiangMianBanR = bpy.props.BoolProperty(
+    #     name="shiFouKongQiangMianBanR", default=True)
+    bpy.types.Scene.KongQiangMianBanTypeEnumR = bpy.props.EnumProperty(
+        name="",
+        description='this is option',
+        items=[
+            ('OP1', '使用红环', ''),
+            ('OP2', '使用上部切割面板', ''),
+            ('OP3', '不使用', '')],
+        default='OP1',
+        update=kongQianMianBanTypeUpdate
+    )
+    bpy.types.Scene.KongQiangMianBanSheRuPianYiR = bpy.props.FloatProperty(
+        name="KongQiangMianBanSheRuPianYiR", min=0.0, max=3,
+        step=10, update=soft_eardrum_cavity_border, default=0)
+    bpy.types.Scene.ShangBuQieGeBanPianYiR = bpy.props.FloatProperty(
+        name="ShangBuQieGeBanPianYiR", min=0.0, max=5.0,default=2,update=shangBuQieGeBanPianYiUpdate)
+
+    # 暂时不用
+    bpy.types.Scene.gongXingMianBanR = bpy.props.FloatProperty(
+        name="gongXingMianBanR", min=-1.0, max=1.0)
+    bpy.types.Scene.gongKuanR = bpy.props.FloatProperty(
+        name="gongKuanR", min=-1.0, max=1.0)
+    bpy.types.Scene.gongGaoR = bpy.props.FloatProperty(
+        name="gongGaoR", min=-1.0, max=1.0)
+
+
+    #外壳管道参数
+    bpy.types.Scene.useShellCanalR = bpy.props.BoolProperty(
+        name="useShellCanalR",default=True,update=updateShellCanal)
+    bpy.types.Scene.shellCanalDiameterR = bpy.props.FloatProperty(
+        name="shellCanalDiameterR", min=0.1, max=5.0,default=1,update=updateShellCanalDiameter)
+    bpy.types.Scene.shellCanalThicknessR = bpy.props.FloatProperty(
+        name="shellCanalThicknessR", min=0.1, max=5.0,default=1,update=updateShellCanalThickness)
+    bpy.types.Scene.shellCanalOffsetR = bpy.props.FloatProperty(
+        name="shellCanalOffsetR", min=-3.0, max=3.0,default=1,update=updateCanalOffset)
+    bpy.types.Scene.innerShellCanalOffsetR = bpy.props.FloatProperty(
+        name="innerShellCanalOffsetR", min=0, max=3.0,default=0.5)
+    bpy.types.Scene.outerShellCanalOffsetR = bpy.props.FloatProperty(
+        name="outerShellCanalOffsetR", min=0, max=3.0,default=0.5)
+
+
+
+    # 外壳蓝线相关
+    bpy.types.Scene.mianBanPianYiL = bpy.props.FloatProperty(
+        name="mianBanPianYiL", min=0.0, max=5, step=10, default=1, update=mianBanPianYi)
+    bpy.types.Scene.xiaFangYangXianPianYiL = bpy.props.FloatProperty(
+        name="xiaFangYangXianPianYiL", min=0.0, max=5, step=10, default=1, update=xiaFangYangXianPianYi)
+    bpy.types.Scene.shangSheRuYinZiL = bpy.props.FloatProperty(
+        name="shangSheRuYinZiL", min=0, max=100, step=100, default=0, update=smooth_loft_part)
+    bpy.types.Scene.xiaSheRuYinZiL = bpy.props.FloatProperty(
+        name="xiaSheRuYinZiL", min=0, max=100, step=100, default=0, update=smooth_loft_part)
+
+    # 上部切割面板
+    bpy.types.Scene.shiFouShangBuQieGeMianBanL = bpy.props.BoolProperty(
+        name="shiFouShangBuQieGeMianBanL", default=False, update=UpperPlane)
+    bpy.types.Scene.shangBuQieGeMianBanPianYiL = bpy.props.FloatProperty(
+        name="shangBuQieGeMianBanPianYiL",  min=0.0, max=3,
+        step=10, update=upper_border_smooth, default=0)
+
+    # 空腔面板
+    # bpy.types.Scene.shiFouKongQiangMianBanL = bpy.props.BoolProperty(
+    #     name="shiFouKongQiangMianBanL", default=True)
+    bpy.types.Scene.KongQiangMianBanTypeEnumL = bpy.props.EnumProperty(
+        name="",
+        description='this is option',
+        items=[
+            ('OP1', '使用红环', ''),
+            ('OP2', '使用上部切割面板', ''),
+            ('OP3', '不使用', '')],
+        default='OP1',
+        update=kongQianMianBanTypeUpdate
+    )
+    bpy.types.Scene.KongQiangMianBanSheRuPianYiL = bpy.props.FloatProperty(
+        name="KongQiangMianBanSheRuPianYiL", min=0.0, max=3,
+        step=10, update=soft_eardrum_cavity_border, default=0)
+    bpy.types.Scene.ShangBuQieGeBanPianYiL = bpy.props.FloatProperty(
+        name="ShangBuQieGeBanPianYiL", min=0.0, max=5.0,default=2,update=shangBuQieGeBanPianYiUpdate)
+
+    # 暂时不用
+    bpy.types.Scene.gongXingMianBanL = bpy.props.FloatProperty(
+        name="gongXingMianBanL", min=-1.0, max=1.0)
+    bpy.types.Scene.gongKuanL = bpy.props.FloatProperty(
+        name="gongKuanL", min=-1.0, max=1.0)
+    bpy.types.Scene.gongGaoL = bpy.props.FloatProperty(
+        name="gongGaoL", min=-1.0, max=1.0)
+
+
+    # 外壳管道参数
+    bpy.types.Scene.useShellCanalL = bpy.props.BoolProperty(
+        name="useShellCanalL", default=True,update=updateShellCanal)
+    bpy.types.Scene.shellCanalDiameterL = bpy.props.FloatProperty(
+        name="shellCanalDiameterL", min=0.1, max=5.0,default=1,update=updateShellCanalDiameter)
+    bpy.types.Scene.shellCanalThicknessL = bpy.props.FloatProperty(
+        name="shellCanalThicknessL", min=0.1, max=5.0,default=1,update=updateShellCanalThickness)
+    bpy.types.Scene.shellCanalOffsetL = bpy.props.FloatProperty(
+        name="shellCanalOffsetL", min=-3.0, max=3.0,default=1,update=updateCanalOffset)
+    bpy.types.Scene.innerShellCanalOffsetL = bpy.props.FloatProperty(
+        name="innerShellCanalOffsetL", min=0, max=3.0,default=0.5)
+    bpy.types.Scene.outerShellCanalOffsetL = bpy.props.FloatProperty(
+        name="outerShellCanalOffsetL", min=0, max=3.0,default=0.5)
 
     # 传声孔      管道平滑      传声管道直径         激活   管道形状  偏移
     # 右属性
@@ -410,7 +556,7 @@ def My_Properties():
         name="gaunDaoPinHua_L", default=True)
     bpy.types.Scene.chuanShenGuanDaoZhiJing_L = bpy.props.FloatProperty(
         name="chuanShenGuanDaoZhiJing_L", min=0.2, max=10, step=10,
-        default=2, update=soundcanalupdate_L)
+        default=2, update=soundcanalupdate)
     # bpy.types.Scene.active = bpy.props.BoolProperty(name="active")
     bpy.types.Scene.chuanShenKongOffset_L = bpy.props.FloatProperty(
         name="chuanShenKongOffset_L", min=-50, max=50,update = soundcanalHornpipeOffset)
@@ -720,26 +866,23 @@ def Houdu(self, context):
     is_back = get_is_back()
     is_dialog = get_is_dialog()
     if active_object.type == 'MESH' and bpy.data.objects.get(reset_name) != None:
-        if not get_modal_start() or (get_modal_start() and is_back):
+        if not get_is_operator() or (get_is_operator() and is_back):
             me = active_object.data
             reset_me = reset_obj.data
-            bm = bmesh.new()
-            bm.from_mesh(me)
-            bm.verts.ensure_lookup_table()
 
             ori_me = ori_obj.data
             ori_bm = bmesh.new()
             ori_bm.from_mesh(ori_me)
             ori_bm.verts.ensure_lookup_table()
 
-            for vert in bm.verts:
+            for vert in ori_bm.verts:
                 vert.co = ori_bm.verts[vert.index].co + ori_bm.verts[vert.index].normal.normalized() * thickness
-            bm.to_mesh(me)
-            bm.to_mesh(reset_me)
-            bm.free()
+
+            ori_bm.to_mesh(me)
+            ori_bm.to_mesh(reset_me)
             ori_bm.free()
 
-        elif get_modal_start() and not is_back and not is_dialog:
+        elif get_is_operator() and not is_back and not is_dialog:
             bpy.ops.object.damo_operator('INVOKE_DEFAULT')
 
 
@@ -756,12 +899,6 @@ def scale_strength(self, context):
             bpy.data.brushes["SculptDraw"].strength = 25 / radius * context.scene.damo_scale_strength_L
         elif context.scene.var == 3:
             bpy.data.brushes["Smooth"].strength = 25 / radius * context.scene.damo_scale_strength_L
-
-
-
-def localLaHouDu(self, context):
-    bl_description = "记录局部蜡厚度开启前的数据"
-    remember_vertex_change()
 
 
 # 环切舍入偏移函数
@@ -998,9 +1135,9 @@ def ChangeMouldName(self, context):
 
 # ('OP1', '软耳模', '', 'URL', 1),
 # ('OP2', '硬耳膜', '', 'URL', 2),
-# ('OP3', '一体外壳', '', 'URL', 3),
+# ('OP3', '常规外壳', '', 'URL', 3),
 # ('OP4', '框架式耳膜', '', 'URL', 4),
-# ('OP5', '常规外壳', '', 'URL', 5),
+# ('OP5', '一体外壳', '', 'URL', 5),
 # ('OP6', '实心面板', '', 'URL', 6)
 def ChangeMouldType(self, context):
     bl_description = "切换模板"
@@ -1013,21 +1150,52 @@ def ChangeMouldType(self, context):
     if enum == "OP2":
         bpy.context.scene.muJuNameEnum = '硬耳膜'
     if enum == "OP3":
-        bpy.context.scene.muJuNameEnum = '一体外壳'
+        bpy.context.scene.muJuNameEnum = '常规外壳'
     if enum == "OP4":
         bpy.context.scene.muJuNameEnum = '框架式耳膜'
     if enum == "OP5":
-        bpy.context.scene.muJuNameEnum = '常规外壳'
+        bpy.context.scene.muJuNameEnum = '一体外壳'
     if enum == "OP6":
         bpy.context.scene.muJuNameEnum = '实心面板'
 
     # 重置回最开始
     override = getOverride()
-    if override!= None:
+    if override != None:
         with bpy.context.temp_override(**override):
-            recover_flag = recover()
-            # 开启切割modal
-            set_is_cut_finish(False)
+            last_eunm = get_type()
+            if context.scene.leftWindowObj == '右耳':
+                bpy.context.scene.createmouldinitR = False
+            elif context.scene.leftWindowObj == '左耳':
+                bpy.context.scene.createmouldinitL = False
+            if (last_eunm == 'OP1' and enum == 'OP4') or (last_eunm == 'OP4' and enum == 'OP1'):
+                name = bpy.context.scene.leftWindowObj
+                set_type(enum)
+                reset_to_after_cut()
+                torus_obj = [name + "Circle", name + "Torus", name + "UpperCircle", name + "UpperTorus"]
+                delete_useless_object(torus_obj)
+                if last_eunm == 'OP1':
+                    if context.scene.leftWindowObj == '右耳':
+                        set_left_soft_eardrum_border_template(get_left_frame_style_eardrum_border_template())
+                    else:
+                        set_right_soft_eardrum_border_template(get_right_frame_style_eardrum_border_template())
+                elif last_eunm == 'OP4':
+                    for obj in bpy.data.objects:
+                        if re.match(name + 'HoleBorderCurve', obj.name) is not None:
+                            bpy.data.objects.remove(obj, do_unlink=True)
+                    for obj in bpy.data.objects:
+                        if re.match(name + 'meshHoleBorderCurve', obj.name) is not None:
+                            bpy.data.objects.remove(obj, do_unlink=True)
+                    if context.scene.leftWindowObj == '右耳':
+                        set_left_frame_style_eardrum_border_template(get_left_soft_eardrum_border_template())
+                    else:
+                        set_right_frame_style_eardrum_border_template(get_right_soft_eardrum_border_template())
+                create_mould_fill()
+                bpy.context.scene.var = 32   # 将正在运行的modal退出
+            else:
+                recover_flag = recover(last_eunm, restart=False)
+                set_type(enum)
+                create_mould_cut()
+                bpy.context.scene.var = 32
 
             # if enum == "OP1":
             #     print("软耳模")
@@ -1051,7 +1219,6 @@ def ChangeMouldType(self, context):
 
 def CreateMouldThicknessUpdate(self, context):
     bl_description = "更新创建模具中的总厚度"
-    thickness = context.scene.zongHouDu
     enum = bpy.context.scene.muJuTypeEnum
 
     # 根据不同的模具执行不同的逻辑
@@ -1062,7 +1229,8 @@ def CreateMouldThicknessUpdate(self, context):
     elif enum == "OP4":
         override = getOverride()
         with bpy.context.temp_override(**override):
-            recover_and_refill()
+            # recover_and_refill()
+            reset_and_refill()
 
 
 def CreateMouldOuterSmooth(self, context):
@@ -1074,11 +1242,15 @@ def CreateMouldOuterSmooth(self, context):
     if enum == "OP1":
         override = getOverride()
         with bpy.context.temp_override(**override):
-            re_smooth("右耳OuterOrigin", "右耳OuterRetopo", "右耳InnerRetopo", "BottomOuterBorderVertex", bpy.context.scene.waiBianYuanSheRuPianYi)
+            soft_extrude_smooth_initial()
+            # re_smooth("右耳OuterOrigin", "右耳OuterRetopo", "右耳InnerRetopo", "BottomOuterBorderVertex", bpy.context.scene.waiBianYuanSheRuPianYi)
     elif enum == "OP4":
         override = getOverride()
         with bpy.context.temp_override(**override):
-            recover_and_refill()
+            soft_extrude_smooth_initial()
+            # frame_extrude_smooth_initial()
+            # recover_and_refill()
+
 
 def CreateMouldInnerSmooth(self, context):
     bl_description = "创建模具后,平滑其内边缘"
@@ -1089,11 +1261,128 @@ def CreateMouldInnerSmooth(self, context):
     if enum == "OP1":
         override = getOverride()
         with bpy.context.temp_override(**override):
-            re_smooth("右耳InnerOrigin", "右耳InnerRetopo", "右耳OuterRetopo", "BottomInnerBorderVertex", bpy.context.scene.neiBianYuanSheRuPianYi)
+            soft_extrude_smooth_initial()
+            # re_smooth("右耳InnerOrigin", "右耳InnerRetopo", "右耳OuterRetopo", "BottomInnerBorderVertex", bpy.context.scene.neiBianYuanSheRuPianYi)
     elif enum == "OP4":
         override = getOverride()
         with bpy.context.temp_override(**override):
-            recover_and_refill()
+            soft_extrude_smooth_initial()
+            # frame_extrude_smooth_initial()
+            # recover_and_refill()
+
+
+# 软耳模空腔面板边缘平滑
+def soft_eardrum_cavity_border(self, context):
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        enum = bpy.context.scene.muJuTypeEnum
+        if (enum == 'OP1'):
+            refill_after_cavity_smooth()
+        elif(enum == 'OP3'):
+            # update_middle_circle_cut()
+            update_middle_circle_smooth()
+
+def kongQianMianBanTypeUpdate(self,context):
+    override = getOverride()
+    if context.scene.leftWindowObj == '右耳':
+        createmouldinit = bpy.context.scene.createmouldinitR
+    elif context.scene.leftWindowObj == '左耳':
+        createmouldinit = bpy.context.scene.createmouldinitL
+    if createmouldinit:
+        with bpy.context.temp_override(**override):
+            enum = bpy.context.scene.muJuTypeEnum
+            if(enum == 'OP3'):
+                useMiddleTrous()
+                update_top_circle_cut()
+
+def shangBuQieGeBanPianYiUpdate(self,context):
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        enum = bpy.context.scene.muJuTypeEnum
+        if(enum == 'OP3'):
+            update_middle_circle_offset()
+            update_middle_circle_cut()
+
+# 上部切割面板边缘平滑
+def upper_border_smooth(self, context):
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        enum = bpy.context.scene.muJuTypeEnum
+        if (enum == 'OP1' or enum == 'OP4'):
+            refill_after_upper_smooth()
+        if (enum == 'OP3'):
+            update_top_circle_smooth()
+
+
+# 是否启用上部切割面板
+def UpperPlane(self, context):
+    enum = bpy.context.scene.muJuTypeEnum
+    if enum == 'OP1' or enum == 'OP4':
+        if context.scene.leftWindowObj == '右耳':
+            shangbuqiege = bpy.context.scene.shiFouShangBuQieGeMianBanR
+            createmouldinit = bpy.context.scene.createmouldinitR
+            neibianjixian = bpy.context.scene.neiBianJiXianR
+        elif context.scene.leftWindowObj == '左耳':
+            shangbuqiege = bpy.context.scene.shiFouShangBuQieGeMianBanL
+            createmouldinit = bpy.context.scene.createmouldinitL
+            neibianjixian = bpy.context.scene.neiBianJiXianL
+
+        if createmouldinit:
+            if shangbuqiege:
+                override = getOverride()
+                with bpy.context.temp_override(**override):
+                    set_finish(True)
+                    draw_cut_plane_upper(context.scene.leftWindowObj)
+                    if neibianjixian:
+                        reset_and_dig_and_refill()
+                    else:
+                        reset_and_refill()
+                    set_finish(False)
+            else:
+                override = getOverride()
+                with bpy.context.temp_override(**override):
+                    name = bpy.context.scene.leftWindowObj
+                    if bpy.data.objects.get(name + 'UpperTorus') != None:
+                        bpy.data.objects.remove(bpy.data.objects[name + 'UpperTorus'], do_unlink=True)
+                    if bpy.data.objects.get(name + 'UpperCircle') != None:
+                        bpy.data.objects.remove(bpy.data.objects[name + 'UpperCircle'], do_unlink=True)
+                    if bpy.data.objects.get(name + 'InnerSmooth') != None:
+                        bpy.data.objects.remove(bpy.data.objects[name + 'InnerSmooth'], do_unlink=True)
+                    set_finish(True)
+                    if neibianjixian:
+                        reset_and_dig_and_refill()
+                    else:
+                        reset_and_refill()
+                    set_finish(False)
+
+
+# 是否启用边缘蓝线（框架式耳膜中的挖孔蓝线）
+def HoleBorder(self, context):
+    enum = bpy.context.scene.muJuTypeEnum
+    if enum == 'OP1' or enum == 'OP4':
+        if context.scene.leftWindowObj == '右耳':
+            neibianjixian = bpy.context.scene.neiBianJiXianR
+            createmouldinit = bpy.context.scene.createmouldinitR
+        elif context.scene.leftWindowObj == '左耳':
+            neibianjixian = bpy.context.scene.neiBianJiXianL
+            createmouldinit = bpy.context.scene.createmouldinitL
+
+        if createmouldinit:
+            if neibianjixian:
+                override = getOverride()
+                with bpy.context.temp_override(**override):
+                    reset_and_dig_and_refill()
+            else:
+                override = getOverride()
+                with bpy.context.temp_override(**override):
+                    name = bpy.context.scene.leftWindowObj
+                    for obj in bpy.data.objects:
+                        if re.match(name + 'HoleBorderCurve', obj.name) is not None:
+                            bpy.data.objects.remove(obj, do_unlink=True)
+                    for obj in bpy.data.objects:
+                        if re.match(name + 'meshHoleBorderCurve', obj.name) is not None:
+                            bpy.data.objects.remove(obj, do_unlink=True)
+                    reset_and_refill()
 
 
 #通过面板参数调整硬耳膜底面平滑度
@@ -1103,145 +1392,112 @@ def CreateMouldHardDrumSmooth(self,context):
     override = getOverride()
     with bpy.context.temp_override(**override):
         print("参数调整平滑开始:", datetime.datetime.now())
-        # smooth_initial()
         name = bpy.context.scene.leftWindowObj
-        main_obj = bpy.data.objects.get(name)
         reset_obj = bpy.data.objects.get(name + "HardEarDrumForSmooth")
 
         if reset_obj:
-            bpy.data.objects.remove(main_obj, do_unlink=True)
-            reset_obj.name = name
-            reset_obj.hide_set(False)
-            bpy.ops.object.select_all(action='DESELECT')
-            bpy.context.view_layer.objects.active = reset_obj
-            reset_obj.select_set(True)
             if bpy.context.scene.leftWindowObj == '右耳':
                 pianyi = bpy.context.scene.yingErMoSheRuPianYiR
             else:
                 pianyi = bpy.context.scene.yingErMoSheRuPianYiL
             if pianyi > 0.4:
+                # 用offset_cut平滑
                 hard_eardrum_smooth()
-            else:
+            elif 0 < pianyi <= 0.4:
+                # 用平滑修改器平滑，避免偏移太小时offset_cut管道切割不成功的情况
                 smooth_initial()
+            else:
+                obj = reset_obj.copy()
+                obj.data = reset_obj.data.copy()
+                obj.name = reset_obj.name + "HardEarDrumTemp"
+                obj.animation_data_clear()
+                bpy.context.scene.collection.objects.link(obj)
+                if bpy.context.scene.leftWindowObj == '右耳':
+                    moveToRight(obj)
+                else:
+                    moveToLeft(obj)
+                obj.hide_set(False)
+                bpy.data.objects.remove(bpy.data.objects[bpy.context.scene.leftWindowObj], do_unlink=True)
+                obj.name = bpy.context.scene.leftWindowObj
+
+                bpy.ops.object.select_all(action='DESELECT')
+                bpy.context.view_layer.objects.active = obj
+                obj.select_set(True)
+                bpy.context.active_object.data.use_auto_smooth = True
+                bpy.context.object.data.auto_smooth_angle = 3.14159
+                bpy.ops.object.modifier_add(type='DATA_TRANSFER')
+                bpy.context.object.modifiers["DataTransfer"].object = bpy.data.objects[
+                    bpy.context.scene.leftWindowObj + "ForBottomFillReset"]
+                bpy.context.object.modifiers["DataTransfer"].vertex_group = "BottomOuterBorderVertex"
+                bpy.context.object.modifiers["DataTransfer"].use_loop_data = True
+                bpy.context.object.modifiers["DataTransfer"].data_types_loops = {'CUSTOM_NORMAL'}
+                bpy.context.object.modifiers["DataTransfer"].loop_mapping = 'POLYINTERP_LNORPROJ'
+                bpy.ops.object.modifier_apply(modifier="DataTransfer", single_user=True)
+
 
         print("参数调整平滑结束:", datetime.datetime.now())
 
-    # print("参数调整平滑开始:",datetime.datetime.now())
-    #
-    # name = context.scene.leftWindowObj
-    # # obj = bpy.data.objects.get(name)
-    # hard_eardrum_smooth = 0
-    # if (name == "右耳"):
-    #     hard_eardrum_smooth = round(bpy.context.scene.yingErMoSheRuPianYiR, 1) * 2
-    # elif (name == "左耳"):
-    #     hard_eardrum_smooth = round(bpy.context.scene.yingErMoSheRuPianYiL, 1) * 2
-    # override = getOverride()
-    # with bpy.context.temp_override(**override):
-    #     name = bpy.context.scene.leftWindowObj
-    #     smooth_name = name + "HardEarDrumForSmooth"
-    #     smooth_obj = bpy.data.objects.get(smooth_name)
-    #
-    #     # 根据HardEarDrumForSmooth复制出一份物体用于平滑操作
-    #     duplicate_obj1 = smooth_obj.copy()
-    #     duplicate_obj1.data = smooth_obj.data.copy()
-    #     duplicate_obj1.name = smooth_obj.name + "HardEarDrumSmoothing"
-    #     duplicate_obj1.animation_data_clear()
-    #     bpy.context.scene.collection.objects.link(duplicate_obj1)
-    #     if bpy.context.scene.leftWindowObj == '右耳':
-    #         moveToRight(duplicate_obj1)
-    #     else:
-    #         moveToLeft(duplicate_obj1)
-    #     bpy.ops.object.select_all(action='DESELECT')
-    #     duplicate_obj1.hide_set(False)
-    #     duplicate_obj1.select_set(True)
-    #     bpy.context.view_layer.objects.active = duplicate_obj1
-    #
-    #     obj = duplicate_obj1
-    #
-    #     # 创建平滑修改器,指定硬耳膜平滑顶点组
-    #     modifier_name = "HardEarDrumModifier4"
-    #     target_modifier = None
-    #     for modifier in obj.modifiers:
-    #         if modifier.name == modifier_name:
-    #             target_modifier = modifier
-    #     if (target_modifier == None):
-    #         modifierHardEarDrumSmooth = obj.modifiers.new(name="HardEarDrumModifier4", type='SMOOTH')
-    #         modifierHardEarDrumSmooth.vertex_group = "HardEarDrumOuterVertex4"
-    #         target_modifier = modifierHardEarDrumSmooth
-    #     target_modifier.factor = 0.5
-    #     target_modifier.iterations = int(hard_eardrum_smooth)
-    #     bpy.ops.object.modifier_apply(modifier="HardEarDrumModifier4")
-    #
-    #     # 创建平滑修改器,指定硬耳膜平滑顶点组
-    #     modifier_name = "HardEarDrumModifier3"
-    #     target_modifier = None
-    #     for modifier in obj.modifiers:
-    #         if modifier.name == modifier_name:
-    #             target_modifier = modifier
-    #     if (target_modifier == None):
-    #         modifierHardEarDrumSmooth = obj.modifiers.new(name="HardEarDrumModifier3", type='SMOOTH')
-    #         modifierHardEarDrumSmooth.vertex_group = "HardEarDrumOuterVertex3"
-    #         target_modifier = modifierHardEarDrumSmooth
-    #     target_modifier.factor = 0.5
-    #     target_modifier.iterations = int(hard_eardrum_smooth * 3)
-    #     bpy.ops.object.modifier_apply(modifier="HardEarDrumModifier3")
-    #
-    #     # 创建平滑修改器,指定硬耳膜平滑顶点组
-    #     modifier_name = "HardEarDrumModifier2"
-    #     target_modifier = None
-    #     for modifier in obj.modifiers:
-    #         if modifier.name == modifier_name:
-    #             target_modifier = modifier
-    #     if (target_modifier == None):
-    #         modifierHardEarDrumSmooth = obj.modifiers.new(name="HardEarDrumModifier2", type='SMOOTH')
-    #         modifierHardEarDrumSmooth.vertex_group = "HardEarDrumOuterVertex2"
-    #         target_modifier = modifierHardEarDrumSmooth
-    #     target_modifier.factor = 0.5
-    #     target_modifier.iterations = int(hard_eardrum_smooth * 7)
-    #     bpy.ops.object.modifier_apply(modifier="HardEarDrumModifier2")
-    #
-    #     # 创建平滑修改器,指定硬耳膜平滑顶点组
-    #     modifier_name = "HardEarDrumModifier1"
-    #     target_modifier = None
-    #     for modifier in obj.modifiers:
-    #         if modifier.name == modifier_name:  #
-    #             target_modifier = modifier
-    #     if (target_modifier == None):
-    #         modifierHardEarDrumSmooth = obj.modifiers.new(name="HardEarDrumModifier1", type='SMOOTH')
-    #         modifierHardEarDrumSmooth.vertex_group = "HardEarDrumOuterVertex1"
-    #         target_modifier = modifierHardEarDrumSmooth
-    #     target_modifier.factor = 0.5
-    #     target_modifier.iterations = int(hard_eardrum_smooth * 10)
-    #     bpy.ops.object.modifier_apply(modifier="HardEarDrumModifier1")
-    #
-    #     if hard_eardrum_smooth != 0:
-    #         # 创建矫正平滑修改器,指定硬耳膜平滑顶点组
-    #         modifier_name = "HardEarDrumModifier5"
-    #         target_modifier = None
-    #         for modifier in obj.modifiers:
-    #             if modifier.name == modifier_name:
-    #                 target_modifier = modifier
-    #         if (target_modifier == None):
-    #             modifierHardEarDrumSmooth = obj.modifiers.new(name="HardEarDrumModifier5", type='CORRECTIVE_SMOOTH')
-    #             modifierHardEarDrumSmooth.smooth_type = 'LENGTH_WEIGHTED'
-    #             modifierHardEarDrumSmooth.vertex_group = "HardEarDrumOuterVertex5"
-    #             modifierHardEarDrumSmooth.scale = 0
-    #             target_modifier = modifierHardEarDrumSmooth
-    #         target_modifier.factor = 0.5
-    #         target_modifier.iterations = 5
-    #         bpy.ops.object.modifier_apply(modifier="HardEarDrumModifier5")
-    #         for i in range(7):
-    #             laplacian_smooth(getIndex5(), 0.3)
-    #         for i in range(5):
-    #             laplacian_smooth(getIndex6(), 0.3)
-    #         for i in range(2):
-    #             laplacian_smooth(getIndex7(), 0.3)
-    #
-    #     # 平滑成功之后,用平滑后的物体替换左/右耳
-    #     bpy.data.objects.remove(bpy.data.objects[bpy.context.scene.leftWindowObj], do_unlink=True)
-    #     obj.name = bpy.context.scene.leftWindowObj
-    #
-    #     print("参数调整平滑结束:", datetime.datetime.now())
+
+def xiaFangYangXianPianYi(self, context):
+    bl_description = "更新下放线的偏移"
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        update_xiafangxian()
+
+
+def mianBanPianYi(self, context):
+    bl_description = "更新面板的偏移"
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        update_mianban()
+
+
+def smooth_loft_part(self, context):
+    bl_description = "更新放样部分的平滑度"
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        update_smooth_factor()
+
+
+def updateShellCanal(self,context):
+    bl_description = "是否开启管道功能"
+
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        updateshellCanalState()
+
+
+
+
+
+def updateShellCanalDiameter(self,context):
+    bl_description = "更新外壳管道的直径"
+
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        updateshellCanalDiameter()
+
+
+
+
+
+def updateShellCanalThickness(self,context):
+    bl_description = "更新管道外壳的厚度"
+
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        updateshellCanalThickness()
+
+
+
+
+def updateCanalOffset(self,context):
+    bl_description = "更新管道外壳的偏移"
+
+    override = getOverride()
+    with bpy.context.temp_override(**override):
+        updateshellCanalOffset()
+
 
 
 def HandleOffsetUpdate(self, context):
@@ -1644,24 +1900,16 @@ def SprueOffsetUpdate(self, context):
 
 def soundcanalupdate(self, context):
     bl_description = "更新传声孔的直径大小"
-
-    diameter = bpy.context.scene.chuanShenGuanDaoZhiJing
+    name = bpy.context.scene.leftWindowObj
+    if name == '右耳':
+        diameter = bpy.context.scene.chuanShenGuanDaoZhiJing
+    else:
+        diameter = bpy.context.scene.chuanShenGuanDaoZhiJing_L
     for obj in bpy.data.objects:
-        if obj.name == 'soundcanal':
+        if obj.name == name + 'soundcanal':
             obj.data.bevel_depth = diameter / 2
-    #更新网格数据
     convert_soundcanal()
 
-# 左耳
-def soundcanalupdate_L(self, context):
-    bl_description = "更新传声孔的直径大小"
-
-    diameter = bpy.context.scene.chuanShenGuanDaoZhiJing_L
-    for obj in bpy.data.objects:
-        if obj.name == 'soundcanal':
-            obj.data.bevel_depth = diameter / 2
-    #更新网格数据
-    convert_soundcanal()
 
 def soundcanalShape(self, context):
     bl_description = "普通管道和号角管之间的切换"
@@ -1687,7 +1935,7 @@ def ventcanalupdate(self, context):
     else:
         diameter = bpy.context.scene.tongQiGuanDaoZhiJing_L
     for obj in bpy.data.objects:
-        if obj.name == 'ventcanal':
+        if obj.name == name + 'ventcanal':
             obj.data.bevel_depth = diameter / 2
     #更新网格数据
     convert_ventcanal()
@@ -1696,28 +1944,31 @@ def ventcanalupdate(self, context):
 def appendmaterial(type, name, material_name, percent):
     obj = bpy.data.objects.get(name)
 
-    if type == 'OP1':  # 自动，一般为实体
-        obj.data.materials.clear()
-        obj.data.materials.append(bpy.data.materials.get(material_name))
-        changealpha(material_name, 1)
-    elif type == 'OP2':  # 不透明
-        obj.data.materials.clear()
-        obj.data.materials.append(bpy.data.materials.get(material_name))
-        changealpha(material_name, 1)
-    elif type == "OP3":  # 透明
-        obj.data.materials.clear()
-        obj.data.materials.append(bpy.data.materials.get(material_name))
-        changealpha(material_name, percent)
+    if obj:
+        if type == 'OP1':  # 自动，一般为实体
+            obj.data.materials.clear()
+            obj.data.materials.append(bpy.data.materials.get(material_name))
+            changealpha(material_name, 1)
+        elif type == 'OP2':  # 不透明
+            obj.data.materials.clear()
+            obj.data.materials.append(bpy.data.materials.get(material_name))
+            changealpha(material_name, 1)
+        elif type == "OP3":  # 透明
+            obj.data.materials.clear()
+            obj.data.materials.append(bpy.data.materials.get(material_name))
+            changealpha(material_name, percent)
 
 
 def changealpha(material_name, alpha):
     mat = bpy.data.materials.get(material_name)
-    if alpha == 1:
-        mat.blend_method = 'OPAQUE'
-        mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 1
-    else:
-        mat.blend_method = 'BLEND'
-        mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = alpha
+
+    if mat:
+        if alpha == 1:
+            mat.blend_method = 'OPAQUE'
+            mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 1
+        else:
+            mat.blend_method = 'BLEND'
+            mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = alpha
 
 
 # 最原始的模型
@@ -1738,7 +1989,7 @@ def show_transparent1(self, context):
     if obj and is_show:
         if obj.hide_get():
             obj.hide_set(False)
-            appendmaterial(type, name, mat_name, percent)
+        appendmaterial(type, name, mat_name, percent)
     elif obj and not is_show:
         if not obj.hide_get():
             obj.hide_set(True)
@@ -1804,7 +2055,7 @@ def show_transparent2(self, context):
     if obj and is_show:
         if obj.hide_get():
             obj.hide_set(False)
-            appendmaterial(type, name, mat_name, percent)
+        appendmaterial(type, name, mat_name, percent)
     elif obj and not is_show:
         if not obj.hide_get():
             obj.hide_set(True)
@@ -1823,8 +2074,8 @@ def update_transparent2(self, context):
         elif name == '左耳':
             is_show = context.scene.transparent2L
             type = context.scene.transparent2EnumL
-            mat_name = "YellowL"
             percent = 1 - float(bpy.context.scene.transparentper2EnumL)
+            mat_name = "YellowL"
 
     else:
         name = context.scene.leftWindowObj + 'WaxForShow'
@@ -1837,8 +2088,8 @@ def update_transparent2(self, context):
         elif context.scene.leftWindowObj == '左耳':
             is_show = context.scene.transparent2L
             type = context.scene.transparent2EnumL
-            mat_name = "tran_blue_l"
             percent = 1 - float(bpy.context.scene.transparentper2EnumL)
+            mat_name = "tran_blue_l"
 
     if obj and is_show:
         appendmaterial(type, name, mat_name, percent)
@@ -1876,8 +2127,9 @@ def update_transparentper2(self, context):
 
 # 正在操作的模型
 def show_transparent3(self, context):
+    current_tab = bpy.context.screen.areas[0].spaces.active.context
     # 从打磨切到切割模具
-    if bpy.context.screen.areas[0].spaces.active.context == 'MATERIAL' and get_color_mode() == 1:
+    if current_tab == 'MATERIAL' and get_color_mode() == 1:
         name = context.scene.leftWindowObj
         obj = bpy.data.objects.get(name)
         if bpy.data.objects.get(name + 'cutmouldforshow') != None:
@@ -1924,7 +2176,7 @@ def show_transparent3(self, context):
         name = obj.name
 
     # 在打磨模块
-    elif bpy.context.screen.areas[0].spaces.active.context == 'RENDER':
+    elif current_tab == 'RENDER':
         return
 
     else:
@@ -1935,15 +2187,20 @@ def show_transparent3(self, context):
             type = context.scene.transparent3EnumR
             percent = 1 - float(bpy.context.scene.transparentper3EnumR)
             mat_name = "YellowR"
+            if (current_tab == 'OUTPUT'):
+                name = name + "LocalThickCompare"
         elif name == '左耳':
             is_show = context.scene.transparent3L
             type = context.scene.transparent3EnumL
+            percent = 1 - float(bpy.context.scene.transparentper3EnumL)
             mat_name = "YellowL"
+            if (current_tab == 'OUTPUT'):
+                name = name + "LocalThickCompare"
 
     if obj and is_show:
         if obj.hide_get():
             obj.hide_set(False)
-            appendmaterial(type, name, mat_name, percent)
+        appendmaterial(type, name, mat_name, percent)
     elif obj and not is_show:
         if not obj.hide_get():
             obj.hide_set(True)
