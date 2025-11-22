@@ -12,10 +12,10 @@ class BooleanCleanup(bpy.types.Operator):
     side_selection_items = [("A", "A", ""),
                             ("B", "B", "")]
 
-    sideselection: EnumProperty(name="Side", items=side_selection_items, default="B")
+    sideselection: EnumProperty(name="Side", items=side_selection_items, default="A")
     flip: BoolProperty(name="Flip Red to Green", default=False)
     threshold: FloatProperty(name="Threshold", default=0, min=0, step=0.1)
-    triangulate: BoolProperty(name="Triangulate", default=True)
+    triangulate: BoolProperty(name="Triangulate", default=False)
     allowmodalthreashold: BoolProperty(default=True)
     sharp: BoolProperty(default=False)
     debuginit: BoolProperty(default=True)

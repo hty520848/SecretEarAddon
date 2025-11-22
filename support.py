@@ -11,6 +11,10 @@ import time
 from .tool import *
 from .parameter import get_switch_time, set_switch_time, get_switch_flag, set_switch_flag, check_modals_running,\
     get_mirror_context, set_mirror_context, get_process_var_list
+from .register_tool import unregister_tools
+from .global_manager import global_manager
+import math
+from .back_and_forward import record_state, backup_state, forward_state
 
 prev_on_hard_support = False  # 判断鼠标在模型上与否的状态是否改变
 prev_on_hard_supportL = False
@@ -51,6 +55,37 @@ support_offsetL = 0
 is_supportAdd_modal_start = False
 is_supportAdd_modal_startL = False
 
+
+def register_support_globals():
+    global is_add_support, is_add_supportL
+    global is_on_rotate, is_on_rotateL
+    global prev_location_x, prev_location_y, prev_location_z
+    global prev_rotation_x, prev_rotation_y, prev_rotation_z
+    global prev_location_xL, prev_location_yL, prev_location_zL
+    global prev_rotation_xL, prev_rotation_yL, prev_rotation_zL
+    global support_enum, support_enumL, support_offset, support_offsetL
+    global_manager.register("is_add_support", is_add_support)
+    global_manager.register("is_add_supportL", is_add_supportL)
+    global_manager.register("is_on_rotate", is_on_rotate)
+    global_manager.register("is_on_rotateL", is_on_rotateL)
+    global_manager.register("prev_location_x", prev_location_x)
+    global_manager.register("prev_location_y", prev_location_y)
+    global_manager.register("prev_location_z", prev_location_z)
+    global_manager.register("prev_rotation_x", prev_rotation_x)
+    global_manager.register("prev_rotation_y", prev_rotation_y)
+    global_manager.register("prev_rotation_z", prev_rotation_z)
+    global_manager.register("prev_location_xL", prev_location_xL)
+    global_manager.register("prev_location_yL", prev_location_yL)
+    global_manager.register("prev_location_zL", prev_location_zL)
+    global_manager.register("prev_rotation_xL", prev_rotation_xL)
+    global_manager.register("prev_rotation_yL", prev_rotation_yL)
+    global_manager.register("prev_rotation_zL", prev_rotation_zL)
+    global_manager.register("support_enum", support_enum)
+    global_manager.register("support_enumL", support_enumL)
+    global_manager.register("support_offset", support_offset)
+    global_manager.register("support_offsetL", support_offsetL)
+
+
 def newColor(id, r, g, b, is_transparency, transparency_degree):
     mat = newMaterial(id)
     nodes = mat.node_tree.nodes
@@ -62,7 +97,7 @@ def newColor(id, r, g, b, is_transparency, transparency_degree):
     shader.inputs[7].default_value = 0
     shader.inputs[9].default_value = 0.472
     shader.inputs[14].default_value = 1
-    shader.inputs[15].default_value = 0.105
+    shader.inputs[15].default_value = 1
     links.new(shader.outputs[0], output.inputs[0])
     if is_transparency:
         mat.blend_method = "BLEND"
@@ -540,6 +575,132 @@ def cal_co(context, event):
                 return co, normal  # 如果发生交叉，返回坐标的值
 
     return -1, -1
+
+def recover_hard_support():
+    name = bpy.context.scene.leftWindowObj
+    hard_support_obj = bpy.data.objects.get(name + "Cone")
+    cone_compare_offset_obj = bpy.data.objects.get(name + "ConeOffsetCompare")
+    cone_compare_offset_obj.hide_set(False)
+    plane_obj = bpy.data.objects.get(name + "Plane")
+    plane_obj.location = (0, 0, 1)
+    plane_obj.rotation_euler = (0, 0, 0)
+    bpy.ops.object.select_all(action='DESELECT')
+    hard_support_obj.select_set(True)
+    cone_compare_offset_obj.select_set(True)
+    plane_obj.select_set(True)
+    bpy.context.view_layer.objects.active = plane_obj
+    bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
+    hard_support_obj.select_set(False)
+    cone_compare_offset_obj.select_set(False)
+    cone_compare_offset_obj.hide_set(True)
+
+
+def recover_soft_support():
+    name = bpy.context.scene.leftWindowObj
+    soft_support_inner_obj = bpy.data.objects.get(name + "SoftSupportInner")
+    soft_support_outer_obj = bpy.data.objects.get(name + "SoftSupportOuter")
+    soft_support_inside_obj = bpy.data.objects.get(name + "SoftSupportInside")
+    soft_support_inner_offset_compare_obj = bpy.data.objects.get(name + "SoftSupportInnerOffsetCompare")
+    soft_support_outer_offset_compare_obj = bpy.data.objects.get(name + "SoftSupportOuterOffsetCompare")
+    soft_support_inside_offset_compare_obj = bpy.data.objects.get(name + "SoftSupportInsideOffsetCompare")
+    bpy.ops.object.select_all(action='DESELECT')
+    soft_support_inner_obj.select_set(True)
+    soft_support_inside_obj.select_set(True)
+    soft_support_outer_obj.select_set(True)
+    bpy.context.view_layer.objects.active = soft_support_outer_obj
+    bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
+    # soft_support_inner_obj.select_set(False)
+    # soft_support_inside_obj.select_set(False)
+
+    # 将排气孔内外壁,内外壁对比物和平面绑定为一组,平面为父物体,提交时统一处理
+    plane_obj = bpy.data.objects.get(name + "Plane")
+    plane_obj.location = (-100, -100, 1)
+    plane_obj.rotation_euler = (0, 0, 0)
+    soft_support_inner_offset_compare_obj.hide_set(False)
+    soft_support_outer_offset_compare_obj.hide_set(False)
+    soft_support_inside_offset_compare_obj.hide_set(False)
+    bpy.ops.object.select_all(action='DESELECT')
+    soft_support_outer_offset_compare_obj.select_set(True)
+    soft_support_inner_offset_compare_obj.select_set(True)
+    soft_support_inside_offset_compare_obj.select_set(True)
+    soft_support_outer_obj.select_set(True)
+    plane_obj.select_set(True)
+    bpy.context.view_layer.objects.active = plane_obj
+    bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
+    soft_support_outer_obj.select_set(False)
+    soft_support_outer_offset_compare_obj.select_set(False)
+    soft_support_inner_offset_compare_obj.select_set(False)
+    soft_support_inside_offset_compare_obj.select_set(False)
+    # 内外壁对比物隐藏
+    soft_support_outer_offset_compare_obj.hide_set(True)
+    soft_support_inner_offset_compare_obj.hide_set(True)
+    soft_support_inside_offset_compare_obj.hide_set(True)
+     
+
+def recover_support():
+    global prev_location_x
+    global prev_location_y
+    global prev_location_z
+    global prev_rotation_x
+    global prev_rotation_y
+    global prev_rotation_z
+    global support_enum
+    global support_offset
+    global is_add_support
+    global prev_location_xL
+    global prev_location_yL
+    global prev_location_zL
+    global prev_rotation_xL
+    global prev_rotation_yL
+    global prev_rotation_zL
+    global support_enumL
+    global support_offsetL
+    global is_add_supportL
+    global is_on_rotate
+    global is_on_rotateL
+   
+    name = bpy.context.scene.leftWindowObj
+    if name == '右耳':
+        if (is_add_support == True):
+            if support_enum == "OP1":
+                recover_hard_support()
+            elif support_enum == "OP2":
+               recover_soft_support()
+            plane_obj = bpy.data.objects.get(name + "Plane")
+            plane_obj.location[0] = prev_location_x
+            plane_obj.location[1] = prev_location_y
+            plane_obj.location[2] = prev_location_z
+            plane_obj.rotation_euler[0] = prev_rotation_x
+            plane_obj.rotation_euler[1] = prev_rotation_y
+            plane_obj.rotation_euler[2] = prev_rotation_z
+        else:
+            bpy.ops.wm.tool_set_by_id(name="my_tool.support_add")
+    elif name == '左耳':
+        if (is_add_supportL == True):
+            if support_enumL == "OP1":
+                recover_hard_support()
+            elif support_enumL == "OP2":
+                recover_soft_support()
+            plane_obj = bpy.data.objects.get(name + "Plane")
+            plane_obj.location[0] = prev_location_xL
+            plane_obj.location[1] = prev_location_yL
+            plane_obj.location[2] = prev_location_zL
+            plane_obj.rotation_euler[0] = prev_rotation_xL
+            plane_obj.rotation_euler[1] = prev_rotation_yL
+            plane_obj.rotation_euler[2] = prev_rotation_zL
+        else:
+            bpy.ops.wm.tool_set_by_id(name="my_tool.support_add")
+
+
+def support_forward():
+    forward_state()
+    recover_support()
+
+
+def support_backup():
+    backup_state()
+    recover_support()
+
 
 def support_fit_rotate(normal,location):
     '''
@@ -1237,28 +1398,89 @@ def supportSaveInfo():
     name = bpy.context.scene.leftWindowObj
     planename = name + "Plane"
     plane_obj = bpy.data.objects.get(planename)
+
+    # Helper: compare floats safely
+    def _floats_different(a, b, tol=1e-6):
+        try:
+            return not math.isclose(a, b, rel_tol=0, abs_tol=tol)
+        except Exception:
+            return True
+
     if name == '右耳':
-        # 记录附件位置信息
-        if (plane_obj != None):
-            prev_location_x = plane_obj.location[0]
-            prev_location_y = plane_obj.location[1]
-            prev_location_z = plane_obj.location[2]
-            prev_rotation_x = plane_obj.rotation_euler[0]
-            prev_rotation_y = plane_obj.rotation_euler[1]
-            prev_rotation_z = plane_obj.rotation_euler[2]
-        support_enum = bpy.context.scene.zhiChengTypeEnum
-        support_offset = bpy.context.scene.zhiChengOffset
+        # 仅在位置/旋转 发生变化时才更新并记录状态，避免重复写入
+        cur_lx = cur_ly = cur_lz = cur_rx = cur_ry = cur_rz = None
+        if plane_obj is not None:
+            cur_lx = plane_obj.location[0]
+            cur_ly = plane_obj.location[1]
+            cur_lz = plane_obj.location[2]
+            cur_rx = plane_obj.rotation_euler[0]
+            cur_ry = plane_obj.rotation_euler[1]
+            cur_rz = plane_obj.rotation_euler[2]
+        cur_enum = bpy.context.scene.zhiChengTypeEnum
+        cur_offset = bpy.context.scene.zhiChengOffset
+
+        changed = False
+        if plane_obj is not None:
+            if _floats_different(prev_location_x, cur_lx) or _floats_different(prev_location_y, cur_ly) or _floats_different(prev_location_z, cur_lz):
+                prev_location_x = cur_lx
+                prev_location_y = cur_ly
+                prev_location_z = cur_lz
+                changed = True
+            if _floats_different(prev_rotation_x, cur_rx) or _floats_different(prev_rotation_y, cur_ry) or _floats_different(prev_rotation_z, cur_rz):
+                prev_rotation_x = cur_rx
+                prev_rotation_y = cur_ry
+                prev_rotation_z = cur_rz
+                changed = True
+            # if support_enum != cur_enum:
+            #     support_enum = cur_enum
+            #     changed = True
+            # if _floats_different(support_offset, cur_offset):
+            #     support_offset = cur_offset
+            #     changed = True
+
+        if changed:
+            record_state()
+
     elif name == '左耳':
-        # 记录附件位置信息
+        cur_lx = cur_ly = cur_lz = cur_rx = cur_ry = cur_rz = None
         if (plane_obj != None):
-            prev_location_xL = plane_obj.location[0]
-            prev_location_yL = plane_obj.location[1]
-            prev_location_zL = plane_obj.location[2]
-            prev_rotation_xL = plane_obj.rotation_euler[0]
-            prev_rotation_yL = plane_obj.rotation_euler[1]
-            prev_rotation_zL = plane_obj.rotation_euler[2]
-        support_enumL = bpy.context.scene.zhiChengTypeEnumL
-        support_offsetL = bpy.context.scene.zhiChengOffsetL
+            cur_lx = plane_obj.location[0]
+            cur_ly = plane_obj.location[1]
+            cur_lz = plane_obj.location[2]
+            cur_rx = plane_obj.rotation_euler[0]
+            cur_ry = plane_obj.rotation_euler[1]
+            cur_rz = plane_obj.rotation_euler[2]
+        cur_enum = bpy.context.scene.zhiChengTypeEnumL
+        cur_offset = bpy.context.scene.zhiChengOffsetL
+
+        changed = False
+        if plane_obj is None:
+            if support_enumL != cur_enum:
+                support_enumL = cur_enum
+                changed = True
+            if _floats_different(support_offsetL, cur_offset):
+                support_offsetL = cur_offset
+                changed = True
+        else:
+            if _floats_different(prev_location_xL, cur_lx) or _floats_different(prev_location_yL, cur_ly) or _floats_different(prev_location_zL, cur_lz):
+                prev_location_xL = cur_lx
+                prev_location_yL = cur_ly
+                prev_location_zL = cur_lz
+                changed = True
+            if _floats_different(prev_rotation_xL, cur_rx) or _floats_different(prev_rotation_yL, cur_ry) or _floats_different(prev_rotation_zL, cur_rz):
+                prev_rotation_xL = cur_rx
+                prev_rotation_yL = cur_ry
+                prev_rotation_zL = cur_rz
+                changed = True
+            # if support_enumL != cur_enum:
+            #     support_enumL = cur_enum
+            #     changed = True
+            # if _floats_different(support_offsetL, cur_offset):
+            #     support_offsetL = cur_offset
+            #     changed = True
+
+        if changed:
+            record_state()
 
 
 
@@ -1300,7 +1522,9 @@ def supportInitial():
             plane_obj.rotation_euler[0] = prev_rotation_x
             plane_obj.rotation_euler[1] = prev_rotation_y
             plane_obj.rotation_euler[2] = prev_rotation_z
+            bpy.context.scene.needrecord = False
             bpy.context.scene.zhiChengOffset = support_offset
+            bpy.context.scene.needrecord = True
             bpy.ops.object.supportswitch('INVOKE_DEFAULT')
             bpy.ops.object.supportadd('INVOKE_DEFAULT')
         else:
@@ -1320,7 +1544,9 @@ def supportInitial():
             plane_obj.rotation_euler[0] = prev_rotation_xL
             plane_obj.rotation_euler[1] = prev_rotation_yL
             plane_obj.rotation_euler[2] = prev_rotation_zL
+            bpy.context.scene.needrecord = False
             bpy.context.scene.zhiChengOffsetL= support_offsetL
+            bpy.context.scene.needrecord = True
             bpy.ops.object.supportswitch('INVOKE_DEFAULT')
             bpy.ops.object.supportadd('INVOKE_DEFAULT')
         else:
@@ -1742,13 +1968,13 @@ class SupportReset(bpy.types.Operator):
 
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         self.execute(context)
+        record_state()
         return {'FINISHED'}
 
     def execute(self, context):
         supportSaveInfo()
         supportReset()
         bpy.ops.wm.tool_set_by_id(name="my_tool.support_add")
-        return {'FINISHED'}
 
 
 class SupportAdd(bpy.types.Operator):
@@ -1825,7 +2051,9 @@ class SupportAdd(bpy.types.Operator):
             if (not is_add_support):
                 is_add_support = True
                 addSupport()
+                bpy.context.scene.needrecord = False
                 bpy.context.scene.zhiChengOffset = support_offset
+                bpy.context.scene.needrecord = True
                 # 将Plane激活并选中
                 name = bpy.context.scene.leftWindowObj
                 planename = name + "Plane"
@@ -1845,7 +2073,9 @@ class SupportAdd(bpy.types.Operator):
             if (not is_add_supportL):
                 is_add_supportL = True
                 addSupport()
+                bpy.context.scene.needrecord = False
                 bpy.context.scene.zhiChengOffsetL = support_offsetL
+                bpy.context.scene.needrecord = True
                 # 将Plane激活并选中
                 name = bpy.context.scene.leftWindowObj
                 planename = name + "Plane"
@@ -1864,240 +2094,229 @@ class SupportAdd(bpy.types.Operator):
         bpy.ops.object.supportswitch('INVOKE_DEFAULT')
 
 
-    def modal(self, context, event):
-        global is_on_rotate
-        global is_on_rotateL
-        support_enum = bpy.context.scene.zhiChengTypeEnum
-        support_enumL = bpy.context.scene.zhiChengTypeEnumL
-        name = bpy.context.scene.leftWindowObj
-        hard_support_name = name + "Cone"
-        hard_support_obj = bpy.data.objects.get(hard_support_name)
-        soft_support_inner_obj = bpy.data.objects.get(name + "SoftSupportInner")
-        soft_support_outer_obj = bpy.data.objects.get(name + "SoftSupportOuter")
-        soft_support_inside_obj = bpy.data.objects.get(name + "SoftSupportInside")
-        soft_support_inner_offset_compare_obj = bpy.data.objects.get(name + "SoftSupportInnerOffsetCompare")
-        soft_support_outer_offset_compare_obj = bpy.data.objects.get(name + "SoftSupportOuterOffsetCompare")
-        soft_support_inside_offset_compare_obj = bpy.data.objects.get(name + "SoftSupportInsideOffsetCompare")
-        planename = name + "Plane"
-        plane_obj = bpy.data.objects.get(planename)
-        cur_obj_name = name
-        cur_obj = bpy.data.objects.get(cur_obj_name)
-        support_enum_cur = "OP1"
-        is_on_rotate_cur = False
-        if name == '右耳':
-            support_enum_cur = support_enum
-            is_on_rotate_cur = is_on_rotate
-        elif name == '左耳':
-            support_enum_cur = support_enumL
-            is_on_rotate_cur = is_on_rotateL
-        if bpy.context.screen.areas[0].spaces.active.context == 'PHYSICS':
-            if (bpy.context.scene.var == 77):
-                if(not is_on_rotate_cur):
-                    if support_enum_cur == "OP1":
-                        if(hard_support_obj != None):
-                            if (is_mouse_on_object(context, event) and not is_mouse_on_hard_support(context, event) and (is_changed_hard_support(context, event) or is_changed(context, event))):
-                                # 公共鼠标行为加双击移动附件位置
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                hard_support_obj.data.materials.clear()
-                                hard_support_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                            elif (is_mouse_on_hard_support(context, event) and (is_changed(context, event) or is_changed_hard_support(context,event))):
-                                # 调用hardSupport的鼠标行为
-                                yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
-                                hard_support_obj.data.materials.clear()
-                                hard_support_obj.data.materials.append(yellow_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
-                                plane_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = plane_obj
-                                cur_obj.select_set(False)
-                            elif ((not is_mouse_on_object(context, event)) and (is_changed(context, event) or is_changed_hard_support(context,event))):
-                                # 调用公共鼠标行为
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                hard_support_obj.data.materials.clear()
-                                hard_support_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                    elif support_enum_cur == "OP2":
-                        if(soft_support_inner_obj != None and soft_support_outer_obj != None and soft_support_inside_obj != None):
-                            if (is_mouse_on_object(context, event) and not is_mouse_on_soft_support(context, event) and (is_changed_soft_support(context, event) or is_changed(context, event))):
-                                # 公共鼠标行为加双击移动附件位置
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                # soft_support_inner_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inner_obj
-                                soft_support_inner_obj.data.materials.clear()
-                                soft_support_inner_obj.data.materials.append(red_material)
-                                # soft_support_outer_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_outer_obj
-                                soft_support_outer_obj.data.materials.clear()
-                                soft_support_outer_obj.data.materials.append(red_material)
-                                # soft_support_inside_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inside_obj
-                                soft_support_inside_obj.data.materials.clear()
-                                soft_support_inside_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                            elif (is_mouse_on_soft_support(context, event) and (is_changed_soft_support(context, event) or is_changed(context, event))):
-                                # 调用softSupport的鼠标行为
-                                yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
-                                # soft_support_inner_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inner_obj
-                                soft_support_inner_obj.data.materials.clear()
-                                soft_support_inner_obj.data.materials.append(yellow_material)
-                                # soft_support_outer_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_outer_obj
-                                soft_support_outer_obj.data.materials.clear()
-                                soft_support_outer_obj.data.materials.append(yellow_material)
-                                # soft_support_inside_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inside_obj
-                                soft_support_inside_obj.data.materials.clear()
-                                soft_support_inside_obj.data.materials.append(yellow_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
-                                plane_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = plane_obj
-                                cur_obj.select_set(False)
-                                soft_support_inner_obj.select_set(False)
-                                soft_support_outer_obj.select_set(False)
-                                soft_support_inside_obj.select_set(False)
-                            elif ((not is_mouse_on_object(context, event)) and (is_changed_soft_support(context, event) or is_changed(context, event))):
-                                # 调用公共鼠标行为
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                # soft_support_inner_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inner_obj
-                                soft_support_inner_obj.data.materials.clear()
-                                soft_support_inner_obj.data.materials.append(red_material)
-                                # soft_support_outer_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_outer_obj
-                                soft_support_outer_obj.data.materials.clear()
-                                soft_support_outer_obj.data.materials.append(red_material)
-                                # soft_support_inside_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inside_obj
-                                soft_support_inside_obj.data.materials.clear()
-                                soft_support_inside_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                                soft_support_inner_obj.select_set(False)
-                                soft_support_outer_obj.select_set(False)
-                                soft_support_inside_obj.select_set(False)
-                if(is_on_rotate_cur):
-                    if support_enum_cur == "OP1":
-                        if(hard_support_obj != None):
-                            if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
-                                    is_changed_sphere(context, event) or is_changed(context, event))):
-                                # 公共鼠标行为加双击移动附件位置
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                hard_support_obj.data.materials.clear()
-                                hard_support_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                            elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
-                                # 调用hardSupport的三维旋转鼠标行为
-                                yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
-                                hard_support_obj.data.materials.clear()
-                                hard_support_obj.data.materials.append(yellow_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
-                                plane_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = plane_obj
-                                cur_obj.select_set(False)
-                            elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
-                                # 调用公共鼠标行为
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                hard_support_obj.data.materials.clear()
-                                hard_support_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                    elif support_enum_cur == "OP2":
-                        if(soft_support_inner_obj != None and soft_support_outer_obj != None and soft_support_inside_obj != None):
-                            if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
-                                    is_changed_sphere(context, event) or is_changed(context, event))):
-                                # 公共鼠标行为加双击移动附件位置
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                # soft_support_inner_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inner_obj
-                                soft_support_inner_obj.data.materials.clear()
-                                soft_support_inner_obj.data.materials.append(red_material)
-                                # soft_support_outer_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_outer_obj
-                                soft_support_outer_obj.data.materials.clear()
-                                soft_support_outer_obj.data.materials.append(red_material)
-                                # soft_support_inside_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inside_obj
-                                soft_support_inside_obj.data.materials.clear()
-                                soft_support_inside_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                            elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
-                                # 调用softSupport的鼠标行为
-                                yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
-                                # soft_support_inner_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inner_obj
-                                soft_support_inner_obj.data.materials.clear()
-                                soft_support_inner_obj.data.materials.append(yellow_material)
-                                # soft_support_outer_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_outer_obj
-                                soft_support_outer_obj.data.materials.clear()
-                                soft_support_outer_obj.data.materials.append(yellow_material)
-                                # soft_support_inside_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inside_obj
-                                soft_support_inside_obj.data.materials.clear()
-                                soft_support_inside_obj.data.materials.append(yellow_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
-                                plane_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = plane_obj
-                                cur_obj.select_set(False)
-                                soft_support_inner_obj.select_set(False)
-                                soft_support_outer_obj.select_set(False)
-                                soft_support_inside_obj.select_set(False)
-                            elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
-                                # 调用公共鼠标行为
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                # soft_support_inner_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inner_obj
-                                soft_support_inner_obj.data.materials.clear()
-                                soft_support_inner_obj.data.materials.append(red_material)
-                                # soft_support_outer_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_outer_obj
-                                soft_support_outer_obj.data.materials.clear()
-                                soft_support_outer_obj.data.materials.append(red_material)
-                                # soft_support_inside_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inside_obj
-                                soft_support_inside_obj.data.materials.clear()
-                                soft_support_inside_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                                soft_support_inner_obj.select_set(False)
-                                soft_support_outer_obj.select_set(False)
-                                soft_support_inside_obj.select_set(False)
-                return {'PASS_THROUGH'}
-            else:
-                print("supportadd_modal_finished")
-                return {'FINISHED'}
-
-        else:
-            if get_switch_time() != None and time.time() - get_switch_time() > 0.3 and get_switch_flag():
-                print("supportadd_modal_finished")
-                set_switch_time(None)
-                now_context = bpy.context.screen.areas[0].spaces.active.context
-                if not check_modals_running(bpy.context.scene.var, now_context):
-                    bpy.context.scene.var = 0
-                return {'FINISHED'}
-            return {'PASS_THROUGH'}
+    # def modal(self, context, event):
+    #     global is_on_rotate
+    #     global is_on_rotateL
+    #     support_enum = bpy.context.scene.zhiChengTypeEnum
+    #     support_enumL = bpy.context.scene.zhiChengTypeEnumL
+    #     name = bpy.context.scene.leftWindowObj
+    #     hard_support_name = name + "Cone"
+    #     hard_support_obj = bpy.data.objects.get(hard_support_name)
+    #     soft_support_inner_obj = bpy.data.objects.get(name + "SoftSupportInner")
+    #     soft_support_outer_obj = bpy.data.objects.get(name + "SoftSupportOuter")
+    #     soft_support_inside_obj = bpy.data.objects.get(name + "SoftSupportInside")
+    #     soft_support_inner_offset_compare_obj = bpy.data.objects.get(name + "SoftSupportInnerOffsetCompare")
+    #     soft_support_outer_offset_compare_obj = bpy.data.objects.get(name + "SoftSupportOuterOffsetCompare")
+    #     soft_support_inside_offset_compare_obj = bpy.data.objects.get(name + "SoftSupportInsideOffsetCompare")
+    #     planename = name + "Plane"
+    #     plane_obj = bpy.data.objects.get(planename)
+    #     cur_obj_name = name
+    #     cur_obj = bpy.data.objects.get(cur_obj_name)
+    #     support_enum_cur = "OP1"
+    #     is_on_rotate_cur = False
+    #     if name == '右耳':
+    #         support_enum_cur = support_enum
+    #         is_on_rotate_cur = is_on_rotate
+    #     elif name == '左耳':
+    #         support_enum_cur = support_enumL
+    #         is_on_rotate_cur = is_on_rotateL
+    #     if bpy.context.scene.var == 77:
+    #         if(not is_on_rotate_cur):
+    #             if support_enum_cur == "OP1":
+    #                 if(hard_support_obj != None):
+    #                     if (is_mouse_on_object(context, event) and not is_mouse_on_hard_support(context, event) and (is_changed_hard_support(context, event) or is_changed(context, event))):
+    #                         # 公共鼠标行为加双击移动附件位置
+    #                         red_material = newColor("Red", 1, 0, 0, 0, 1)
+    #                         hard_support_obj.data.materials.clear()
+    #                         hard_support_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #                     elif (is_mouse_on_hard_support(context, event) and (is_changed(context, event) or is_changed_hard_support(context,event))):
+    #                         # 调用hardSupport的鼠标行为
+    #                         yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
+    #                         hard_support_obj.data.materials.clear()
+    #                         hard_support_obj.data.materials.append(yellow_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+    #                         plane_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = plane_obj
+    #                         cur_obj.select_set(False)
+    #                     elif ((not is_mouse_on_object(context, event)) and (is_changed(context, event) or is_changed_hard_support(context,event))):
+    #                         # 调用公共鼠标行为
+    #                         red_material = newColor("Red", 1, 0, 0, 0, 1)
+    #                         hard_support_obj.data.materials.clear()
+    #                         hard_support_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #             elif support_enum_cur == "OP2":
+    #                 if(soft_support_inner_obj != None and soft_support_outer_obj != None and soft_support_inside_obj != None):
+    #                     if (is_mouse_on_object(context, event) and not is_mouse_on_soft_support(context, event) and (is_changed_soft_support(context, event) or is_changed(context, event))):
+    #                         # 公共鼠标行为加双击移动附件位置
+    #                         red_material = newColor("Red", 1, 0, 0, 0, 1)
+    #                         # soft_support_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_inner_obj
+    #                         soft_support_inner_obj.data.materials.clear()
+    #                         soft_support_inner_obj.data.materials.append(red_material)
+    #                         # soft_support_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_outer_obj
+    #                         soft_support_outer_obj.data.materials.clear()
+    #                         soft_support_outer_obj.data.materials.append(red_material)
+    #                         # soft_support_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_inside_obj
+    #                         soft_support_inside_obj.data.materials.clear()
+    #                         soft_support_inside_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #                     elif (is_mouse_on_soft_support(context, event) and (is_changed_soft_support(context, event) or is_changed(context, event))):
+    #                         # 调用softSupport的鼠标行为
+    #                         yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
+    #                         # soft_support_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_inner_obj
+    #                         soft_support_inner_obj.data.materials.clear()
+    #                         soft_support_inner_obj.data.materials.append(yellow_material)
+    #                         # soft_support_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_outer_obj
+    #                         soft_support_outer_obj.data.materials.clear()
+    #                         soft_support_outer_obj.data.materials.append(yellow_material)
+    #                         # soft_support_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_inside_obj
+    #                         soft_support_inside_obj.data.materials.clear()
+    #                         soft_support_inside_obj.data.materials.append(yellow_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+    #                         plane_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = plane_obj
+    #                         cur_obj.select_set(False)
+    #                         soft_support_inner_obj.select_set(False)
+    #                         soft_support_outer_obj.select_set(False)
+    #                         soft_support_inside_obj.select_set(False)
+    #                     elif ((not is_mouse_on_object(context, event)) and (is_changed_soft_support(context, event) or is_changed(context, event))):
+    #                         # 调用公共鼠标行为
+    #                         red_material = newColor("Red", 1, 0, 0, 0, 1)
+    #                         # soft_support_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_inner_obj
+    #                         soft_support_inner_obj.data.materials.clear()
+    #                         soft_support_inner_obj.data.materials.append(red_material)
+    #                         # soft_support_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_outer_obj
+    #                         soft_support_outer_obj.data.materials.clear()
+    #                         soft_support_outer_obj.data.materials.append(red_material)
+    #                         # soft_support_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_inside_obj
+    #                         soft_support_inside_obj.data.materials.clear()
+    #                         soft_support_inside_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #                         soft_support_inner_obj.select_set(False)
+    #                         soft_support_outer_obj.select_set(False)
+    #                         soft_support_inside_obj.select_set(False)
+    #         if(is_on_rotate_cur):
+    #             if support_enum_cur == "OP1":
+    #                 if(hard_support_obj != None):
+    #                     if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
+    #                             is_changed_sphere(context, event) or is_changed(context, event))):
+    #                         # 公共鼠标行为加双击移动附件位置
+    #                         red_material = newColor("Red", 1, 0, 0, 0, 1)
+    #                         hard_support_obj.data.materials.clear()
+    #                         hard_support_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #                     elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+    #                         # 调用hardSupport的三维旋转鼠标行为
+    #                         yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
+    #                         hard_support_obj.data.materials.clear()
+    #                         hard_support_obj.data.materials.append(yellow_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
+    #                         plane_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = plane_obj
+    #                         cur_obj.select_set(False)
+    #                     elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+    #                         # 调用公共鼠标行为
+    #                         red_material = newColor("Red", 1, 0, 0, 0, 1)
+    #                         hard_support_obj.data.materials.clear()
+    #                         hard_support_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #             elif support_enum_cur == "OP2":
+    #                 if(soft_support_inner_obj != None and soft_support_outer_obj != None and soft_support_inside_obj != None):
+    #                     if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
+    #                             is_changed_sphere(context, event) or is_changed(context, event))):
+    #                         # 公共鼠标行为加双击移动附件位置
+    #                         red_material = newColor("Red", 1, 0, 0, 0, 1)
+    #                         # soft_support_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_inner_obj
+    #                         soft_support_inner_obj.data.materials.clear()
+    #                         soft_support_inner_obj.data.materials.append(red_material)
+    #                         # soft_support_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_outer_obj
+    #                         soft_support_outer_obj.data.materials.clear()
+    #                         soft_support_outer_obj.data.materials.append(red_material)
+    #                         # soft_support_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_inside_obj
+    #                         soft_support_inside_obj.data.materials.clear()
+    #                         soft_support_inside_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #                     elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+    #                         # 调用softSupport的鼠标行为
+    #                         yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
+    #                         # soft_support_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_inner_obj
+    #                         soft_support_inner_obj.data.materials.clear()
+    #                         soft_support_inner_obj.data.materials.append(yellow_material)
+    #                         # soft_support_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_outer_obj
+    #                         soft_support_outer_obj.data.materials.clear()
+    #                         soft_support_outer_obj.data.materials.append(yellow_material)
+    #                         # soft_support_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_inside_obj
+    #                         soft_support_inside_obj.data.materials.clear()
+    #                         soft_support_inside_obj.data.materials.append(yellow_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
+    #                         plane_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = plane_obj
+    #                         cur_obj.select_set(False)
+    #                         soft_support_inner_obj.select_set(False)
+    #                         soft_support_outer_obj.select_set(False)
+    #                         soft_support_inside_obj.select_set(False)
+    #                     elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+    #                         # 调用公共鼠标行为
+    #                         red_material = newColor("Red", 1, 0, 0, 0, 1)
+    #                         # soft_support_inner_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_inner_obj
+    #                         soft_support_inner_obj.data.materials.clear()
+    #                         soft_support_inner_obj.data.materials.append(red_material)
+    #                         # soft_support_outer_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_outer_obj
+    #                         soft_support_outer_obj.data.materials.clear()
+    #                         soft_support_outer_obj.data.materials.append(red_material)
+    #                         # soft_support_inside_obj.select_set(True)
+    #                         # bpy.context.view_layer.objects.active = soft_support_inside_obj
+    #                         soft_support_inside_obj.data.materials.clear()
+    #                         soft_support_inside_obj.data.materials.append(red_material)
+    #                         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    #                         cur_obj.select_set(True)
+    #                         bpy.context.view_layer.objects.active = cur_obj
+    #                         plane_obj.select_set(False)
+    #                         soft_support_inner_obj.select_set(False)
+    #                         soft_support_outer_obj.select_set(False)
+    #                         soft_support_inside_obj.select_set(False)
+    #         return {'PASS_THROUGH'}
+    #     else:
+    #         print("supportadd_modal_finished")
+    #         return {'FINISHED'}
 
 
 class SupportSwitch(bpy.types.Operator):
@@ -2151,13 +2370,15 @@ class SupportSwitch(bpy.types.Operator):
         elif name == '左耳':
             support_enum_cur = support_enumL
             is_on_rotate_cur = is_on_rotateL
-        if bpy.context.screen.areas[0].spaces.active.context == 'PHYSICS':
-            if get_mirror_context():
-                print('supportswitch_modal_finished')
-                is_supportAdd_modal_start = False
-                set_mirror_context(False)
-                return {'FINISHED'}
-            if (event.mouse_x < area.width and area.y < event.mouse_y < area.y + area.height and bpy.context.scene.var == 77):
+
+        if get_mirror_context():
+            print('supportswitch_modal_finished')
+            is_supportAdd_modal_start = False
+            set_mirror_context(False)
+            return {'FINISHED'}
+
+        if bpy.context.scene.var == 77:
+            if event.mouse_x < area.width and area.y < event.mouse_y < area.y + area.height:
                 if event.type == 'WHEELUPMOUSE':
                     if name == '右耳':
                         bpy.context.scene.zhiChengOffset += 0.05
@@ -2170,233 +2391,215 @@ class SupportSwitch(bpy.types.Operator):
                     else:
                         bpy.context.scene.zhiChengOffsetL -= 0.05
                     return {'RUNNING_MODAL'}
-
-                if (not is_on_rotate_cur):
-                    if support_enum_cur == "OP1":
-                        if (hard_support_obj != None):
-                            if (is_mouse_on_object(context, event) and not is_mouse_on_hard_support(context,event) and (
-                                    is_changed_hard_support(context, event) or is_changed(context, event))):
-                                # 公共鼠标行为加双击移动附件位置
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                hard_support_obj.data.materials.clear()
-                                hard_support_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                            elif (is_mouse_on_hard_support(context, event) and (
-                                    is_changed(context, event) or is_changed_hard_support(context, event))):
-                                # 调用hardSupport的鼠标行为
-                                yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
-                                hard_support_obj.data.materials.clear()
-                                hard_support_obj.data.materials.append(yellow_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
-                                plane_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = plane_obj
-                                cur_obj.select_set(False)
-                            elif ((not is_mouse_on_object(context, event)) and (
-                                    is_changed(context, event) or is_changed_hard_support(context, event))):
-                                # 调用公共鼠标行为
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                hard_support_obj.data.materials.clear()
-                                hard_support_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                    elif support_enum_cur == "OP2":
-                        if (soft_support_inner_obj != None and soft_support_outer_obj != None and soft_support_inside_obj != None):
-                            if (is_mouse_on_object(context, event) and not is_mouse_on_soft_support(context,event) and (
-                                    is_changed_soft_support(context, event) or is_changed(context, event))):
-                                # 公共鼠标行为加双击移动附件位置
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                # soft_support_inner_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inner_obj
-                                soft_support_inner_obj.data.materials.clear()
-                                soft_support_inner_obj.data.materials.append(red_material)
-                                # soft_support_outer_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_outer_obj
-                                soft_support_outer_obj.data.materials.clear()
-                                soft_support_outer_obj.data.materials.append(red_material)
-                                # soft_support_inside_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inside_obj
-                                soft_support_inside_obj.data.materials.clear()
-                                soft_support_inside_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                            elif (is_mouse_on_soft_support(context, event) and (
-                                    is_changed_soft_support(context, event) or is_changed(context, event))):
-                                # 调用softSupport的鼠标行为
-                                yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
-                                # soft_support_inner_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inner_obj
-                                soft_support_inner_obj.data.materials.clear()
-                                soft_support_inner_obj.data.materials.append(yellow_material)
-                                # soft_support_outer_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_outer_obj
-                                soft_support_outer_obj.data.materials.clear()
-                                soft_support_outer_obj.data.materials.append(yellow_material)
-                                # soft_support_inside_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inside_obj
-                                soft_support_inside_obj.data.materials.clear()
-                                soft_support_inside_obj.data.materials.append(yellow_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
-                                plane_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = plane_obj
-                                cur_obj.select_set(False)
-                                soft_support_inner_obj.select_set(False)
-                                soft_support_outer_obj.select_set(False)
-                                soft_support_inside_obj.select_set(False)
-                            elif ((not is_mouse_on_object(context, event)) and (
-                                    is_changed_soft_support(context, event) or is_changed(context, event))):
-                                # 调用公共鼠标行为
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                # soft_support_inner_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inner_obj
-                                soft_support_inner_obj.data.materials.clear()
-                                soft_support_inner_obj.data.materials.append(red_material)
-                                # soft_support_outer_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_outer_obj
-                                soft_support_outer_obj.data.materials.clear()
-                                soft_support_outer_obj.data.materials.append(red_material)
-                                # soft_support_inside_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inside_obj
-                                soft_support_inside_obj.data.materials.clear()
-                                soft_support_inside_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                                soft_support_inner_obj.select_set(False)
-                                soft_support_outer_obj.select_set(False)
-                                soft_support_inside_obj.select_set(False)
-                if (is_on_rotate_cur):
-                    if support_enum_cur == "OP1":
-                        if (hard_support_obj != None):
-                            if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
-                                    is_changed_sphere(context, event) or is_changed(context, event))):
-                                # 公共鼠标行为加双击移动附件位置
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                hard_support_obj.data.materials.clear()
-                                hard_support_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                            elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
-                                # 调用hardSupport的三维旋转鼠标行为
-                                yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
-                                hard_support_obj.data.materials.clear()
-                                hard_support_obj.data.materials.append(yellow_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
-                                plane_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = plane_obj
-                                cur_obj.select_set(False)
-                            elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
-                                # 调用公共鼠标行为
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                hard_support_obj.data.materials.clear()
-                                hard_support_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                    elif support_enum_cur == "OP2":
-                        if (soft_support_inner_obj != None and soft_support_outer_obj != None and soft_support_inside_obj != None):
-                            if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
-                                    is_changed_sphere(context, event) or is_changed(context, event))):
-                                # 公共鼠标行为加双击移动附件位置
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                # soft_support_inner_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inner_obj
-                                soft_support_inner_obj.data.materials.clear()
-                                soft_support_inner_obj.data.materials.append(red_material)
-                                # soft_support_outer_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_outer_obj
-                                soft_support_outer_obj.data.materials.clear()
-                                soft_support_outer_obj.data.materials.append(red_material)
-                                # soft_support_inside_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inside_obj
-                                soft_support_inside_obj.data.materials.clear()
-                                soft_support_inside_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                            elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
-                                # 调用softSupport的鼠标行为
-                                yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
-                                # soft_support_inner_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inner_obj
-                                soft_support_inner_obj.data.materials.clear()
-                                soft_support_inner_obj.data.materials.append(yellow_material)
-                                # soft_support_outer_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_outer_obj
-                                soft_support_outer_obj.data.materials.clear()
-                                soft_support_outer_obj.data.materials.append(yellow_material)
-                                # soft_support_inside_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inside_obj
-                                soft_support_inside_obj.data.materials.clear()
-                                soft_support_inside_obj.data.materials.append(yellow_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
-                                plane_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = plane_obj
-                                cur_obj.select_set(False)
-                                soft_support_inner_obj.select_set(False)
-                                soft_support_outer_obj.select_set(False)
-                                soft_support_inside_obj.select_set(False)
-                            elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
-                                # 调用公共鼠标行为
-                                red_material = newColor("Red", 1, 0, 0, 0, 1)
-                                # soft_support_inner_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inner_obj
-                                soft_support_inner_obj.data.materials.clear()
-                                soft_support_inner_obj.data.materials.append(red_material)
-                                # soft_support_outer_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_outer_obj
-                                soft_support_outer_obj.data.materials.clear()
-                                soft_support_outer_obj.data.materials.append(red_material)
-                                # soft_support_inside_obj.select_set(True)
-                                # bpy.context.view_layer.objects.active = soft_support_inside_obj
-                                soft_support_inside_obj.data.materials.clear()
-                                soft_support_inside_obj.data.materials.append(red_material)
-                                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                                cur_obj.select_set(True)
-                                bpy.context.view_layer.objects.active = cur_obj
-                                plane_obj.select_set(False)
-                                soft_support_inner_obj.select_set(False)
-                                soft_support_outer_obj.select_set(False)
-                                soft_support_inside_obj.select_set(False)
-                return {'PASS_THROUGH'}
-
-            elif bpy.context.scene.var != 77 and bpy.context.scene.var in get_process_var_list("支撑"):
-                print("supportswitch_modal_finished")
-                is_supportAdd_modal_start = False
-                # if (name == "右耳"):
-                #     is_supportAdd_modal_start = False
-                # elif (name == "左耳"):
-                #     is_supportAdd_modal_startL = False
-                return {'FINISHED'}
-
-            else:
-                return {'PASS_THROUGH'}
+            supportSaveInfo()
+            if (not is_on_rotate_cur):
+                if support_enum_cur == "OP1":
+                    if (hard_support_obj != None):
+                        if (is_mouse_on_object(context, event) and not is_mouse_on_hard_support(context,event) and (
+                                is_changed_hard_support(context, event) or is_changed(context, event))):
+                            # 公共鼠标行为加双击移动附件位置
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
+                            hard_support_obj.data.materials.clear()
+                            hard_support_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                        elif (is_mouse_on_hard_support(context, event) and (
+                                is_changed(context, event) or is_changed_hard_support(context, event))):
+                            # 调用hardSupport的鼠标行为
+                            yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
+                            hard_support_obj.data.materials.clear()
+                            hard_support_obj.data.materials.append(yellow_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+                            plane_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = plane_obj
+                            cur_obj.select_set(False)
+                        elif ((not is_mouse_on_object(context, event)) and (
+                                is_changed(context, event) or is_changed_hard_support(context, event))):
+                            # 调用公共鼠标行为
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
+                            hard_support_obj.data.materials.clear()
+                            hard_support_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                elif support_enum_cur == "OP2":
+                    if (soft_support_inner_obj != None and soft_support_outer_obj != None and soft_support_inside_obj != None):
+                        if (is_mouse_on_object(context, event) and not is_mouse_on_soft_support(context,event) and (
+                                is_changed_soft_support(context, event) or is_changed(context, event))):
+                            # 公共鼠标行为加双击移动附件位置
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
+                            # soft_support_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_inner_obj
+                            soft_support_inner_obj.data.materials.clear()
+                            soft_support_inner_obj.data.materials.append(red_material)
+                            # soft_support_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_outer_obj
+                            soft_support_outer_obj.data.materials.clear()
+                            soft_support_outer_obj.data.materials.append(red_material)
+                            # soft_support_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_inside_obj
+                            soft_support_inside_obj.data.materials.clear()
+                            soft_support_inside_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                        elif (is_mouse_on_soft_support(context, event) and (
+                                is_changed_soft_support(context, event) or is_changed(context, event))):
+                            # 调用softSupport的鼠标行为
+                            yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
+                            # soft_support_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_inner_obj
+                            soft_support_inner_obj.data.materials.clear()
+                            soft_support_inner_obj.data.materials.append(yellow_material)
+                            # soft_support_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_outer_obj
+                            soft_support_outer_obj.data.materials.clear()
+                            soft_support_outer_obj.data.materials.append(yellow_material)
+                            # soft_support_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_inside_obj
+                            soft_support_inside_obj.data.materials.clear()
+                            soft_support_inside_obj.data.materials.append(yellow_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.select_lasso")
+                            plane_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = plane_obj
+                            cur_obj.select_set(False)
+                            soft_support_inner_obj.select_set(False)
+                            soft_support_outer_obj.select_set(False)
+                            soft_support_inside_obj.select_set(False)
+                        elif ((not is_mouse_on_object(context, event)) and (
+                                is_changed_soft_support(context, event) or is_changed(context, event))):
+                            # 调用公共鼠标行为
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
+                            # soft_support_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_inner_obj
+                            soft_support_inner_obj.data.materials.clear()
+                            soft_support_inner_obj.data.materials.append(red_material)
+                            # soft_support_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_outer_obj
+                            soft_support_outer_obj.data.materials.clear()
+                            soft_support_outer_obj.data.materials.append(red_material)
+                            # soft_support_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_inside_obj
+                            soft_support_inside_obj.data.materials.clear()
+                            soft_support_inside_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                            soft_support_inner_obj.select_set(False)
+                            soft_support_outer_obj.select_set(False)
+                            soft_support_inside_obj.select_set(False)
+            if (is_on_rotate_cur):
+                if support_enum_cur == "OP1":
+                    if (hard_support_obj != None):
+                        if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
+                                is_changed_sphere(context, event) or is_changed(context, event))):
+                            # 公共鼠标行为加双击移动附件位置
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
+                            hard_support_obj.data.materials.clear()
+                            hard_support_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                        elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+                            # 调用hardSupport的三维旋转鼠标行为
+                            yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
+                            hard_support_obj.data.materials.clear()
+                            hard_support_obj.data.materials.append(yellow_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
+                            plane_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = plane_obj
+                            cur_obj.select_set(False)
+                        elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+                            # 调用公共鼠标行为
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
+                            hard_support_obj.data.materials.clear()
+                            hard_support_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                elif support_enum_cur == "OP2":
+                    if (soft_support_inner_obj != None and soft_support_outer_obj != None and soft_support_inside_obj != None):
+                        if (is_mouse_on_object(context, event) and not is_mouse_on_sphere(context, event) and (
+                                is_changed_sphere(context, event) or is_changed(context, event))):
+                            # 公共鼠标行为加双击移动附件位置
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
+                            # soft_support_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_inner_obj
+                            soft_support_inner_obj.data.materials.clear()
+                            soft_support_inner_obj.data.materials.append(red_material)
+                            # soft_support_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_outer_obj
+                            soft_support_outer_obj.data.materials.clear()
+                            soft_support_outer_obj.data.materials.append(red_material)
+                            # soft_support_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_inside_obj
+                            soft_support_inside_obj.data.materials.clear()
+                            soft_support_inside_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="my_tool.support_mouse")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                        elif (is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+                            # 调用softSupport的鼠标行为
+                            yellow_material = newColor("yellow", 1, 1, 0, 0, 1)
+                            # soft_support_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_inner_obj
+                            soft_support_inner_obj.data.materials.clear()
+                            soft_support_inner_obj.data.materials.append(yellow_material)
+                            # soft_support_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_outer_obj
+                            soft_support_outer_obj.data.materials.clear()
+                            soft_support_outer_obj.data.materials.append(yellow_material)
+                            # soft_support_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_inside_obj
+                            soft_support_inside_obj.data.materials.clear()
+                            soft_support_inside_obj.data.materials.append(yellow_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.rotate")
+                            plane_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = plane_obj
+                            cur_obj.select_set(False)
+                            soft_support_inner_obj.select_set(False)
+                            soft_support_outer_obj.select_set(False)
+                            soft_support_inside_obj.select_set(False)
+                        elif (not is_mouse_on_sphere(context, event) and is_changed_sphere(context, event)):
+                            # 调用公共鼠标行为
+                            red_material = newColor("Red", 1, 0, 0, 0, 1)
+                            # soft_support_inner_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_inner_obj
+                            soft_support_inner_obj.data.materials.clear()
+                            soft_support_inner_obj.data.materials.append(red_material)
+                            # soft_support_outer_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_outer_obj
+                            soft_support_outer_obj.data.materials.clear()
+                            soft_support_outer_obj.data.materials.append(red_material)
+                            # soft_support_inside_obj.select_set(True)
+                            # bpy.context.view_layer.objects.active = soft_support_inside_obj
+                            soft_support_inside_obj.data.materials.clear()
+                            soft_support_inside_obj.data.materials.append(red_material)
+                            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                            cur_obj.select_set(True)
+                            bpy.context.view_layer.objects.active = cur_obj
+                            plane_obj.select_set(False)
+                            soft_support_inner_obj.select_set(False)
+                            soft_support_outer_obj.select_set(False)
+                            soft_support_inside_obj.select_set(False)
+            return {'PASS_THROUGH'}
 
         else:
-            if get_switch_time() != None and time.time() - get_switch_time() > 0.3 and get_switch_flag():
-                print("supportswitch_modal_finished")
-                is_supportAdd_modal_start = False
-                # if (name == "右耳"):
-                #     is_supportAdd_modal_start = False
-                # elif (name == "左耳"):
-                #     is_supportAdd_modal_startL = False
-                set_switch_time(None)
-                now_context = bpy.context.screen.areas[0].spaces.active.context
-                if not check_modals_running(bpy.context.scene.var, now_context):
-                    bpy.context.scene.var = 0
-                return {'FINISHED'}
-            return {'PASS_THROUGH'}
+            print("supportswitch_modal_finished")
+            is_supportAdd_modal_start = False
+            # if (name == "右耳"):
+            #     is_supportAdd_modal_start = False
+            # elif (name == "左耳"):
+            #     is_supportAdd_modal_startL = False
+            return {'FINISHED'}
 
 
 class SupportSubmit(bpy.types.Operator):
@@ -2415,6 +2618,7 @@ class SupportSubmit(bpy.types.Operator):
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         self.execute(context)
+        record_state()
         return {'FINISHED'}
 
     def execute(self, context):
@@ -2435,7 +2639,10 @@ class SupportSubmit(bpy.types.Operator):
             elif support_enumL == "OP2":
                 softSupportSubmit()
 
-        return {'FINISHED'}
+        if not bpy.context.scene.pressfinish:
+            unregister_tools()
+            bpy.context.scene.pressfinish = True
+
 
 class SupportRotate(bpy.types.Operator):
     bl_idname = "object.supportrotate"
@@ -2443,6 +2650,7 @@ class SupportRotate(bpy.types.Operator):
 
     def invoke(self, context, event):
         self.execute(context)
+        record_state()
         return {'FINISHED'}
 
     def execute(self, context):
@@ -2457,7 +2665,7 @@ class SupportRotate(bpy.types.Operator):
             elif(name == '左耳'):
                 is_on_rotateL = not is_on_rotateL
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-        return {'FINISHED'}
+
 
 class SupportDoubleClick(bpy.types.Operator):
     bl_idname = "object.supportdoubleclick"
@@ -2491,6 +2699,11 @@ class SupportMirror(bpy.types.Operator):
         return {'FINISHED'}
 
     def execute(self, context):
+
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")          #TODO  支撑模块不需要镜像
+        return {'FINISHED'}
+
+
         global support_enum,support_enumL,support_offset,support_offsetL
         global is_add_supportL,is_add_support
 
@@ -2499,6 +2712,7 @@ class SupportMirror(bpy.types.Operator):
 
         # 只操作一个耳朵时，不执行镜像
         if left_obj == None or right_obj == None:
+            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             return {'FINISHED'}
 
         tar_obj_name = bpy.context.scene.leftWindowObj
@@ -2572,138 +2786,6 @@ class SupportMirror(bpy.types.Operator):
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
 
-
-
-
-class MyTool_Support1(WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.support_reset"
-    bl_label = "支撑重置"
-    bl_description = (
-        "重置模型,清除模型上的所有支撑"
-    )
-    bl_icon = "ops.transform.bone_envelope"
-    bl_widget = None
-    bl_keymap = (
-        ("object.supportreset", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class MyTool_Support2(WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.support_add"
-    bl_label = "支撑添加"
-    bl_description = (
-        "在模型上添加一个支撑"
-    )
-    bl_icon = "ops.transform.bone_size"
-    bl_widget = None
-    bl_keymap = (
-        # ("object.supportadd", {"type": 'MOUSEMOVE', "value": 'ANY'},
-        #  {}),
-        ("object.supportadd", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
-        ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class MyTool_Support3(WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.support_submit"
-    bl_label = "支撑提交"
-    bl_description = (
-        "对于模型上所有支撑提交实体化"
-    )
-    bl_icon = "ops.transform.edge_slide"
-    bl_widget = None
-    bl_keymap = (
-        ("object.supportsubmit", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-class MyTool_Support_Rotate(WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.support_rotate"
-    bl_label = "支撑旋转"
-    bl_description = (
-        "添加支撑后,调用支撑三维旋转鼠标行为"
-    )
-    bl_icon = "brush.paint_texture.clone"
-    bl_widget = None
-    bl_keymap = (
-        ("object.supportrotate", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-class MyTool_Support_Mirror(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.support_mirror"
-    bl_label = "支撑镜像"
-    bl_description = (
-        "点击镜像支撑"
-    )
-    bl_icon = "brush.paint_texture.airbrush"
-    bl_widget = None
-    bl_keymap = (
-        ("object.supportmirror", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-class MyTool_Support_Mouse(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.support_mouse"
-    bl_label = "双击改变支撑位置"
-    bl_description = (
-        "添加支撑后,在模型上双击,附件移动到双击位置"
-    )
-    bl_icon = "brush.uv_sculpt.relax"
-    bl_widget = None
-    bl_keymap = (
-        ("object.supportdoubleclick", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
-        ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
-        ("view3d.view_roll", {"type": 'LEFTMOUSE', "value": 'PRESS', "ctrl": True}, None)
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
 # 注册类
 _classes = [
     SupportReset,
@@ -2718,31 +2800,11 @@ _classes = [
 ]
 
 
-def register_support_tools():
-    bpy.utils.register_tool(MyTool_Support1, separator=True, group=False)
-    bpy.utils.register_tool(MyTool_Support2, separator=True, group=False, after={MyTool_Support1.bl_idname})
-    bpy.utils.register_tool(MyTool_Support3, separator=True, group=False, after={MyTool_Support2.bl_idname})
-    bpy.utils.register_tool(MyTool_Support_Rotate, separator=True, group=False, after={MyTool_Support3.bl_idname})
-    bpy.utils.register_tool(MyTool_Support_Mirror, separator=True, group=False, after={MyTool_Support_Rotate.bl_idname})
-    bpy.utils.register_tool(MyTool_Support_Mouse, separator=True, group=False, after={MyTool_Support_Mirror.bl_idname})
-
-
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
-    # bpy.utils.register_tool(MyTool_Support1, separator=True, group=False)
-    # bpy.utils.register_tool(MyTool_Support2, separator=True, group=False, after={MyTool_Support1.bl_idname})
-    # bpy.utils.register_tool(MyTool_Support3, separator=True, group=False, after={MyTool_Support2.bl_idname})
-    # bpy.utils.register_tool(MyTool_Support_Rotate, separator=True, group=False, after={MyTool_Support3.bl_idname})
-    # bpy.utils.register_tool(MyTool_Support_Mirror, separator=True, group=False, after={MyTool_Support_Rotate.bl_idname})
-    # bpy.utils.register_tool(MyTool_Support_Mouse, separator=True, group=False, after={MyTool_Support_Mirror.bl_idname})
+
 
 def unregister():
     for cls in _classes:
         bpy.utils.unregister_class(cls)
-    bpy.utils.unregister_tool(MyTool_Support1)
-    bpy.utils.unregister_tool(MyTool_Support2)
-    bpy.utils.unregister_tool(MyTool_Support3)
-    bpy.utils.unregister_tool(MyTool_Support_Rotate)
-    bpy.utils.unregister_tool(MyTool_Support_Mirror)
-    bpy.utils.unregister_tool(MyTool_Support_Mouse)

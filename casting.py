@@ -1,12 +1,23 @@
 import bpy
 from bpy.types import WorkSpaceTool
+from .register_tool import unregister_tools
 from .tool import *
-
+from .global_manager import global_manager
+from .back_and_forward import record_state, backup_state, forward_state
 
 is_casting_submit = False            #铸造法是否提交  铸造法中厚度参数只在未提交时有效
 is_casting_submitL = False
 prev_casting_thickness = 0.2         #记录铸造法厚度,模块切换时保持厚度参数
 prev_casting_thicknessL = 0.2
+
+
+def register_casting_globals():
+    global prev_casting_thickness, prev_casting_thicknessL
+    global is_casting_submit, is_casting_submitL
+    global_manager.register("prev_casting_thickness", prev_casting_thickness)
+    global_manager.register("prev_casting_thicknessL", prev_casting_thicknessL)
+    global_manager.register("is_casting_submit", is_casting_submit)
+    global_manager.register("is_casting_submitL", is_casting_submitL)
 
 
 def newColor(id, r, g, b, is_transparency, transparency_degree):
@@ -21,12 +32,20 @@ def newColor(id, r, g, b, is_transparency, transparency_degree):
     shader.inputs[7].default_value = 0
     shader.inputs[9].default_value = 0.472
     shader.inputs[14].default_value = 1
-    shader.inputs[15].default_value = 0.105
+    shader.inputs[15].default_value = 1
     links.new(shader.outputs[0], output.inputs[0])
     if is_transparency:
         mat.blend_method = "BLEND"
         shader.inputs[21].default_value = transparency_degree
     return mat
+
+
+def casting_forward():
+    forward_state()
+
+
+def casting_backup():
+    backup_state()
 
 
 def frontToCasting():
@@ -56,10 +75,12 @@ def frontToCasting():
     global prev_casting_thickness
     global prev_casting_thicknessL
     name = bpy.context.scene.leftWindowObj
+    bpy.context.scene.needrecord = False
     if name == '右耳':
         bpy.context.scene.ruanErMoHouDu = prev_casting_thickness
     elif name == '左耳':
         bpy.context.scene.ruanErMoHouDuL = prev_casting_thicknessL
+    bpy.context.scene.needrecord = True
 
     # 调用公共鼠标行为
     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
@@ -210,10 +231,12 @@ def backToCasting():
         duplicate_obj.select_set(True)
         bpy.context.view_layer.objects.active = duplicate_obj
         castingInitial()      #初始化
+        bpy.context.scene.needrecord = False
         if name == '右耳':
             bpy.context.scene.ruanErMoHouDu = prev_casting_thickness
         elif name == '左耳':
             bpy.context.scene.ruanErMoHouDuL = prev_casting_thicknessL
+        bpy.context.scene.needrecord = True
 
 
     else:
@@ -336,10 +359,12 @@ def backToCasting():
         duplicate_obj.select_set(True)
         bpy.context.view_layer.objects.active = duplicate_obj
         castingInitial()      #初始化
+        bpy.context.scene.needrecord = False
         if name == '右耳':
             bpy.context.scene.ruanErMoHouDu = prev_casting_thickness
         elif name == '左耳':
             bpy.context.scene.ruanErMoHouDuL = prev_casting_thicknessL
+        bpy.context.scene.needrecord = True
 
     # 调用公共鼠标行为
     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
@@ -540,14 +565,16 @@ def castingInitial():
 
     cur_obj.select_set(True)
     bpy.context.view_layer.objects.active = cur_obj
-    # if bpy.context.scene.leftWindowObj == '右耳':
-    #     mat = bpy.data.materials.get("YellowR")
-    #     mat.blend_method = 'BLEND'
-    #     bpy.context.scene.transparent3EnumR = 'OP3'
-    # elif bpy.context.scene.leftWindowObj == '左耳':
-    #     mat = bpy.data.materials.get("YellowL")
-    #     mat.blend_method = 'BLEND'
-    #     bpy.context.scene.transparent3EnumL = 'OP3'
+    if bpy.context.scene.leftWindowObj == '右耳':
+        if bpy.context.scene.transparent3EnumR != 'OP3':
+            mat = bpy.data.materials.get("YellowR")
+            mat.blend_method = 'BLEND'
+            bpy.context.scene.transparent3EnumR = 'OP3'
+    elif bpy.context.scene.leftWindowObj == '左耳':
+        if bpy.context.scene.transparent3EnumL != 'OP3':
+            mat = bpy.data.materials.get("YellowL")
+            mat.blend_method = 'BLEND'
+            bpy.context.scene.transparent3EnumL = 'OP3'
 
     # 为操作物体添加实体化修改器,通过参数实现铸造厚度
     modifier_name = "CastingModifier"
@@ -571,37 +598,66 @@ def castingInitial():
     for obj in bpy.data.objects:
         patternR = r'右耳软耳膜附件Casting'
         patternL = r'左耳软耳膜附件Casting'
-        if re.match(patternR, obj.name) or re.match(patternL, obj.name):
-            handle_for_casting_obj = obj
-            bpy.ops.object.select_all(action='DESELECT')
-            handle_for_casting_obj.hide_set(False)
-            handle_for_casting_obj.select_set(True)
-            bpy.context.view_layer.objects.active = handle_for_casting_obj
+        if(name == '右耳'):
+            if re.match(patternR, obj.name):
+                handle_for_casting_obj = obj
+                bpy.ops.object.select_all(action='DESELECT')
+                handle_for_casting_obj.hide_set(False)
+                handle_for_casting_obj.select_set(True)
+                bpy.context.view_layer.objects.active = handle_for_casting_obj
 
-            # 为操作物体添加实体化修改器,通过参数实现铸造厚度
-            modifier_name = "HandleCastingModifier"
-            target_modifier = None
-            for modifier in handle_for_casting_obj.modifiers:
-                if modifier.name == modifier_name:
-                    target_modifier = modifier
-            if (target_modifier == None):
-                bpy.ops.object.modifier_add(type='SOLIDIFY')
-                soft_eardrum_casting_modifier = bpy.context.object.modifiers["Solidify"]
-                soft_eardrum_casting_modifier.name = "HandleCastingModifier"
-            bpy.context.object.modifiers["HandleCastingModifier"].solidify_mode = 'EXTRUDE'
-            bpy.context.object.modifiers["HandleCastingModifier"].offset = 1
-            bpy.context.object.modifiers["HandleCastingModifier"].thickness = 0.5
-            bpy.context.object.modifiers["HandleCastingModifier"].use_rim_only = True
-            bpy.context.object.modifiers["HandleCastingModifier"].use_rim = True
+                # 为操作物体添加实体化修改器,通过参数实现铸造厚度
+                modifier_name = "HandleCastingModifier"
+                target_modifier = None
+                for modifier in handle_for_casting_obj.modifiers:
+                    if modifier.name == modifier_name:
+                        target_modifier = modifier
+                if (target_modifier == None):
+                    bpy.ops.object.modifier_add(type='SOLIDIFY')
+                    soft_eardrum_casting_modifier = bpy.context.object.modifiers["Solidify"]
+                    soft_eardrum_casting_modifier.name = "HandleCastingModifier"
+                bpy.context.object.modifiers["HandleCastingModifier"].solidify_mode = 'EXTRUDE'
+                bpy.context.object.modifiers["HandleCastingModifier"].offset = 1
+                bpy.context.object.modifiers["HandleCastingModifier"].thickness = 0.5
+                bpy.context.object.modifiers["HandleCastingModifier"].use_rim_only = True
+                bpy.context.object.modifiers["HandleCastingModifier"].use_rim = True
+        elif (name == '左耳'):
+            if re.match(patternL, obj.name):
+                handle_for_casting_obj = obj
+                bpy.ops.object.select_all(action='DESELECT')
+                handle_for_casting_obj.hide_set(False)
+                handle_for_casting_obj.select_set(True)
+                bpy.context.view_layer.objects.active = handle_for_casting_obj
+
+                # 为操作物体添加实体化修改器,通过参数实现铸造厚度
+                modifier_name = "HandleCastingModifier"
+                target_modifier = None
+                for modifier in handle_for_casting_obj.modifiers:
+                    if modifier.name == modifier_name:
+                        target_modifier = modifier
+                if (target_modifier == None):
+                    bpy.ops.object.modifier_add(type='SOLIDIFY')
+                    soft_eardrum_casting_modifier = bpy.context.object.modifiers["Solidify"]
+                    soft_eardrum_casting_modifier.name = "HandleCastingModifier"
+                bpy.context.object.modifiers["HandleCastingModifier"].solidify_mode = 'EXTRUDE'
+                bpy.context.object.modifiers["HandleCastingModifier"].offset = 1
+                bpy.context.object.modifiers["HandleCastingModifier"].thickness = 0.5
+                bpy.context.object.modifiers["HandleCastingModifier"].use_rim_only = True
+                bpy.context.object.modifiers["HandleCastingModifier"].use_rim = True
 
 
     # 之前的模块若添加过外凸的字体
     for obj in bpy.data.objects:
         patternR = r'右耳LabelPlaneForCasting'
         patternL = r'左耳LabelPlaneForCasting'
-        if re.match(patternR, obj.name) or re.match(patternL, obj.name):
-            label_obj = obj
-            label_obj.hide_set(False)
+        if(name == '右耳'):
+            if re.match(patternR, obj.name):
+                label_obj = obj
+                label_obj.hide_set(False)
+        elif(name == '左耳'):
+            if re.match(patternL, obj.name):
+                label_obj = obj
+                label_obj.hide_set(False)
 
 
 
@@ -801,7 +857,6 @@ def castingSubmit():
 
 
 
-
 class CastingReset(bpy.types.Operator):
     bl_idname = "object.castingreset"
     bl_label = "铸造法重置"
@@ -812,6 +867,7 @@ class CastingReset(bpy.types.Operator):
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         self.execute(context)
+        record_state()
         return {'FINISHED'}
 
     def execute(self, context):
@@ -819,16 +875,17 @@ class CastingReset(bpy.types.Operator):
         global prev_casting_thickness
         global prev_casting_thicknessL
         name = bpy.context.scene.leftWindowObj
+        bpy.context.scene.needrecord = False
         if name == '右耳':
             prev_casting_thickness = 0.2
             bpy.context.scene.ruanErMoHouDu = 0.2
         elif name == '左耳':
             prev_casting_thicknessL = 0.2
             bpy.context.scene.ruanErMoHouDuL = 0.2
+        bpy.context.scene.needrecord = True
 
         frontFromCasting()
         frontToCasting()
-        return {'FINISHED'}
 
 
 
@@ -842,12 +899,16 @@ class CastingSubmit(bpy.types.Operator):
         # 调用公共鼠标行为按钮,避免自定义按钮因多次移动鼠标触发多次自定义的Operator
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         self.execute(context)
+        record_state()
         return {'FINISHED'}
 
     def execute(self, context):
         print("铸造法提交")
         castingSubmit()
-        return {'FINISHED'}
+
+        if not bpy.context.scene.pressfinish:
+            unregister_tools()
+            bpy.context.scene.pressfinish = True
 
 
 
@@ -868,6 +929,7 @@ class CastingMirror(bpy.types.Operator):
 
         # 只操作一个耳朵时，不执行镜像
         if left_obj == None or right_obj == None:
+            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             return {'FINISHED'}
 
         tar_obj = bpy.context.scene.leftWindowObj
@@ -875,71 +937,10 @@ class CastingMirror(bpy.types.Operator):
             bpy.context.scene.ruanErMoHouDu = bpy.context.scene.ruanErMoHouDuL
         elif tar_obj == "左耳":
             bpy.context.scene.ruanErMoHouDuL = bpy.context.scene.ruanErMoHouDu
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
 
-
-
-class MyTool_Casting1(WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.casting_reset"
-    bl_label = "铸造法重置"
-    bl_description = (
-        "重置模型,清除模型上的所有标签"
-    )
-    bl_icon = "ops.gpencil.sculpt_randomize"
-    bl_widget = None
-    bl_keymap = (
-        ("object.castingreset", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class MyTool_Casting2(WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.casting_submit"
-    bl_label = "铸造法提交"
-    bl_description = (
-        "提交铸造法中所作的操作"
-    )
-    bl_icon = "ops.gpencil.sculpt_smear"
-    bl_widget = None
-    bl_keymap = (
-        ("object.castingsubmit", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-class MyTool_Casting3(WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.casting_mirror"
-    bl_label = "铸造法镜像"
-    bl_description = (
-        "将该模型上的铸造法操作镜像到另一个模型上"
-    )
-    bl_icon = "ops.gpencil.sculpt_smooth"
-    bl_widget = None
-    bl_keymap = (
-        ("object.castingmirror", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-    def draw_settings(context, layout, tool):
-        pass
-
-    # 注册类
+# 注册类
 _classes = [
     CastingReset,
     CastingSubmit,
@@ -947,24 +948,11 @@ _classes = [
 ]
 
 
-def register_casting_tools():
-    bpy.utils.register_tool(MyTool_Casting1, separator=True, group=False)
-    bpy.utils.register_tool(MyTool_Casting2, separator=True, group=False, after={MyTool_Casting1.bl_idname})
-    bpy.utils.register_tool(MyTool_Casting3, separator=True, group=False, after={MyTool_Casting2.bl_idname})
-
-
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
-    # bpy.utils.register_tool(MyTool_Casting1, separator=True, group=False)
-    # bpy.utils.register_tool(MyTool_Casting2, separator=True, group=False, after={MyTool_Casting1.bl_idname})
-    # bpy.utils.register_tool(MyTool_Casting3, separator=True, group=False, after={MyTool_Casting2.bl_idname})
 
 
 def unregister():
     for cls in _classes:
         bpy.utils.unregister_class(cls)
-    bpy.utils.unregister_tool(MyTool_Casting1)
-    bpy.utils.unregister_tool(MyTool_Casting2)
-    bpy.utils.unregister_tool(MyTool_Casting3)
-

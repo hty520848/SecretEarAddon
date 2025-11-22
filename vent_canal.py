@@ -8,6 +8,9 @@ from .tool import newShader, moveToRight, moveToLeft, utils_re_color, delete_use
     getOverride, apply_material, transform_normal
 from .parameter import get_switch_time, set_switch_time, get_switch_flag, set_switch_flag, check_modals_running,\
     get_mirror_context, set_mirror_context, get_process_var_list
+from .register_tool import unregister_tools
+from .global_manager import global_manager
+from .back_and_forward import record_state, backup_state, forward_state
 import re
 import time
 
@@ -41,6 +44,88 @@ is_mouseSwitch_modal_startL = False
 
 add_or_delete = False             # 执行添加或删除红球的过程中,暂停qiehuan modal的检测执行
 add_or_deleteL = False
+vent_canal_press = False
+
+def register_ventcanal_globals():
+    global number, numberL
+    global object_dic, object_dicL
+    global ventcanal_data, ventcanal_dataL
+    global ventcanal_finish, ventcanal_finishL
+    global_manager.register("number", number)
+    global_manager.register("numberL", numberL)
+    global_manager.register("object_dic", object_dic)
+    global_manager.register("object_dicL", object_dicL)
+    global_manager.register("ventcanal_data", ventcanal_data)
+    global_manager.register("ventcanal_dataL", ventcanal_dataL)
+    global_manager.register("ventcanal_finish", ventcanal_finish)
+    global_manager.register("ventcanal_finishL", ventcanal_finishL)
+
+
+def vent_canal_backup():
+    backup_state()
+    recover_vent_canal()
+        
+
+def vent_canal_forward():
+    forward_state()
+    recover_vent_canal()
+
+
+def recover_vent_canal():
+    name = bpy.context.scene.leftWindowObj
+    canal_obj = bpy.data.objects[name + "ventcanal"]
+    for modifier in canal_obj.modifiers:
+        if modifier.type == 'HOOK':
+            canal_obj.modifiers.remove(modifier)
+    # 为管道控制红球添加位置约束,只能在红环平面上移动
+    if (name == "右耳"):
+        for obj in bpy.data.objects:
+            soundCanalPlanePattern = r'右耳VentCanalPlane'
+            soundCanalPlaneBorderPattern = r'右耳VentCanalPlaneBorderCurveObject'
+            if re.match(soundCanalPlanePattern, obj.name) and not re.match(soundCanalPlaneBorderPattern, obj.name):
+                sphere_number = int(obj.name.replace('右耳VentCanalPlane', ''))
+                sphere_name = '右耳ventcanalsphere' + str(sphere_number)
+                cur_sphere_obj = bpy.data.objects.get(sphere_name)
+                if (cur_sphere_obj != None):
+                    limit_location_constraint = None
+                    for constraint in cur_sphere_obj.constraints:
+                        if (constraint.type == 'LIMIT_LOCATION'):
+                            limit_location_constraint = constraint
+                            break
+                    if (limit_location_constraint == None):
+                        limit_location_constraint = cur_sphere_obj.constraints.new(type='LIMIT_LOCATION')
+                    limit_location_constraint.use_min_z = True
+                    limit_location_constraint.min_z = 0
+                    limit_location_constraint.use_max_z = True
+                    limit_location_constraint.max_z = 0
+                    limit_location_constraint.owner_space = 'CUSTOM'
+                    limit_location_constraint.space_object = obj
+    elif (name == "左耳"):
+        for obj in bpy.data.objects:
+            soundCanalPlanePattern = r'左耳VentCanalPlane'
+            soundCanalPlaneBorderPattern = r'左耳VentCanalPlaneBorderCurveObject'
+            if re.match(soundCanalPlanePattern, obj.name) and not re.match(soundCanalPlaneBorderPattern, obj.name):
+                sphere_number = int(obj.name.replace('左耳VentCanalPlane', ''))
+                sphere_name = '左耳ventcanalsphere' + str(sphere_number)
+                cur_sphere_obj = bpy.data.objects.get(sphere_name)
+                if (cur_sphere_obj != None):
+                    limit_location_constraint = None
+                    for constraint in cur_sphere_obj.constraints:
+                        if (constraint.type == 'LIMIT_LOCATION'):
+                            limit_location_constraint = constraint
+                            break
+                    if (limit_location_constraint == None):
+                        limit_location_constraint = cur_sphere_obj.constraints.new(type='LIMIT_LOCATION')
+                    limit_location_constraint.use_min_z = True
+                    limit_location_constraint.min_z = 0
+                    limit_location_constraint.use_max_z = True
+                    limit_location_constraint.max_z = 0
+                    limit_location_constraint.owner_space = 'CUSTOM'
+                    limit_location_constraint.space_object = obj
+
+    # 重新将曲线控制点勾挂到管道控制红球上
+    hook_curve_point_to_sphere()
+
 
 def initialPlaneTransparency():
     mat = newColor("PlaneTransparency", 1, 0.319, 0.133, 1, 0.4)  # 创建材质
@@ -922,6 +1007,7 @@ class TEST_OT_addventcanal(bpy.types.Operator):
 
         # 重新将曲线控制点勾挂到管道控制红球上
         hook_curve_point_to_sphere()
+        record_state()
 
         if name == '右耳':
             add_or_delete = False
@@ -1047,6 +1133,7 @@ class TEST_OT_deleteventcanal(bpy.types.Operator):
 
             # 重新将曲线控制点勾挂到管道控制红球上
             hook_curve_point_to_sphere()
+            record_state()
 
         if name == '右耳':
             add_or_delete = False
@@ -1066,6 +1153,8 @@ class TEST_OT_ventcanalqiehuan(bpy.types.Operator):
     __left_mouse_down = False
     __timer = None              #添加定时器
 
+    update_sphere_number = 0    #记录管道正在更新时的类型  更新管道两端,更新管道中间点,更新号角管位置
+
     def invoke(self, context, event):  # 初始化
         # initialTransparency()
         newColor('red', 1, 0, 0, 0, 1)
@@ -1077,14 +1166,6 @@ class TEST_OT_ventcanalqiehuan(bpy.types.Operator):
         bpy.context.scene.var = 26
         global is_mouseSwitch_modal_start
         global is_mouseSwitch_modal_startL
-        # if not is_mouseSwitch_modal_start and not is_mouseSwitch_modal_startL:
-        #     name = bpy.context.scene.leftWindowObj
-        #     if (name == "右耳"):
-        #         is_mouseSwitch_modal_start = True
-        #     elif (name == "左耳"):
-        #         is_mouseSwitch_modal_startL = True
-        #     context.window_manager.modal_handler_add(self)
-        #     print('ventcanalqiehuan invoke')
         if not is_mouseSwitch_modal_start:
             is_mouseSwitch_modal_start = True
             context.window_manager.modal_handler_add(self)
@@ -1102,6 +1183,7 @@ class TEST_OT_ventcanalqiehuan(bpy.types.Operator):
         global is_mouseSwitch_modal_startL
         global mouse_index
         global mouse_indexL
+        global vent_canal_press
 
         op_cls = TEST_OT_ventcanalqiehuan
         name = bpy.context.scene.leftWindowObj
@@ -1110,104 +1192,140 @@ class TEST_OT_ventcanalqiehuan(bpy.types.Operator):
 
         mouse_x = event.mouse_x
         mouse_y = event.mouse_y
-        override1 = getOverride()
-        area = override1['area']
 
-        if bpy.context.screen.areas[0].spaces.active.context == 'COLLECTION':
-            if get_mirror_context():
-                if op_cls.__timer:
-                    context.window_manager.event_timer_remove(op_cls.__timer)
-                    op_cls.__timer = None
-                print('ventcanalqiehuan finish')
-                is_mouseSwitch_modal_start = False
-                set_mirror_context(False)
-                return {'FINISHED'}
-            # 鼠标在3D区域内
-            if(mouse_x < area.width and area.y < mouse_y < area.y+area.height and bpy.context.scene.var == 26):
+        if get_mirror_context():
+            if op_cls.__timer:
+                context.window_manager.event_timer_remove(op_cls.__timer)
+                op_cls.__timer = None
+            print('ventcanalqiehuan finish')
+            is_mouseSwitch_modal_start = False
+            set_mirror_context(False)
+            return {'FINISHED'}
 
-                if event.type == 'LEFTMOUSE':  # 监听左键
-                    if event.value == 'PRESS':  # 按下
-                        op_cls.__left_mouse_down = True
-                    return {'PASS_THROUGH'}
+        if bpy.context.scene.var == 26:
+            if event.type == 'LEFTMOUSE':  # 监听左键
+                if event.value == 'PRESS':  # 按下
+                    op_cls.__left_mouse_down = True
+                return {'PASS_THROUGH'}
 
-                elif event.type == 'MOUSEMOVE':
-                    if op_cls.__left_mouse_down:
-                        op_cls.__left_mouse_down = False
-                    return {'PASS_THROUGH'}
+            elif event.type == 'MOUSEMOVE':
+                if op_cls.__left_mouse_down:
+                    op_cls.__left_mouse_down = False
+                return {'PASS_THROUGH'}
 
+            if (name == "右耳"):
+                object_dic_cur = object_dic
+                add_or_delete_cur = add_or_delete
+                ventcanal_convert_cur = ventcanal_convert
+            elif (name == "左耳"):
+                object_dic_cur = object_dicL
+                add_or_delete_cur = add_or_deleteL
+                ventcanal_convert_cur = ventcanal_convertL
+
+            if(not add_or_delete_cur):
+                # 若没有将曲线管道转化为网格管道,则根据曲线管道复制出一份转化为网格管道并显示(防止convert_ventcanal执行过程中切换模式中断鼠标行为)
                 if (name == "右耳"):
-                    object_dic_cur = object_dic
-                    add_or_delete_cur = add_or_delete
+                    if (ventcanal_convert and not op_cls.__left_mouse_down):
+                        op_cls.update_sphere_number = 0
+                        ventcanal_convert = False
+                        ventcanal_convert_cur = ventcanal_convert
+                        # 将曲线控制点的勾挂修改器全部应用
+                        apply_hook_modifies()
+                        # 保存曲线控制点信息
+                        save_ventcanal_info([0, 0, 0])
+                        # 根据曲线管道更新mesh管道信息
+                        convert_ventcanal()
+                        # 将曲线管道显示出来,mesh管道隐藏
+                        bpy.data.objects[name + 'ventcanal'].hide_set(True)
+                        bpy.data.objects[name + 'meshventcanal'].hide_set(False)
+                        # 重新将曲线控制点勾挂到管道控制红球上
+                        hook_curve_point_to_sphere()
                 elif (name == "左耳"):
-                    object_dic_cur = object_dicL
-                    add_or_delete_cur = add_or_deleteL
+                    if (ventcanal_convertL and not op_cls.__left_mouse_down):
+                        op_cls.update_sphere_number = 0
+                        ventcanal_convertL = False
+                        ventcanal_convert_cur = ventcanal_convertL
+                        # 将曲线控制点的勾挂修改器全部应用
+                        apply_hook_modifies()
+                        # 保存曲线控制点信息
+                        save_ventcanal_info([0, 0, 0])
+                        # 根据曲线管道更新mesh管道信息
+                        convert_ventcanal()
+                        # 将曲线管道显示出来,mesh管道隐藏
+                        bpy.data.objects[name + 'ventcanal'].hide_set(True)
+                        bpy.data.objects[name + 'meshventcanal'].hide_set(False)
+                        # 重新将曲线控制点勾挂到管道控制红球上
+                        hook_curve_point_to_sphere()
 
-                if(not add_or_delete_cur):
-                    # 若没有将曲线管道转化为网格管道,则根据曲线管道复制出一份转化为网格管道并显示(防止convert_ventcanal执行过程中切换模式中断鼠标行为)
+
+                if len(object_dic_cur) < 2:
+                    if cal_co(name, context, event) != -1 and is_changed(context, event) == True:
+                        bpy.ops.wm.tool_set_by_id(name="my_tool.addventcanal2")
+                    elif cal_co(name, context, event) == -1 and is_changed(context, event) == True:
+                        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+                        bpy.ops.object.select_all(action='DESELECT')
+                        bpy.context.view_layer.objects.active = bpy.data.objects[name]
+                        bpy.data.objects[name].select_set(True)
+
+                elif len(object_dic_cur) >= 2:
+
+                    # 判断是否位于红球上,存在则返回其索引,不存在则返回0
+                    sphere_number = on_which_shpere(context, event)
+
+                    # 根据鼠标位于模型的种类,切换到不同的鼠标行为
+                    if (not op_cls.__left_mouse_down):
+                        mouse_switch(sphere_number)
+                        # 生成管道中间红球对应的平面
+                        plane_switch(sphere_number)
+                        if vent_canal_press:
+                            vent_canal_press = False
+                            record_state()
+
+                        # 鼠标位于管道或圆球上的时候,改变管道的材质,将其亮度调高
+                        if cal_co(name + 'meshventcanal', context, event) == -1:
+                                bpy.data.objects[name + 'meshventcanal'].data.materials.clear()
+                                bpy.data.objects[name + 'meshventcanal'].data.materials.append(bpy.data.materials["grey"])
+                        elif cal_co(name + 'meshventcanal', context, event) != -1:
+                                bpy.data.objects[name + 'meshventcanal'].data.materials.clear()
+                                bpy.data.objects[name + 'meshventcanal'].data.materials.append(bpy.data.materials["grey2"])
+                    
                     if (name == "右耳"):
-                        if (ventcanal_convert and not op_cls.__left_mouse_down):
-                            ventcanal_convert = False
-                            # 将曲线控制点的勾挂修改器全部应用
-                            apply_hook_modifies()
-                            # 保存曲线控制点信息
-                            save_ventcanal_info([0, 0, 0])
-                            # 根据曲线管道更新mesh管道信息
-                            convert_ventcanal()
-                            # 将曲线管道显示出来,mesh管道隐藏
-                            bpy.data.objects[name + 'ventcanal'].hide_set(True)
-                            bpy.data.objects[name + 'meshventcanal'].hide_set(False)
-                            # 重新将曲线控制点勾挂到管道控制红球上
-                            hook_curve_point_to_sphere()
+                        mouse_index_cur = mouse_index
                     elif (name == "左耳"):
-                        if (ventcanal_convertL and not op_cls.__left_mouse_down):
-                            ventcanal_convertL = False
-                            # 将曲线控制点的勾挂修改器全部应用
-                            apply_hook_modifies()
-                            # 保存曲线控制点信息
-                            save_ventcanal_info([0, 0, 0])
-                            # 根据曲线管道更新mesh管道信息
-                            convert_ventcanal()
-                            # 将曲线管道显示出来,mesh管道隐藏
-                            bpy.data.objects[name + 'ventcanal'].hide_set(True)
-                            bpy.data.objects[name + 'meshventcanal'].hide_set(False)
-                            # 重新将曲线控制点勾挂到管道控制红球上
-                            hook_curve_point_to_sphere()
+                        mouse_index_cur = mouse_indexL
+                    
+                    if mouse_index_cur == 2 and op_cls.__left_mouse_down:
+                        vent_canal_press = True
 
-
-                    if len(object_dic_cur) < 2:
-                        if cal_co(name, context, event) != -1 and is_changed(context, event) == True:
-                            bpy.ops.wm.tool_set_by_id(name="my_tool.addventcanal2")
-                        elif cal_co(name, context, event) == -1 and is_changed(context, event) == True:
-                            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-                            bpy.ops.object.select_all(action='DESELECT')
-                            bpy.context.view_layer.objects.active = bpy.data.objects[name]
-                            bpy.data.objects[name].select_set(True)
-
-                    elif len(object_dic_cur) >= 2:
-
-                        # 判断是否位于红球上,存在则返回其索引,不存在则返回0
-                        sphere_number = on_which_shpere(context, event)
-
-                        # 根据鼠标位于模型的种类,切换到不同的鼠标行为
-                        if (not op_cls.__left_mouse_down):
-                            mouse_switch(sphere_number)
-                            # 生成管道中间红球对应的平面
-                            plane_switch(sphere_number)
-
-                            # 鼠标位于管道或圆球上的时候,改变管道的材质,将其亮度调高
-                            if cal_co(name + 'meshventcanal', context, event) == -1:
-                                    bpy.data.objects[name + 'meshventcanal'].data.materials.clear()
-                                    bpy.data.objects[name + 'meshventcanal'].data.materials.append(bpy.data.materials["grey"])
-                            elif cal_co(name + 'meshventcanal', context, event) != -1:
-                                    bpy.data.objects[name + 'meshventcanal'].data.materials.clear()
-                                    bpy.data.objects[name + 'meshventcanal'].data.materials.append(bpy.data.materials["grey2"])
-
-                        # 实时更新管道控制点的位置,随圆球位置更新而改变
+                    # 激活相关鼠标行为开始相关更新后,便不再根据sphere_number判断,而是使用保持更新
+                    if (op_cls.__left_mouse_down and ventcanal_convert_cur and op_cls.update_sphere_number != 0):
+                        if (op_cls.update_sphere_number == 201 or op_cls.update_sphere_number == 202):
+                            loc = cal_co(name, context, event)
+                            sphere_number = op_cls.update_sphere_number
+                            sphere_number1 = op_cls.update_sphere_number
+                            if (sphere_number == 201):
+                                sphere_number1 = 1
+                            elif (sphere_number == 202):
+                                sphere_number1 = 2
+                            # 管道末端透明控制圆球
+                            sphere_name = name + 'ventcanalsphere' + str(sphere_number)
+                            obj = bpy.data.objects[sphere_name]
+                            # 管道末端显示红球
+                            sphere_name1 = name + 'ventcanalsphere' + str(sphere_number1)
+                            obj1 = bpy.data.objects[sphere_name1]
+                            if (loc != -1 and op_cls.__left_mouse_down):
+                                obj1.location = loc
+                        return {'PASS_THROUGH'}
+                    # 各种更新的入口,根据sphere_number判断激活何种类型的更新(管道两端更新,管道中间点更新,号角管更新)
+                    # 设置op_cls.update_sphere_number值用于进入保持更新部分时进行何种类型的保持更新
+                    # 因为进入更新后,若依然根据sphere_number保持更新,可能存在更新过程中将鼠标移动到其他物体上sphere_                                obj.location = obj1.locationnumber改变而切换到了其他类型的更新
+                    else:
                         # 若鼠标不在圆球上
                         if sphere_number == 0:
                             return {'PASS_THROUGH'}
-                            # 对于管道两端的控制点,操控调整的时候,限制其不能拖出模型之外
+                        # 对于管道两端的控制点,操控调整的时候,限制其不能拖出模型之外
                         elif (sphere_number == 201 or sphere_number == 202 or sphere_number == 1 or sphere_number == 2):
+                            op_cls.update_sphere_number = sphere_number
                             active_object = bpy.context.active_object
                             if (active_object != None):
                                 active_object_name = active_object.name
@@ -1248,12 +1366,10 @@ class TEST_OT_ventcanalqiehuan(bpy.types.Operator):
                             return {'PASS_THROUGH'}
                         # 鼠标位于其他控制圆球上的时候,管道控制点随着圆球位置的拖动改变而更新
                         else:
+                            op_cls.update_sphere_number = sphere_number
                             sphere_name = name + 'ventcanalsphere' + str(sphere_number)
-                            obj = bpy.data.objects[sphere_name]
                             index = int(object_dic_cur[sphere_name])
                             if(index < len(bpy.data.objects[name + 'ventcanal'].data.splines[0].points) and op_cls.__left_mouse_down):
-                                # bpy.data.objects[name + 'ventcanal'].data.splines[0].points[index].co[0:3] = obj.location
-                                # bpy.data.objects[name + 'ventcanal'].data.splines[0].points[index].co[3] = 1
                                 if (name == "右耳"):
                                     if (not ventcanal_convert):
                                         ventcanal_convert = True
@@ -1266,46 +1382,20 @@ class TEST_OT_ventcanalqiehuan(bpy.types.Operator):
                                         bpy.data.objects[name + 'meshventcanal'].hide_set(True)
                         return {'PASS_THROUGH'}
 
-                return {'PASS_THROUGH'}
-
-            # 模式切换，结束modal
-            elif(bpy.context.scene.var != 26 and bpy.context.scene.var in get_process_var_list("通气孔")):
-                if op_cls.__timer:
-                    context.window_manager.event_timer_remove(TEST_OT_ventcanalqiehuan.__timer)
-                    op_cls.__timer = None
-                # if (name == "右耳"):
-                #     is_mouseSwitch_modal_start = False
-                # elif (name == "左耳"):
-                #     is_mouseSwitch_modal_startL = False
-                is_mouseSwitch_modal_start = False
-                print('ventcanalqiehuan finish')
-                return {'FINISHED'}
-
-            # 鼠标在区域外
-            else:
-                if (name == '右耳' and mouse_index != -1):
-                    mouse_index = -1
-                if (name == '左耳' and mouse_indexL != -1):
-                    mouse_indexL = -1
-                return {'PASS_THROUGH'}
-
-        else:
-            if get_switch_time() != None and time.time() - get_switch_time() > 0.3 and get_switch_flag():
-                if op_cls.__timer:
-                    context.window_manager.event_timer_remove(TEST_OT_ventcanalqiehuan.__timer)
-                    op_cls.__timer = None
-                # if (name == "右耳"):
-                #     is_mouseSwitch_modal_start = False
-                # elif (name == "左耳"):
-                #     is_mouseSwitch_modal_startL = False
-                is_mouseSwitch_modal_start = False
-                set_switch_time(None)
-                now_context = bpy.context.screen.areas[0].spaces.active.context
-                if not check_modals_running(bpy.context.scene.var, now_context):
-                    bpy.context.scene.var = 0
-                print('ventcanalqiehuan finish')
-                return {'FINISHED'}
             return {'PASS_THROUGH'}
+
+        # 模式切换，结束modal
+        else:
+            if op_cls.__timer:
+                context.window_manager.event_timer_remove(TEST_OT_ventcanalqiehuan.__timer)
+                op_cls.__timer = None
+            # if (name == "右耳"):
+            #     is_mouseSwitch_modal_start = False
+            # elif (name == "左耳"):
+            #     is_mouseSwitch_modal_startL = False
+            is_mouseSwitch_modal_start = False
+            print('ventcanalqiehuan finish')
+            return {'FINISHED'}
 
 
 class TEST_OT_finishventcanal(bpy.types.Operator):
@@ -1317,6 +1407,7 @@ class TEST_OT_finishventcanal(bpy.types.Operator):
         bpy.context.scene.var = 27
         self.execute(context)
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        record_state()
         return {'FINISHED'}
 
     def execute(self, context):
@@ -1328,6 +1419,10 @@ class TEST_OT_finishventcanal(bpy.types.Operator):
             ventcanal_finish = True
         elif (name == "左耳"):
             ventcanal_finishL = True
+
+        if not bpy.context.scene.pressfinish:
+            unregister_tools()
+            bpy.context.scene.pressfinish = True
 
 
 
@@ -1381,6 +1476,7 @@ class TEST_OT_resetventcanal(bpy.types.Operator):
                 number = 0
                 prev_sphere_number_plane = 0
                 bpy.context.scene.transparent3EnumR = 'OP1'
+                record_state()
                 # bpy.ops.object.ventcanalqiehuan('INVOKE_DEFAULT')
                 context.window_manager.modal_handler_add(self)
                 return {'RUNNING_MODAL'}
@@ -1419,6 +1515,7 @@ class TEST_OT_resetventcanal(bpy.types.Operator):
                 numberL = 0
                 prev_sphere_number_planeL = 0
                 bpy.context.scene.transparent3EnumL = 'OP1'
+                record_state()
                 # bpy.ops.object.ventcanalqiehuan('INVOKE_DEFAULT')
                 context.window_manager.modal_handler_add(self)
                 return {'RUNNING_MODAL'}
@@ -2118,6 +2215,56 @@ def initial_ventcanal():
     else:  # 不存在已保存的圆球位置
         pass
 
+
+
+    # 为管道控制红球添加位置约束,只能在红环平面上移动
+    if (name == "右耳"):
+        for obj in bpy.data.objects:
+            soundCanalPlanePattern = r'右耳VentCanalPlane'
+            soundCanalPlaneBorderPattern = r'右耳VentCanalPlaneBorderCurveObject'
+            if re.match(soundCanalPlanePattern, obj.name) and not re.match(soundCanalPlaneBorderPattern, obj.name):
+                sphere_number = int(obj.name.replace('右耳VentCanalPlane', ''))
+                sphere_name = '右耳ventcanalsphere' + str(sphere_number)
+                cur_sphere_obj = bpy.data.objects.get(sphere_name)
+                if (cur_sphere_obj != None):
+                    limit_location_constraint = None
+                    for constraint in cur_sphere_obj.constraints:
+                        if (constraint.type == 'LIMIT_LOCATION'):
+                            limit_location_constraint = constraint
+                            break
+                    if (limit_location_constraint == None):
+                        limit_location_constraint = cur_sphere_obj.constraints.new(type='LIMIT_LOCATION')
+                    limit_location_constraint.use_min_z = True
+                    limit_location_constraint.min_z = 0
+                    limit_location_constraint.use_max_z = True
+                    limit_location_constraint.max_z = 0
+                    limit_location_constraint.owner_space = 'CUSTOM'
+                    limit_location_constraint.space_object = obj
+    elif (name == "左耳"):
+        for obj in bpy.data.objects:
+            soundCanalPlanePattern = r'左耳VentCanalPlane'
+            soundCanalPlaneBorderPattern = r'左耳VentCanalPlaneBorderCurveObject'
+            if re.match(soundCanalPlanePattern, obj.name) and not re.match(soundCanalPlaneBorderPattern, obj.name):
+                sphere_number = int(obj.name.replace('左耳VentCanalPlane', ''))
+                sphere_name = '左耳ventcanalsphere' + str(sphere_number)
+                cur_sphere_obj = bpy.data.objects.get(sphere_name)
+                if (cur_sphere_obj != None):
+                    limit_location_constraint = None
+                    for constraint in cur_sphere_obj.constraints:
+                        if (constraint.type == 'LIMIT_LOCATION'):
+                            limit_location_constraint = constraint
+                            break
+                    if (limit_location_constraint == None):
+                        limit_location_constraint = cur_sphere_obj.constraints.new(type='LIMIT_LOCATION')
+                    limit_location_constraint.use_min_z = True
+                    limit_location_constraint.min_z = 0
+                    limit_location_constraint.use_max_z = True
+                    limit_location_constraint.max_z = 0
+                    limit_location_constraint.owner_space = 'CUSTOM'
+                    limit_location_constraint.space_object = obj
+
+
+
     # 重新将曲线控制点勾挂到管道控制红球上
     hook_curve_point_to_sphere()
 
@@ -2679,115 +2826,6 @@ def backFromVentCanal():
     bpy.context.view_layer.objects.active = cur_obj
 
 
-class addventcanal_MyTool2(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.addventcanal2"
-    bl_label = "通气孔添加控制点操作"
-    bl_description = (
-        "实现鼠标双击添加控制点操作"
-    )
-    bl_icon = "ops.curve.extrude_cursor"
-    bl_widget = None
-    bl_keymap = (
-        ("object.addventcanal", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
-        ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
-        ("view3d.view_roll", {"type": 'LEFTMOUSE', "value": 'PRESS', "ctrl": True}, None)
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class addventcanal_MyTool3(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.addventcanal3"
-    bl_label = "通气孔对圆球操作"
-    bl_description = (
-        "通气孔对圆球移动、双击操作"
-    )
-    bl_icon = "ops.curve.draw"
-    bl_widget = None
-    bl_keymap = (
-        # ("view3d.select", {"type": 'LEFTMOUSE', "value": 'PRESS'}, {"properties": [("deselect_all", True), ], },),
-        ("transform.translate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
-        ("object.deleteventcanal", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class finishventcanal_MyTool(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.finishventcanal"
-    bl_label = "通气孔完成"
-    bl_description = (
-        "完成管道的绘制"
-    )
-    bl_icon = "ops.curve.extrude_move"
-    bl_widget = None
-    bl_keymap = (
-        ("object.finishventcanal", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class resetventcanal_MyTool(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.resetventcanal"
-    bl_label = "通气孔重置"
-    bl_description = (
-        "重置管道的绘制"
-    )
-    bl_icon = "ops.curves.sculpt_snake_hook"
-    bl_widget = None
-    bl_keymap = (
-        ("object.resetventcanal", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class mirrorventcanal_MyTool(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.mirrorventcanal"
-    bl_label = "通气孔镜像"
-    bl_description = (
-        "点击镜像通气孔"
-    )
-    bl_icon = "ops.curve.radius"
-    bl_widget = None
-    bl_keymap = (
-        ("object.mirrorventcanal", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
 _classes = [
     TEST_OT_addventcanal,
     TEST_OT_deleteventcanal,
@@ -2798,38 +2836,11 @@ _classes = [
 ]
 
 
-def register_ventcanal_tools():
-    bpy.utils.register_tool(resetventcanal_MyTool, separator=True, group=False)
-    bpy.utils.register_tool(finishventcanal_MyTool, separator=True, group=False,
-                            after={resetventcanal_MyTool.bl_idname})
-    bpy.utils.register_tool(mirrorventcanal_MyTool, separator=True, group=False,
-                            after={finishventcanal_MyTool.bl_idname})
-
-    bpy.utils.register_tool(addventcanal_MyTool2, separator=True, group=False)
-    bpy.utils.register_tool(addventcanal_MyTool3, separator=True, group=False)
-
-
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
-
-    # bpy.utils.register_tool(resetventcanal_MyTool, separator=True, group=False)
-    # bpy.utils.register_tool(finishventcanal_MyTool, separator=True, group=False,
-    #                         after={resetventcanal_MyTool.bl_idname})
-    # bpy.utils.register_tool(mirrorventcanal_MyTool, separator=True, group=False,
-    #                         after={finishventcanal_MyTool.bl_idname})
-    #
-    # bpy.utils.register_tool(addventcanal_MyTool2, separator=True, group=False)
-    # bpy.utils.register_tool(addventcanal_MyTool3, separator=True, group=False)
 
 
 def unregister():
     for cls in _classes:
         bpy.utils.unregister_class(cls)
-
-    bpy.utils.unregister_tool(resetventcanal_MyTool)
-    bpy.utils.unregister_tool(finishventcanal_MyTool)
-    bpy.utils.unregister_tool(mirrorventcanal_MyTool)
-
-    bpy.utils.unregister_tool(addventcanal_MyTool2)
-    bpy.utils.unregister_tool(addventcanal_MyTool3)

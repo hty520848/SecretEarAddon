@@ -90,7 +90,7 @@ def draw_border_curve(order_border_co, name, depth):
             moveToLeft(bpy.context.active_object)
 
         # 为圆环上色
-        newColor('blue', 0, 0, 1, 1, 1)
+        newColor('blue', 0, 0, 1, 0, 1)
         bpy.context.active_object.data.materials.append(bpy.data.materials['blue'])
         bpy.context.view_layer.update()
         bpy.context.view_layer.objects.active = active_obj
@@ -591,6 +591,8 @@ def extrude_border(name, step_out, step_in):
     bpy.ops.mesh.edge_face_add()
     duplicate_obj.vertex_groups.new(name="temp")
     bpy.ops.object.vertex_group_assign()
+    if judge_normals():
+        bpy.ops.mesh.flip_normals()
     bpy.ops.mesh.extrude_region_shrink_fatten(TRANSFORM_OT_shrink_fatten={"value": step_out})
     bpy.ops.object.vertex_group_set_active(group="temp")
     bpy.ops.object.vertex_group_remove_from()
@@ -600,12 +602,12 @@ def extrude_border(name, step_out, step_in):
     bpy.ops.mesh.delete(type='ONLY_FACE')
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.vertex_group_select()
+    if not judge_normals():
+        bpy.ops.mesh.flip_normals()
     bpy.ops.mesh.extrude_region_shrink_fatten(TRANSFORM_OT_shrink_fatten={"value": step_in})
     bpy.ops.mesh.delete(type='ONLY_FACE')
     bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.mesh.normals_make_consistent(inside=False)
-    if judge_normals():
-        bpy.ops.mesh.flip_normals()
     bpy.ops.object.mode_set(mode='OBJECT')
 
     return duplicate_obj.name
@@ -631,7 +633,7 @@ def dig_hole():
             local_mesh_name = name + 'meshHoleBorderCurve' + str(number)
             utils_draw_curve(template_hole_border, local_curve_name, 0.18)
             convert_to_mesh(local_curve_name, local_mesh_name, 0.18)  # 重新生成网格
-            newColor('blue', 0, 0, 1, 1, 1)
+            newColor('blue', 0, 0, 1, 0, 1)
             bpy.data.objects[local_curve_name].data.materials.append(bpy.data.materials['blue'])
 
             cut_obj_name = extrude_border(local_curve_name, 1, 1)
@@ -874,8 +876,9 @@ def judge_if_need_invert():
 
 def judge_normals():
     obj_mesh = bmesh.from_edit_mesh(bpy.context.active_object.data)
+    verts = [v for v in obj_mesh.verts if v.select]
     sum = 0
-    for v in obj_mesh.verts:
+    for v in verts:
         sum += v.normal[2]
     return sum < 0
 
@@ -889,6 +892,8 @@ def frame_fill():
             bpy.context.scene.shiFouShangBuQieGeMianBanR = True
         if bpy.context.scene.KongQiangMianBanTypeEnumR != 'OP1':
             bpy.context.scene.KongQiangMianBanTypeEnumR = 'OP1'
+        if bpy.context.scene.jiHuoBianYuanHouDuR:
+            bpy.context.scene.jiHuoBianYuanHouDuR = False
     elif name == '左耳':
         if not bpy.context.scene.neiBianJiXianL:
             bpy.context.scene.neiBianJiXianL = True
@@ -896,6 +901,8 @@ def frame_fill():
             bpy.context.scene.shiFouShangBuQieGeMianBanL = True
         if bpy.context.scene.KongQiangMianBanTypeEnumL != 'OP1':
             bpy.context.scene.KongQiangMianBanTypeEnumL = 'OP1'
+        if bpy.context.scene.jiHuoBianYuanHouDuL:
+            bpy.context.scene.jiHuoBianYuanHouDuL = False
 
     set_finish(True)
     copyModel(name)

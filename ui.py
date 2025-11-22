@@ -24,6 +24,9 @@ from .public_operation import processing_stage_dict, order_processing_list, set_
 from .sound_canal import get_is_on_rotate
 from .create_tip.cut_mould import get_color_mode
 from .parameter import set_switch_flag, get_switch_flag, get_mirror_context, set_mirror_context, check_modals_running
+from .pymesh.pymesh import register_globals, write_to_pickle, import_sed_file
+from .global_manager import global_manager
+import subprocess
 
 # 记录左右窗口视角的数据
 left_last_dis = None
@@ -41,6 +44,13 @@ show_prop = False
 
 # 不同布局间的监听是否启动
 is_listen_start = False
+
+
+def register_ui_globals():
+    global prev_context
+    global show_prop
+    global_manager.register("prev_context", prev_context)
+    global_manager.register("show_prop", show_prop)
 
 
 # 打磨面板
@@ -92,6 +102,10 @@ class HUIER_PT_LocalOrGlobalJiaHou(bpy.types.Panel):
     bl_region_type = "WINDOW"
     bl_context = "output"
 
+    @classmethod
+    def poll(cls, context):
+        return not context.scene.pressfinish
+
     def draw(self, context):
         layout = self.layout
         layout.separator()
@@ -118,9 +132,9 @@ class HUIER_PT_DianMianQieGe(bpy.types.Panel):
     bl_context = "view_layer"
     bl_options = {'HIDE_HEADER'}
 
-    # @classmethod
-    # def poll(cls, context):
-    #     return context.scene.leftWindowObj == '右耳'
+    @classmethod
+    def poll(cls, context):
+        return not context.scene.pressfinish
 
     def draw(self, context):
         layout = self.layout
@@ -141,8 +155,9 @@ class HUIER_PT_PlantCut(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return ((context.scene.qieGeTypeEnumR == 'OP1' and context.scene.leftWindowObj == '右耳') or
-                (context.scene.qieGeTypeEnumL == 'OP1' and context.scene.leftWindowObj == '左耳'))
+        return (not context.scene.pressfinish and
+                ((context.scene.qieGeTypeEnumR == 'OP1' and context.scene.leftWindowObj == '右耳') or
+                 (context.scene.qieGeTypeEnumL == 'OP1' and context.scene.leftWindowObj == '左耳')))
 
     def draw(self, context):
         layout = self.layout
@@ -164,8 +179,9 @@ class HUIER_PT_StepCut(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return ((context.scene.qieGeTypeEnumR == 'OP2' and context.scene.leftWindowObj == '右耳') or
-                (context.scene.qieGeTypeEnumL == 'OP2' and context.scene.leftWindowObj == '左耳'))
+        return (not context.scene.pressfinish and
+                ((context.scene.qieGeTypeEnumR == 'OP2' and context.scene.leftWindowObj == '右耳') or
+                 (context.scene.qieGeTypeEnumL == 'OP2' and context.scene.leftWindowObj == '左耳')))
 
     def draw(self, context):
         layout = self.layout
@@ -192,6 +208,10 @@ class HUIER_PT_MoJuTab(bpy.types.Panel):
     bl_context = "scene"
     bl_options = {'HIDE_HEADER'}
 
+    @classmethod
+    def poll(cls, context):
+        return not context.scene.pressfinish
+
     def draw(self, context):
         layout = self.layout
         col = layout.split(factor=0.4)
@@ -212,7 +232,7 @@ class HUIER_PT_ChuangJianMuJu(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.tabEnum == '参数'
+        return not context.scene.pressfinish and context.scene.tabEnum == '参数'
 
     def draw(self, context):
         layout = self.layout
@@ -242,8 +262,8 @@ class HUIER_PT_MuJuPianYi(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return (context.scene.tabEnum == '参数' and context.scene.muJuTypeEnum != 'OP2'
-                and context.scene.muJuTypeEnum != 'OP3')
+        return (not context.scene.pressfinish and context.scene.tabEnum == '参数' and
+                (context.scene.muJuTypeEnum != 'OP2' and context.scene.muJuTypeEnum != 'OP3'))
 
     def draw(self, context):
         layout = self.layout
@@ -278,10 +298,9 @@ class HUIER_PT_MuJuHouDu(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.tabEnum == '参数' and (context.scene.muJuTypeEnum == 'OP1' or
-                                                    context.scene.muJuTypeEnum == 'OP3' or
-                                                    context.scene.muJuTypeEnum == 'OP4' or
-                                                    context.scene.muJuTypeEnum == 'OP5')
+        return (not context.scene.pressfinish and context.scene.tabEnum == '参数' and 
+                (context.scene.muJuTypeEnum == 'OP1' or context.scene.muJuTypeEnum == 'OP3' or
+                 context.scene.muJuTypeEnum == 'OP4' or context.scene.muJuTypeEnum == 'OP5'))
 
     def draw(self, context):
         layout = self.layout
@@ -315,9 +334,9 @@ class HUIER_PT_BianYuanHouDu(bpy.types.Panel):
     @classmethod
     def poll(cls, context):
         if context.scene.leftWindowObj == '右耳':
-            return context.scene.tabEnum == '参数' and context.scene.jiHuoBianYuanHouDuR
+            return not context.scene.pressfinish and context.scene.tabEnum == '参数' and context.scene.jiHuoBianYuanHouDuR
         else:
-            return context.scene.tabEnum == '参数' and context.scene.jiHuoBianYuanHouDuL
+            return not context.scene.pressfinish and context.scene.tabEnum == '参数' and context.scene.jiHuoBianYuanHouDuL
 
     def draw(self, context):
         layout = self.layout
@@ -375,9 +394,9 @@ class HUIER_PT_MianBanAndDianZiSheBei(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.tabEnum == '参数' and (context.scene.muJuTypeEnum == 'OP3' or
-                                                    context.scene.muJuTypeEnum == 'OP5' or
-                                                    context.scene.muJuTypeEnum == 'OP6')
+        return (not context.scene.pressfinish and context.scene.tabEnum == '参数' and
+                (context.scene.muJuTypeEnum == 'OP3' or context.scene.muJuTypeEnum == 'OP5' or
+                 context.scene.muJuTypeEnum == 'OP6'))
 
     def draw(self, context):
         layout = self.layout
@@ -392,7 +411,7 @@ class HUIER_PT_MianBanAndDianZiSheBei(bpy.types.Panel):
         col.prop(context.scene, 'jieShouQiKaiGuanTypeEnum', text="开关类型")
         layout.separator()
         col = layout.column(align=True)
-        col.prop(context.scene, 'buJianBTypeEenu', text="部件B")
+        col.prop(context.scene, 'buJianBTypeEnum', text="部件B")
 
         if context.scene.leftWindowObj == '右耳':
             layout.separator()
@@ -433,7 +452,7 @@ class HUIER_PT_ShangBuQieGeMianBan(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.tabEnum == '参数' and context.scene.muJuTypeEnum != 'OP2'
+        return not context.scene.pressfinish and context.scene.tabEnum == '参数' and context.scene.muJuTypeEnum != 'OP2'
 
     def draw(self, context):
         layout = self.layout
@@ -466,10 +485,9 @@ class HUIER_PT_KongQiangMianBan(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.tabEnum == '参数' and (context.scene.muJuTypeEnum == 'OP1' or
-                                                    context.scene.muJuTypeEnum == 'OP4' or
-                                                    context.scene.muJuTypeEnum == 'OP3' or
-                                                    context.scene.muJuTypeEnum == 'OP5')
+        return (not context.scene.pressfinish and context.scene.tabEnum == '参数' and
+                (context.scene.muJuTypeEnum == 'OP1' or context.scene.muJuTypeEnum == 'OP4' or
+                 context.scene.muJuTypeEnum == 'OP3' or context.scene.muJuTypeEnum == 'OP5'))
 
     def draw(self, context):
         layout = self.layout
@@ -518,7 +536,7 @@ class HUIER_PT_YingErMoCanShu(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.tabEnum == '参数' and context.scene.muJuTypeEnum == 'OP2'
+        return not context.scene.pressfinish and context.scene.tabEnum == '参数' and context.scene.muJuTypeEnum == 'OP2'
 
     def draw(self, context):
         layout = self.layout
@@ -550,9 +568,9 @@ class HUIER_PT_TongQiKong1(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.tabEnum == '参数' and (context.scene.muJuTypeEnum == 'OP3' or
-                                                    context.scene.muJuTypeEnum == 'OP5' or
-                                                    context.scene.muJuTypeEnum == 'OP6')
+        return (not context.scene.pressfinish and context.scene.tabEnum == '参数' and
+                (context.scene.muJuTypeEnum == 'OP3' or context.scene.muJuTypeEnum == 'OP5' or
+                 context.scene.muJuTypeEnum == 'OP6'))
 
     def draw(self, context):
         layout = self.layout
@@ -617,7 +635,7 @@ class HUIER_PT_MoBanXuanZe(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.tabEnum == '模板'
+        return not context.scene.pressfinish and context.scene.tabEnum == '模板'
 
     def draw(self, context):
         layout = self.layout
@@ -629,18 +647,50 @@ class HUIER_PT_MoBanXuanZe(bpy.types.Panel):
         col = box2.column()
         col.label(text='用户模板')
         col.label(text='预定义模板')
-        col.prop(context.scene, "showHdu",
-                 icon="TRIA_DOWN" if context.scene.showHdu else "TRIA_RIGHT",
-                 icon_only=True, emboss=False, text='HDU'
-                 )
-        if context.scene.showHdu:
-            # 右列模板
-            icons = load_icons()
-            icon = icons.get("icon_reset")
-            col = split.column(align=True)
-            grid_flow = col.grid_flow(columns=2, align=True)
-            grid_flow.scale_y = 5
-            grid_flow.prop_tabs_enum(context.scene, 'muJuTypeEnum', icon_only=True)
+        scene = context.scene
+        # 获取所有以 "use_template_" 开头的变量
+        template_props = [
+            prop for prop in dir(scene)
+            if prop.startswith("use_template_")
+        ]
+
+        for prop in template_props:
+            selected_template = getattr(bpy.context.scene, prop)
+            template_name = prop.replace("use_template_", "")
+            col.prop(context.scene, prop,
+                     icon="TRIA_DOWN" if selected_template else "TRIA_RIGHT",
+                     icon_only=True, emboss=False, text=template_name
+                     )
+        for prop in template_props:
+            selected_template = getattr(bpy.context.scene, prop)
+            if selected_template:
+                col = split.column(align=True)
+                grid_flow = col.grid_flow(columns=2, align=True)
+                grid_flow.scale_y = 5
+                template_name = prop.replace("use_template_", "")
+                if template_name == "HDU":
+                    grid_flow.prop_tabs_enum(context.scene, 'muJuTypeEnum', icon_only=True)
+                else:
+                    template_enum_name = f"template_{template_name}"
+                    template_enum = getattr(context.scene, prop)
+                    if template_enum:
+                        grid_flow.prop_tabs_enum(context.scene, template_enum_name, icon_only=False)
+        # col.prop(context.scene, "showHdu",
+        #          icon="TRIA_DOWN" if context.scene.showHdu else "TRIA_RIGHT",
+        #          icon_only=True, emboss=False, text='HDU'
+        #          )
+        # col.prop(context.scene, "showHuier",
+        #          icon="TRIA_DOWN" if context.scene.showHuier else "TRIA_RIGHT",
+        #          icon_only=True, emboss=False, text='Huier'
+        #          )
+        # if context.scene.showHdu:
+        #     # 右列模板
+        #     # icons = load_icons()
+        #     # icon = icons.get("icon_reset")
+        #     col = split.column(align=True)
+        #     grid_flow = col.grid_flow(columns=2, align=True)
+        #     grid_flow.scale_y = 5
+        #     grid_flow.prop_tabs_enum(context.scene, 'muJuTypeEnum', icon_only=True)
 
             # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
             # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
@@ -648,6 +698,13 @@ class HUIER_PT_MoBanXuanZe(bpy.types.Panel):
             # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
             # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
             # grid_flow.operator("wm.open_mainfile",text="", icon_value=icon.icon_id)
+        # elif context.scene.showHuier:
+        #     # 右列模板
+        #     col = split.column(align=True)
+        #     grid_flow = col.grid_flow(columns=2, align=True)
+        #     grid_flow.scale_y = 5
+        #     grid_flow.prop_tabs_enum(context.scene, 'HuierTypeEnum', icon_only=False)
+
 
 
 # 传声孔
@@ -658,6 +715,10 @@ class HUIER_PT_ChuanShenKong1(bpy.types.Panel):
     bl_region_type = "WINDOW"
     bl_context = "world"
     bl_options = {'HIDE_HEADER'}
+
+    @classmethod
+    def poll(cls, context):
+        return not context.scene.pressfinish
 
     def draw(self, context):
         layout = self.layout
@@ -702,6 +763,10 @@ class HUIER_PT_ChuanShenKong2(bpy.types.Panel):
     bl_region_type = "WINDOW"
     bl_context = "world"
 
+    @classmethod
+    def poll(cls, context):
+        return not context.scene.pressfinish
+
     def draw(self, context):
         layout = self.layout
         layout.separator()
@@ -723,6 +788,10 @@ class HUIER_PT_TongQiKong(bpy.types.Panel):
     bl_region_type = "WINDOW"
     bl_context = "collection"
     bl_options = {'HIDE_HEADER'}
+
+    @classmethod
+    def poll(cls, context):
+        return not context.scene.pressfinish
 
     def draw(self, context):
         layout = self.layout
@@ -758,6 +827,10 @@ class HUIER_PT_ErMoFuJian(bpy.types.Panel):
     bl_region_type = "WINDOW"
     bl_context = "object"
 
+    @classmethod
+    def poll(cls, context):
+        return not context.scene.pressfinish
+
     def draw(self, context):
         layout = self.layout
         name = bpy.context.scene.leftWindowObj
@@ -784,6 +857,10 @@ class HUIER_PT_Number(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "modifier"
+
+    @classmethod
+    def poll(cls, context):
+        return not context.scene.pressfinish
 
     def draw(self, context):
         layout = self.layout
@@ -824,6 +901,10 @@ class HUIER_PT_RuanErMoHouDu(bpy.types.Panel):
     bl_region_type = "WINDOW"
     bl_context = "particle"
 
+    @classmethod
+    def poll(cls, context):
+        return not context.scene.pressfinish
+
     def draw(self, context):
         layout = self.layout
         name = bpy.context.scene.leftWindowObj
@@ -844,6 +925,10 @@ class HUIER_PT_ZhiCheng(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "physics"
+
+    @classmethod
+    def poll(cls, context):
+        return not context.scene.pressfinish
 
     def draw(self, context):
         layout = self.layout
@@ -872,6 +957,10 @@ class HUIER_PT_PaiQiKong(bpy.types.Panel):
     bl_region_type = "WINDOW"
     bl_context = "constraint"
 
+    @classmethod
+    def poll(cls, context):
+        return not context.scene.pressfinish
+
     def draw(self, context):
         layout = self.layout
         name = bpy.context.scene.leftWindowObj
@@ -897,6 +986,10 @@ class HUIER_PT_CutMould(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "material"
+
+    @classmethod
+    def poll(cls, context):
+        return not context.scene.pressfinish
 
     def draw(self, context):
         layout = self.layout
@@ -1078,12 +1171,16 @@ class Huier_OT_NewFile(bpy.types.Operator):
     def invoke(self, context, event):
         self.first_mouse_x = event.mouse_x
         self.first_mouse_y = event.mouse_y
-        print('x', self.first_mouse_x)
-        print('y', self.first_mouse_y)
+        # print('x', self.first_mouse_x)
+        # print('y', self.first_mouse_y)
         self.execute(context)
         return {'FINISHED'}
 
     def execute(self, context):
+        if bpy.data.objects.get(bpy.context.scene.leftWindowObj) is not None:
+            blender_executable = bpy.app.binary_path
+            subprocess.Popen([blender_executable])
+            return
         context.scene.rightEar_path = ""
         context.scene.leftEar_path = ""
         # 移动光标到屏幕中心
@@ -1113,19 +1210,40 @@ class Huier_OT_keymap(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class Huier_OT_system(bpy.types.Operator):
+    bl_idname = "huier.system"
+    bl_label = "查看系统设置"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        bpy.ops.screen.userpref_show(section='SYSTEM')
+        return {'FINISHED'}
+
+
 class Huier_OT_DaoChuWei(bpy.types.Operator):
     bl_idname = "huier.export"
     bl_label = "导出为"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
+        name = bpy.context.scene.leftWindowObj
+        if bpy.data.objects.get(name) is None:
+            return {'FINISHED'}
         # 将当前正在操作的物体提交
         current_tab = bpy.context.screen.areas[0].spaces.active.context
         submit_process = processing_stage_dict[current_tab]
+        context.scene.lastprocess = submit_process
+        override = getOverride()
+        with bpy.context.temp_override(**override):
+            recolor_and_change_mode(submit_process)
+        register_globals()
+        register_ui_globals()
+        write_to_pickle()
+        bpy.ops.wm.save_as_mainfile(filepath=context.scene.origin_expSedFile_path, check_existing=False)
         submit(submit_process)
         # 移动光标到屏幕中心
         context.window.cursor_warp(context.window.width // 2, (context.window.height // 2) + 60)
-        bpy.ops.screen.userpref_show(section='SYSTEM')
+        bpy.ops.screen.userpref_show(section='ANIMATION')
         # bpy.ops.screen.userpref_show()
         # area = bpy.context.window_manager.windows[-1].screen.areas[0]
         # area.type = "FILE_BROWSER"
@@ -1153,15 +1271,15 @@ class TOPBAR_MT_huierFile(bpy.types.Menu):
         layout = self.layout
         layout.operator_context = 'INVOKE_AREA'
         layout.operator("huier.new_file", text="新建", icon='FILE_NEW')
-        # layout.operator("wm.open_mainfile", text="打开...", icon='FILE_FOLDER')
+        layout.operator("import.sed_file", text="打开...", icon='FILE_FOLDER')
 
-        # layout.operator_context = 'EXEC_AREA' if context.blend_data.is_saved else 'INVOKE_AREA'
-        # layout.operator("wm.save_mainfile", text="保存", icon='FILE_TICK')
+        layout.operator_context = 'EXEC_AREA' if context.blend_data.is_saved else 'INVOKE_AREA'
+        layout.operator("save.sed_file", text="保存", icon='FILE_TICK')
 
-        # layout.operator_context = 'INVOKE_AREA'
-        # layout.operator("wm.save_as_mainfile", text="另存为")
         layout.operator_context = 'INVOKE_AREA'
+        layout.operator("save.sed_file", text="另存为")
 
+        layout.operator_context = 'INVOKE_AREA'
         layout.operator("huier.export", text="导出为", icon='EXPORT')
         layout.operator("huier.save_as_moban", text="另存为模板")
 
@@ -1282,6 +1400,132 @@ class TOPBAR_MT_huierView(bpy.types.Menu):
             icon = 'CHECKBOX_DEHLT'
         layout.operator_context = 'INVOKE_AREA'
         layout.operator("screen.toggleproperty", text="属性栏", icon=icon)
+
+
+class IMPORT_OT_SedFile(bpy.types.Operator):
+    bl_idname = "import.sed_file"
+    bl_label = "选择 Sed 文件"
+
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH")  # 文件路径属性
+
+    # 过滤文件扩展名
+    filter_glob: bpy.props.StringProperty(
+        default="*.sed",
+        options={'HIDDEN'}
+    )
+
+    def hide_use_settings(self):
+        # Check the most recent window (the file browser)
+        window = bpy.context.window_manager.windows[-1]
+
+        # Find the space of type `SpaceFileBrowser`
+        for area in window.screen.areas:
+            if area.ui_type != 'FILES':
+                continue
+            for space in area.spaces:
+                if space.type != 'FILE_BROWSER':
+                    continue
+
+                # Hide the property settings region
+                space.show_region_tool_props = False
+
+    def execute(self, context):
+        context.scene.expSedFile_path = self.filepath
+        if len(self.filepath) > 0 and self.filepath.endswith('.sed'):
+            name, _ = os.path.splitext(os.path.basename(self.filepath))
+            context.scene.earname = name
+            bpy.ops.wm.open_mainfile(filepath=self.filepath)
+            ovverride1, ooverride2 = getOverrideInFlieBrowser()
+            with bpy.context.temp_override(**ovverride1):
+                import_sed_file()
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        if bpy.data.objects.get(bpy.context.scene.leftWindowObj) is not None:
+            blender_executable = bpy.app.binary_path
+            subprocess.Popen([blender_executable])
+            return {'FINISHED'}
+        # 打开文件选择器，初始路径为场景中存储的路径或默认路径
+        context.window_manager.fileselect_add(self)
+        bpy.app.timers.register(self.hide_use_settings, first_interval=0.2)
+        return {'RUNNING_MODAL'}
+
+
+class SAVE_OT_SedFile(bpy.types.Operator):
+    bl_idname = "save.sed_file"
+    bl_label = "保存为 Sed 文件"
+
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH")  # 文件路径属性
+
+    filename_ext = ".sed"
+
+    # 过滤文件扩展名
+    filter_glob: bpy.props.StringProperty(
+        default="*.sed",
+        options={'HIDDEN'}
+    )
+
+    def hide_use_settings(self):
+        # Check the most recent window (the file browser)
+        window = bpy.context.window_manager.windows[-1]
+
+        # Find the space of type `SpaceFileBrowser`
+        for area in window.screen.areas:
+            if area.ui_type != 'FILES':
+                continue
+            for space in area.spaces:
+                if space.type != 'FILE_BROWSER':
+                    continue
+
+                # Hide the property settings region
+                space.show_region_tool_props = False
+
+    def execute(self, context):
+        current_tab = bpy.context.screen.areas[0].spaces.active.context
+        submit_process = processing_stage_dict[current_tab]
+        context.scene.lastprocess = submit_process
+        override = getOverride()
+        with bpy.context.temp_override(**override):
+            recolor_and_change_mode(submit_process)
+        register_globals()
+        register_ui_globals()
+        write_to_pickle()
+        if self.filepath == "":
+            bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath, check_existing=False)
+        else:
+            bpy.ops.wm.save_as_mainfile(filepath=self.filepath, check_existing=False)
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        # 打开文件选择器，初始路径为场景中存储的路径或默认路径
+        context.window_manager.fileselect_add(self)
+        self.filepath = context.scene.expSedFile_path
+        bpy.app.timers.register(self.hide_use_settings, first_interval=0.2)
+        return {'RUNNING_MODAL'}
+
+
+def getOverrideInFlieBrowser():
+    # 获取所有的窗口
+    override = []
+    for window in bpy.context.window_manager.windows:
+        screen = window.screen
+
+        # 在所有的窗口中找到3D视图
+        for area in screen.areas:
+            if area.type == 'VIEW_3D':
+                # print('宽度',area.width)
+                if(area.spaces.active.use_local_collections == False):
+                    # 设置local collection
+                    area.spaces.active.use_local_collections = True
+                ride = {
+                    'window': window,
+                    'screen': screen,
+                    'area': area,
+                    'region': [region for region in area.regions if region.type == 'WINDOW'][0],
+                }
+                override.append(ride)
+
+    return override[0],override[1]
 
 
 # ********** 3D视图下的菜单栏 **********
@@ -1571,7 +1815,7 @@ class RestartModal(bpy.types.Operator):
 
 
 # 给3d区域添加监听器
-SpaceView3D.my_handler = SpaceView3D.draw_handler_add(test, (), 'WINDOW', 'PRE_VIEW')
+# SpaceView3D.my_handler = SpaceView3D.draw_handler_add(test, (), 'WINDOW', 'PRE_VIEW')
 
 
 # 切换左右耳窗口
@@ -1707,23 +1951,16 @@ class HUIER_PT_TestButton(bpy.types.Panel):
     bl_idname = "HUIER_PT_Button"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "TestButton"
+    bl_category = "3DModel"
 
     def draw(self, context):
         layout = self.layout
         col = layout.column()
-        col.operator("obj.initialcolor", text="初始化模型颜色")
-        col.operator("obj.initialtransparency", text="透明")
-        # col.operator("obj.localthickeningreset", text="重置")
-        # col.operator("obj.localthickeningaddarea", text="扩大区域")
-        # col.operator("obj.localthickeningreducearea", text="缩小区域")
-        # col.operator("obj.localthickeningthick", text="加厚")
-        # col.operator("obj.localthickeningsubmit", text="提交")
-        # col.operator("object.smooth", text="光滑")
-        # col.operator("obj.undo", text="撤销")
-        # col.operator("obj.redo", text="重做")
-        # col.operator("object.switchtestfunc", text="磨具功能测试")
-        col.operator("obj.localthickeningjingxiang", text="加厚镜像")
+        col.operator("object.msgbuscallback", text="初始化模块切换")
+        col.operator("object.msgbuscallback2", text="暂停模块切换")
+        col.operator("object.msgbuscallback3", text="开始模块切换")
+        col.operator("obj.undo1", text="撤回")
+        col.operator("obj.redo1", text="前进")
 
 
 class ToggleProperty(bpy.types.Operator):
@@ -1804,7 +2041,7 @@ def submit(submit_process):
     elif (submit_process == '创建模具'):
         override = getOverride()
         with bpy.context.temp_override(**override):
-            bpy.ops.object.handlesubmit('INVOKE_DEFAULT')
+            bpy.ops.object.finishmould('INVOKE_DEFAULT')
     elif (submit_process == '传声孔'):
         override = getOverride()
         with bpy.context.temp_override(**override):
@@ -1860,20 +2097,54 @@ def submit(submit_process):
             elif bpy.context.scene.leftWindowObj == '左耳':
                 bpy.context.scene.transparent3EnumL = 'OP3'
     elif (submit_process == '后期打磨'):
-        pass
+        override = getOverride()
+        with bpy.context.temp_override(**override):
+            bpy.ops.object.last_damo_finish('INVOKE_DEFAULT')
 
 
-class Huier_OT_Startmodal(bpy.types.Operator):
-    bl_idname = "start.modal"
-    bl_label = "注册"
-    bl_options = {'REGISTER', 'UNDO'}
+def recolor_and_change_mode(submit_process):
+    if bpy.context.mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.context.view_layer.objects.active = bpy.data.objects[bpy.context.scene.leftWindowObj]
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.data.objects[bpy.context.scene.leftWindowObj].select_set(state=True)
+    if submit_process == '打磨':
+        # 重新着色
+        active_obj = bpy.data.objects[bpy.context.scene.leftWindowObj]
+        # 获取网格数据
+        me = active_obj.data
+        # 创建bmesh对象
+        bm = bmesh.new()
+        # 将网格数据复制到bmesh对象
+        bm.from_mesh(me)
+        color_lay = bm.verts.layers.float_color["Color"]
+        for vert in bm.verts:
+            colvert = vert[color_lay]
+            colvert.x = 0
+            colvert.y = 0.25
+            colvert.z = 1
 
-    def execute(self, context):
-        # bpy.ops.object.createmouldinit('INVOKE_DEFAULT')
-        # bpy.ops.object.createmouldcut('INVOKE_DEFAULT')
-        # bpy.ops.object.createmouldfill('INVOKE_DEFAULT')
-        bpy.ops.object.msgbuscallback('INVOKE_DEFAULT')
-        return {'FINISHED'}
+        bm.to_mesh(me)
+        bm.free()
+
+    elif submit_process == '后期打磨':
+        # 重新着色
+        active_obj = bpy.data.objects[bpy.context.scene.leftWindowObj]
+        # 获取网格数据
+        me = active_obj.data
+        # 创建bmesh对象
+        bm = bmesh.new()
+        # 将网格数据复制到bmesh对象
+        bm.from_mesh(me)
+        color_lay = bm.verts.layers.float_color["Color"]
+        for vert in bm.verts:
+            colvert = vert[color_lay]
+            colvert.x = 1
+            colvert.y = 0.319
+            colvert.z = 0.133
+
+        bm.to_mesh(me)
+        bm.free()
 
 
 # 注册类
@@ -1911,9 +2182,10 @@ _classes = [
     TOPBAR_MT_huierView,
     # TOPBAR_MT_file,
     # TOPBAR_MT_edit,
-    # HUIER_PT_TestButton,
+    HUIER_PT_TestButton,
     Huier_OT_addon,
     Huier_OT_keymap,
+    Huier_OT_system,
     Huier_OT_NewFile,
     Huier_OT_DaoChuWei,
     Huier_OT_SaveAsMoban,
@@ -1923,7 +2195,8 @@ _classes = [
     ToggleProperty,
     HUIER_PT_CutMould,
     RestartModal,
-    Huier_OT_Startmodal
+    IMPORT_OT_SedFile,
+    SAVE_OT_SedFile
 ]
 
 

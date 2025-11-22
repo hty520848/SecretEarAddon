@@ -11,7 +11,13 @@
     禁止使用 a，b，c此类无意义的命名！！！！
     禁止使用 a，b，c此类无意义的命名！！！！
 '''
-import bpy
+from .global_manager import global_manager
+
+def register_parameter_globals():
+    global soft_modal_start
+    global shell_modal_start
+    global_manager.register("soft_modal_start", soft_modal_start)
+    global_manager.register("shell_modal_start", shell_modal_start)
 
 '''
     通用变量
@@ -30,17 +36,6 @@ def get_mirror_context():
     return is_mirror_context
 
 switch_flag = True   # 标记当前切换是否结束
-switch_time = None   # 记录切换结束的时间
-
-def set_switch_time(time):
-    global switch_time
-    switch_time = time
-
-
-def get_switch_time():
-    global switch_time
-    return switch_time
-
 
 def set_switch_flag(value):
     global switch_flag
@@ -212,6 +207,83 @@ def set_smooth_curve_modal_start(value):
 def get_smooth_curve_modal_start():
     global smooth_curve_modal_start
     return smooth_curve_modal_start
+
+# 以下两个变量用来防止两个modal间的冲突
+curve_modal_running = False
+torus_modal_running = False
+
+def set_curve_modal_running(value):
+    global curve_modal_running
+    curve_modal_running = value
+
+
+def get_curve_modal_running():
+    global curve_modal_running
+    return curve_modal_running
+
+
+def set_torus_modal_running(value):
+    global torus_modal_running
+    torus_modal_running = value
+
+
+def get_torus_modal_running():
+    global torus_modal_running
+    return torus_modal_running
+
+
+# 以下两个变量用于解决 外壳鼠标物体(红环,接收器,电池仓等物体) 和 蓝线之间的激活冲突问题
+shell_curve_obj_active = False
+
+def set_shell_curve_obj_active(value):
+    global shell_curve_obj_active
+    shell_curve_obj_active = value
+
+def get_shell_curve_obj_active():
+    global shell_curve_obj_active
+    return shell_curve_obj_active
+
+
+prop_select = "use_template_HDU"
+is_modifer = False
+def update_template_selection(self, context):
+    global prop_select
+    global is_modifer
+
+    if not is_modifer:
+        is_modifer = True
+        scene = context.scene
+        # 获取所有 use_template_ 开头的属性
+        template_props = [
+            prop for prop in dir(scene)
+            if prop.startswith("use_template_") and getattr(scene, prop)
+        ]
+
+        # 如果当前有两个模板被选中
+        if len(template_props) == 2:
+            # 取消 prop_select 对应的模板
+            if prop_select in template_props:
+                setattr(scene, prop_select, False)
+                template_props.remove(prop_select)
+
+            # 更新 prop_select 为另一个选中的模板
+            if template_props:
+                prop_select = template_props[0]
+        is_modifer = False
+
+
+########## 为了防止左边工具栏切换不过来使用的延迟相应，现在通过属性栏是否刷新来判断 ##########
+switch_time = None   # 记录切换结束的时间
+
+def set_switch_time(time):
+    global switch_time
+    switch_time = time
+
+
+def get_switch_time():
+    global switch_time
+    return switch_time
+
 
 ########## 第三方鼠标库相关，第三方鼠标库会造成进程闪退，现弃用 ##########
 # from pynput import mouse

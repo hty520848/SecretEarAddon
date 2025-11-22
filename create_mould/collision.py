@@ -9,8 +9,7 @@ from ..tool import newShader, get_region_and_space, moveToRight, moveToLeft, uti
     newColor, getOverride, getOverride2, apply_material
 from math import radians
 from mathutils import Vector, Euler, Matrix
-
-name = ""
+from ..global_manager import global_manager
 
 is_modal_start = False
 is_collision_modal_start = False
@@ -54,6 +53,213 @@ is_pressing_L = None
 
 points1 = points2 = points3 = []
 
+#记录碰撞检测中相关物体的位置信息,用于模块切换时恢复相关物体的位置
+cube1_location = None
+cube2_location = None
+cube3_location = None
+receiver_location = None
+cube1_locationL  = None
+cube2_locationL  = None
+cube3_locationL  = None
+receiver_locationL  = None
+cube1_rotation  = None
+cube2_rotation  = None
+cube3_rotation  = None
+receiver_rotation  = None
+cube1_rotationL  = None
+cube2_rotationL  = None
+cube3_rotationL  = None
+receiver_rotationL  = None
+
+cube1_location_list = []
+cube2_location_list = []
+cube3_location_list = []
+receiver_location_list = []
+cube1_rotation_list = []
+cube2_rotation_list = []
+cube3_rotation_list = []
+receiver_rotation_list = []
+
+cube1_locationL_list = []
+cube2_locationL_list = []
+cube3_locationL_list = []
+receiver_locationL_list = []
+cube1_rotationL_list = []
+cube2_rotationL_list = []
+cube3_rotationL_list = []
+receiver_rotationL_list = []
+
+
+def register_collision_globals():
+    global cube1_location_list, cube2_location_list, cube3_location_list, receiver_location_list
+    global cube1_rotation_list, cube2_rotation_list, cube3_rotation_list, receiver_rotation_list
+    global cube1_locationL_list, cube2_locationL_list, cube3_locationL_list, receiver_locationL_list
+    global cube1_rotationL_list, cube2_rotationL_list, cube3_rotationL_list, receiver_rotationL_list
+    global cube1_location, cube2_location, cube3_location, receiver_location
+    global cube1_rotation, cube2_rotation, cube3_rotation, receiver_rotation
+    global cube1_locationL, cube2_locationL, cube3_locationL, receiver_locationL
+    global cube1_rotationL, cube2_rotationL, cube3_rotationL, receiver_rotationL
+    global finish
+    if cube1_location is not None:
+        cube1_location_list = cube1_location[:]
+        cube1_rotation_list = cube1_rotation[:]
+    if cube2_location is not None:
+        cube2_location_list = cube2_location[:]
+        cube2_rotation_list = cube2_rotation[:]
+    if cube3_location is not None:
+        cube3_location_list = cube3_location[:]
+        cube3_rotation_list = cube3_rotation[:]
+    if receiver_location is not None:
+        receiver_location_list = receiver_location[:]
+        receiver_rotation_list = receiver_rotation[:]
+    if cube1_locationL is not None:
+        cube1_locationL_list = cube1_locationL[:]
+        cube1_rotationL_list = cube1_rotationL[:]
+    if cube2_locationL is not None:
+        cube2_locationL_list = cube2_locationL[:]
+        cube2_rotationL_list = cube2_rotationL[:]
+    if cube3_locationL is not None:
+        cube3_locationL_list = cube3_locationL[:]
+        cube3_rotationL_list = cube3_rotationL[:]
+    if receiver_locationL is not None:
+        receiver_locationL_list = receiver_locationL[:]
+        receiver_rotationL_list = receiver_rotationL[:]
+    global_manager.register("cube1_location_list", cube1_location_list)
+    global_manager.register("cube2_location_list", cube2_location_list)
+    global_manager.register("cube3_location_list", cube3_location_list)
+    global_manager.register("receiver_location_list", receiver_location_list)
+    global_manager.register("cube1_rotation_list", cube1_rotation_list)
+    global_manager.register("cube2_rotation_list", cube2_rotation_list)
+    global_manager.register("cube3_rotation_list", cube3_rotation_list)
+    global_manager.register("receiver_rotation_list", receiver_rotation_list)
+    global_manager.register("cube1_locationL_list", cube1_locationL_list)
+    global_manager.register("cube2_locationL_list", cube2_locationL_list)
+    global_manager.register("cube3_locationL_list", cube3_locationL_list)
+    global_manager.register("receiver_locationL_list", receiver_locationL_list)
+    global_manager.register("cube1_rotationL_list", cube1_rotationL_list)
+    global_manager.register("cube2_rotationL_list", cube2_rotationL_list)
+    global_manager.register("cube3_rotationL_list", cube3_rotationL_list)
+    global_manager.register("receiver_rotationL_list", receiver_rotationL_list)
+    global_manager.register("finish", finish)
+
+
+def load_collision_globals():
+    global cube1_location_list, cube2_location_list, cube3_location_list, receiver_location_list
+    global cube1_rotation_list, cube2_rotation_list, cube3_rotation_list, receiver_rotation_list
+    global cube1_locationL_list, cube2_locationL_list, cube3_locationL_list, receiver_locationL_list
+    global cube1_rotationL_list, cube2_rotationL_list, cube3_rotationL_list, receiver_rotationL_list
+    global cube1_location, cube2_location, cube3_location, receiver_location
+    global cube1_rotation, cube2_rotation, cube3_rotation, receiver_rotation
+    global cube1_locationL, cube2_locationL, cube3_locationL, receiver_locationL
+    global cube1_rotationL, cube2_rotationL, cube3_rotationL, receiver_rotationL
+
+    if len(cube1_location_list) != 0:
+        cube1_location = Vector(cube1_location_list)
+        cube1_rotation = Euler(cube1_rotation_list, 'XYZ')
+    if len(cube2_location_list) != 0:
+        cube2_location = Vector(cube2_location_list)
+        cube2_rotation = Euler(cube2_rotation_list, 'XYZ')
+    if len(cube3_location_list) != 0:
+        cube3_location = Vector(cube3_location_list)
+        cube3_rotation = Euler(cube3_rotation_list, 'XYZ')
+    if len(receiver_location_list) != 0:
+        receiver_location = Vector(receiver_location_list)
+        receiver_rotation = Euler(receiver_rotation_list, 'XYZ')
+    if len(cube1_locationL_list) != 0:
+        cube1_locationL = Vector(cube1_locationL_list)
+        cube1_rotationL = Euler(cube1_rotationL_list, 'XYZ')
+    if len(cube2_locationL_list) != 0:
+        cube2_locationL = Vector(cube2_locationL_list)
+        cube2_rotationL = Euler(cube2_rotationL_list, 'XYZ')
+    if len(cube3_locationL_list) != 0:
+        cube3_locationL = Vector(cube3_locationL_list)
+        cube3_rotationL = Euler(cube3_rotationL_list, 'XYZ')
+    if len(receiver_locationL_list) != 0:
+        receiver_locationL = Vector(receiver_locationL_list)
+        receiver_rotationL = Euler(receiver_rotationL_list, 'XYZ')
+
+
+def saveCubeInfo():
+    '''
+    记录碰撞检测中相关物体和接收器的位置信息
+    '''
+    global cube1_location, cube2_location, cube3_location, receiver_location
+    global cube1_rotation, cube2_rotation, cube3_rotation, receiver_rotation
+    global cube1_locationL, cube2_locationL, cube3_locationL, receiver_locationL
+    global cube1_rotationL, cube2_rotationL, cube3_rotationL, receiver_rotationL
+
+    name = bpy.context.scene.leftWindowObj
+    cube1_obj = bpy.data.objects.get(name + "cube1")
+    cube2_obj = bpy.data.objects.get(name + "cube2")
+    cube3_obj = bpy.data.objects.get(name + "cube3")
+    receiver_plane_obj = bpy.data.objects.get(name + "ReceiverPlane")
+    if (cube1_obj != None and cube2_obj != None and cube3_obj != None and receiver_plane_obj != None):
+        if name == '右耳':
+            cube1_location = [cube1_obj.location[0], cube1_obj.location[1], cube1_obj.location[2]]
+            cube2_location = [cube2_obj.location[0], cube2_obj.location[1], cube2_obj.location[2]]
+            cube3_location = [cube3_obj.location[0], cube3_obj.location[1], cube3_obj.location[2]]
+            receiver_location = [receiver_plane_obj.location[0], receiver_plane_obj.location[1],
+                                 receiver_plane_obj.location[2]]
+            cube1_rotation = [cube1_obj.rotation_euler[0], cube1_obj.rotation_euler[1], cube1_obj.rotation_euler[2]]
+            cube2_rotation = [cube2_obj.rotation_euler[0], cube2_obj.rotation_euler[1], cube2_obj.rotation_euler[2]]
+            cube3_rotation = [cube3_obj.rotation_euler[0], cube3_obj.rotation_euler[1], cube3_obj.rotation_euler[2]]
+            receiver_rotation = [receiver_plane_obj.rotation_euler[0], receiver_plane_obj.rotation_euler[1],
+                                 receiver_plane_obj.rotation_euler[2]]
+        elif name == '左耳':
+            cube1_locationL = [cube1_obj.location[0], cube1_obj.location[1], cube1_obj.location[2]]
+            cube2_locationL = [cube2_obj.location[0], cube2_obj.location[1], cube2_obj.location[2]]
+            cube3_locationL = [cube3_obj.location[0], cube3_obj.location[1], cube3_obj.location[2]]
+            receiver_locationL = [receiver_plane_obj.location[0], receiver_plane_obj.location[1],
+                                 receiver_plane_obj.location[2]]
+            cube1_rotationL = [cube1_obj.rotation_euler[0], cube1_obj.rotation_euler[1], cube1_obj.rotation_euler[2]]
+            cube2_rotationL = [cube2_obj.rotation_euler[0], cube2_obj.rotation_euler[1], cube2_obj.rotation_euler[2]]
+            cube3_rotationL = [cube3_obj.rotation_euler[0], cube3_obj.rotation_euler[1], cube3_obj.rotation_euler[2]]
+            receiver_rotationL = [receiver_plane_obj.rotation_euler[0], receiver_plane_obj.rotation_euler[1],
+                                 receiver_plane_obj.rotation_euler[2]]
+
+
+def initialCubeLocation():
+    '''
+    根据记录的位置恢复碰撞检测中相关物体和接收器的位置
+    '''
+    global cube1_location, cube2_location, cube3_location, receiver_location
+    global cube1_rotation, cube2_rotation, cube3_rotation, receiver_rotation
+    global cube1_locationL, cube2_locationL, cube3_locationL, receiver_locationL
+    global cube1_rotationL, cube2_rotationL, cube3_rotationL, receiver_rotationL
+
+    name = bpy.context.scene.leftWindowObj
+    if name == '右耳':
+        cube1_location_cur = cube1_location
+        cube2_location_cur = cube2_location
+        cube3_location_cur = cube3_location
+        receiver_location_cur = receiver_location
+        cube1_rotation_cur = cube1_rotation
+        cube2_rotation_cur = cube2_rotation
+        cube3_rotation_cur = cube3_rotation
+        receiver_rotation_cur = receiver_rotation
+    elif name == '左耳':
+        cube1_location_cur = cube1_locationL
+        cube2_location_cur = cube2_locationL
+        cube3_location_cur = cube3_locationL
+        receiver_location_cur = receiver_locationL
+        cube1_rotation_cur = cube1_rotationL
+        cube2_rotation_cur = cube2_rotationL
+        cube3_rotation_cur = cube3_rotationL
+        receiver_rotation_cur = receiver_rotationL
+    cube1_obj = bpy.data.objects.get(name + "cube1")
+    cube2_obj = bpy.data.objects.get(name + "cube2")
+    cube3_obj = bpy.data.objects.get(name + "cube3")
+    receiver_plane_obj = bpy.data.objects.get(name + "ReceiverPlane")
+    if(cube1_location_cur != None and cube2_location_cur != None and cube3_location_cur != None and receiver_location_cur != None and cube1_rotation_cur != None and cube2_rotation_cur != None and cube3_rotation_cur != None and receiver_rotation_cur != None):
+        if (cube1_obj != None and cube2_obj != None and cube3_obj != None and receiver_plane_obj != None):
+            cube1_obj.location[0:3] = cube1_location_cur
+            cube2_obj.location[0:3] = cube2_location_cur
+            cube3_obj.location[0:3] = cube3_location_cur
+            receiver_plane_obj.location[0:3] = receiver_location_cur
+            cube1_obj.rotation_euler[0:3] = cube1_rotation_cur
+            cube2_obj.rotation_euler[0:3] = cube2_rotation_cur
+            cube3_obj.rotation_euler[0:3] = cube3_rotation_cur
+            receiver_plane_obj.rotation_euler[0:3] = receiver_rotation_cur
 
 def generate_cubes():  # 生成立方体，改材质，获取六个角点，开启modal
     # global mat_silver, mat_red
@@ -253,6 +459,9 @@ def generate_cubes():  # 生成立方体，改材质，获取六个角点，开�
     plane_obj.location[1] = 10
     plane_obj.location[2] = 10
 
+    #根据记录的位置信息恢复接收器相关物体的位置
+    initialCubeLocation()
+
     #初始化立方体全局变量
     initCube()
 
@@ -284,7 +493,7 @@ def newColor(id, r, g, b, is_transparency, transparency_degree):
     shader.inputs[7].default_value = 0
     shader.inputs[9].default_value = 0.472
     shader.inputs[14].default_value = 1
-    shader.inputs[15].default_value = 0.105
+    shader.inputs[15].default_value = 1
     links.new(shader.outputs[0], output.inputs[0])
     if is_transparency:
         mat.blend_method = "BLEND"
@@ -522,6 +731,7 @@ def update_cube1_by_receiver():  # 如果receiver位置改变了，就更新cube
     global receiver, cube1
     global receiver_prev_location
 
+    name = bpy.context.scene.leftWindowObj
     plane_obj = bpy.data.objects.get(name + "ReceiverPlane")
     if plane_obj and cube1:
         if plane_obj.location != receiver_prev_location:
@@ -550,7 +760,6 @@ class MoveCube(bpy.types.Operator):
         global cube1, cube2, cube3
         global move_cube1, move_cube2, move_cube3
         # global mouse_listener
-        global name
         global ear_model
         global receiver,receiver_prev_location
 
@@ -594,7 +803,7 @@ class MoveCube(bpy.types.Operator):
         global prev_location1, prev_location2, prev_location3
         global prev_rotation1, prev_rotation2, prev_rotation3
         global last_inclusion1, last_inclusion2, last_inclusion3
-        global cube1, cube2, cube3, name
+        global cube1, cube2, cube3
         global move_cube1, move_cube2, move_cube3
         global now_move_cube_name, active_cube_name
         global can_move1, can_move2, can_move3
@@ -619,7 +828,7 @@ class MoveCube(bpy.types.Operator):
         # print(f"当前鼠标状态：{on_which_move_cube(context, event)}")
 
         if cube1 and cube2 and cube3 and move_cube1 and move_cube2 and move_cube3 and ear_model:
-
+            name = bpy.context.scene.leftWindowObj
             update_cube1_by_receiver()
 
             # 对于正在移动的组件，cube跟随move_cube移动，其他组件则将cube的位置直接复制到move_cube
@@ -695,6 +904,7 @@ def setActiveAndMoveCubeName(index):
     active_cube_name = None
     now_move_cube_name = None
 
+    name = bpy.context.scene.leftWindowObj
     total_rot_x = total_rot_y = total_rot_z = 0
     if(index == 4):
         now_move_cube_name = name + "receiver"
@@ -710,7 +920,6 @@ def initCube():
     global cube1, cube2, cube3
     global move_cube1, move_cube2, move_cube3
     # global mouse_listener
-    global name
     global ear_model
     global receiver, receiver_prev_location
 
@@ -765,7 +974,7 @@ def update_cube_location_rotate(is_pressing_R):
     global prev_location1, prev_location2, prev_location3
     global prev_rotation1, prev_rotation2, prev_rotation3
     global last_inclusion1, last_inclusion2, last_inclusion3
-    global cube1, cube2, cube3, name
+    global cube1, cube2, cube3
     global move_cube1, move_cube2, move_cube3
     # global now_move_cube_name, active_cube_name
     global can_move1, can_move2, can_move3
@@ -830,7 +1039,6 @@ class MoveCube_collision(bpy.types.Operator):
         global is_collision_modal_start
         global cube1, cube2, cube3
         global move_cube1, move_cube2, move_cube3
-        global name
         global ear_model, inner_ear_model
         global last_inclusion1, last_inclusion2, last_inclusion3
         global prev_location1, prev_location2, prev_location3
@@ -853,16 +1061,17 @@ class MoveCube_collision(bpy.types.Operator):
         ear_model = bpy.data.objects.get(name)
         inner_ear_model = bpy.data.objects.get(name + 'shellInnerObj')
 
-        last_inclusion1 = check_cube_inclusion(cube1, inner_ear_model)
-        last_inclusion2 = check_cube_inclusion(cube2, inner_ear_model)
-        last_inclusion3 = check_cube_inclusion(cube3, inner_ear_model)
+        if cube1 and cube2 and cube3 and inner_ear_model:
+            last_inclusion1 = check_cube_inclusion(cube1, inner_ear_model)
+            last_inclusion2 = check_cube_inclusion(cube2, inner_ear_model)
+            last_inclusion3 = check_cube_inclusion(cube3, inner_ear_model)
 
-        prev_location1 = cube1.location.copy()
-        prev_location2 = cube2.location.copy()
-        prev_location3 = cube3.location.copy()
-        prev_rotation1 = cube1.rotation_euler.copy()
-        prev_rotation2 = cube2.rotation_euler.copy()
-        prev_rotation3 = cube3.rotation_euler.copy()
+            prev_location1 = cube1.location.copy()
+            prev_location2 = cube2.location.copy()
+            prev_location3 = cube3.location.copy()
+            prev_rotation1 = cube1.rotation_euler.copy()
+            prev_rotation2 = cube2.rotation_euler.copy()
+            prev_rotation3 = cube3.rotation_euler.copy()
 
         # if not op_cls.__timer:
         #     op_cls.__timer = context.window_manager.event_timer_add(0.03, window=context.window)
@@ -881,7 +1090,7 @@ class MoveCube_collision(bpy.types.Operator):
         global prev_location1, prev_location2, prev_location3
         global prev_rotation1, prev_rotation2, prev_rotation3
         global last_inclusion1, last_inclusion2, last_inclusion3
-        global cube1, cube2, cube3, name
+        global cube1, cube2, cube3
         global move_cube1, move_cube2, move_cube3
         global now_move_cube_name, active_cube_name, now_on_cube_name
         global can_move1, can_move2, can_move3
@@ -916,6 +1125,7 @@ class MoveCube_collision(bpy.types.Operator):
 
         print(f"当前鼠标状态：{on_which_move_cube(context, event)}")
 
+        name = bpy.context.scene.leftWindowObj
         inner_ear_model = bpy.data.objects.get(name + 'shellInnerObj')
         if cube1 and cube2 and cube3 and move_cube1 and move_cube2 and move_cube3 and ear_model and inner_ear_model != None:
             update_cube1_by_receiver()
@@ -1284,27 +1494,126 @@ def lerp_move_far(cube, target, speed=0.5, rotate_lerp_factor=0.01):
     # cube.rotation_euler = new_rotation
 
 
-class dragcube_MyTool(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
+def receiver_fit_rotate(normal,location):
+    '''
+    将支撑移动到位置location并将连界面与向量normal对齐垂直
+    '''
+    #获取支撑平面(支撑的父物体)
+    name = bpy.context.scene.leftWindowObj
+    planename = name + "ReceiverPlane"
+    plane_obj = bpy.data.objects.get(planename)
+    #新建一个空物体根据向量normal建立一个局部坐标系
+    empty = bpy.data.objects.new("CoordinateSystem", None)
+    bpy.context.collection.objects.link(empty)
+    empty.location = (0, 0, 0)
+    rotation_matrix = normal.to_track_quat('Z', 'Y').to_matrix().to_4x4()  # 将法线作为局部坐标系的z轴
+    empty.matrix_world = rotation_matrix
+    # 记录该局部坐标系在全局坐标系中的角度并将该空物体删除
+    empty_rotation_x = empty.rotation_euler[0]
+    empty_rotation_y = empty.rotation_euler[1]
+    empty_rotation_z = empty.rotation_euler[2]
+    bpy.data.objects.remove(empty, do_unlink=True)
+    # 将支撑摆正对齐
+    if(plane_obj != None):
+        plane_obj.location = location
+        plane_obj.rotation_euler[0] = empty_rotation_x
+        plane_obj.rotation_euler[1] = empty_rotation_y
+        plane_obj.rotation_euler[2] = empty_rotation_z
 
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.drag_cube"
-    bl_label = "拖拽立方体对象"
-    bl_description = (
-        "左键按住拖拽立方体"
+
+def cal_co(name, context, event):
+    '''
+    返回鼠标点击位置的坐标，没有相交则返回-1
+    :return: 相交的坐标
+    '''
+
+    active_obj = bpy.data.objects.get(name)
+
+    # 获取鼠标光标的区域坐标
+    mv = mathutils.Vector((event.mouse_region_x, event.mouse_region_y))
+
+    # 获取信息和空间信息
+    region, space = get_region_and_space(
+        context, 'VIEW_3D', 'WINDOW', 'VIEW_3D'
     )
-    bl_icon = "brush.sculpt.cloth"
-    bl_widget = None
-    bl_keymap = (
-        # ("view3d.select", {"type": 'LEFTMOUSE', "value": 'PRESS'}, {"properties": [("deselect_all", True), ], },),
-        ("transform.translate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
-        ("transform.trackball", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None)
+    ray_dir = view3d_utils.region_2d_to_vector_3d(
+        region,
+        space.region_3d,
+        mv
+    )
+    ray_orig = view3d_utils.region_2d_to_origin_3d(
+        region,
+        space.region_3d,
+        mv
     )
 
-    def draw_settings(context, layout, tool):
-        pass
+    start = ray_orig
+    end = ray_orig + ray_dir
 
+    # 确定光线和对象的相交
+    mwi = active_obj.matrix_world.inverted()
+    mwi_start = mwi @ start
+    mwi_end = mwi @ end
+    mwi_dir = mwi_end - mwi_start
+
+    if active_obj.type == 'MESH':
+        if active_obj.mode == 'OBJECT':
+            mesh = active_obj.data
+            bm = bmesh.new()
+            bm.from_mesh(mesh)
+            tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
+
+            co, normal, _, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
+
+            if co is not None and normal is not None:
+                return co, normal  # 如果发生交叉，返回坐标的值
+
+    return -1, -1
+
+
+class HideReceiverDoubleClick(bpy.types.Operator):
+    bl_idname = "hide.receiverdoubleclick"
+    bl_label = "双击隐藏接收器位置"
+
+    def invoke(self, context, event):
+        # 将Plane隐藏
+        name = bpy.context.scene.leftWindowObj
+        if name == "右耳":
+            useShellCanal = bpy.context.scene.useShellCanalR
+        elif name == "左耳":
+            useShellCanal = bpy.context.scene.useShellCanalL
+        receiver_name = name + "receiver"
+        receiver_obj = bpy.data.objects.get(receiver_name)
+        co, normal = cal_co(receiver_name, context, event)
+        if co != -1 and not receiver_obj.hide_get() and (bpy.data.objects.get(name + 'meshshelloutercanal') is not None
+            or (bpy.data.objects.get(name + 'meshshelloutercanal') is None and not useShellCanal)):
+            receiver_obj.hide_set(True)
+        # self.execute(context)
+        return {'FINISHED'}
+
+    def execute(self, context):
+        return {'FINISHED'}
+
+
+class AdjustReceiverDoubleClick(bpy.types.Operator):
+    bl_idname = "adjust.receiverdoubleclick"
+    bl_label = "双击改变接收器位置"
+
+    def invoke(self, context, event):
+        # 将Plane激活并选中,位置设置为双击的位置
+        name = bpy.context.scene.leftWindowObj
+        receiver_name = name + "receiver"
+        receiver_obj = bpy.data.objects.get(receiver_name)
+        co, normal = cal_co(name, context, event)
+        if co != -1 and receiver_obj.hide_get():
+            receiver_fit_rotate(normal,co)
+            update_cube1_by_receiver()
+            receiver_obj.hide_set(False)
+        # self.execute(context)
+        return {'FINISHED'}
+
+    def execute(self, context):
+        return {'FINISHED'}
 
 
 # =============
@@ -1384,7 +1693,6 @@ def check_and_resolve_collision(obj1_name, obj2_name):
     global prev_rotation1, prev_rotation2, prev_rotation3
     global prev_location1, prev_location2, prev_location3
     global cube1, cube2, cube3
-    global name
 
     obj1 = bpy.data.objects[obj1_name]
     obj2 = bpy.data.objects[obj2_name]
@@ -1416,6 +1724,7 @@ def check_and_resolve_collision(obj1_name, obj2_name):
 
     apply_transformations(obj2, move_vector, rotation_axis, rotation_angle)
 
+    name = bpy.context.scene.leftWindowObj
     if obj2_name == name + 'cube1':
         if s1 == 2:
             cube1.location = prev_location1
@@ -1588,17 +1897,12 @@ class MoveCube_update(bpy.types.Operator):
 
 # ===
 
-
-def register_collision_tools():
-    bpy.utils.register_tool(dragcube_MyTool)
-
-
 def register():
     bpy.utils.register_class(MoveCube)
     bpy.utils.register_class(MoveCube_collision)
     bpy.utils.register_class(MoveCube_update)
-
-    # bpy.utils.register_tool(dragcube_MyTool)
+    bpy.utils.register_class(HideReceiverDoubleClick)
+    bpy.utils.register_class(AdjustReceiverDoubleClick)
 
 
 def unregister():
@@ -1606,4 +1910,3 @@ def unregister():
     bpy.utils.unregister_class(MoveCube_collision)
     bpy.utils.unregister_class(MoveCube_update)
 
-    bpy.utils.unregister_tool(dragcube_MyTool)

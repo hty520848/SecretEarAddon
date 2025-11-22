@@ -3,7 +3,7 @@ from bpy import context
 from bpy_extras import view3d_utils
 import mathutils
 import bmesh
-from mathutils import Vector
+from mathutils import Vector, Euler
 from bpy.types import WorkSpaceTool
 from contextlib import redirect_stdout
 import io
@@ -15,8 +15,10 @@ from math import *
 import time
 from ...parameter import get_switch_time, set_switch_time, get_switch_flag, set_switch_flag, check_modals_running, \
     set_soft_modal_start, get_soft_modal_start, get_point_qiehuan_modal_start, get_drag_curve_modal_start, \
-    get_smooth_curve_modal_start
-
+    get_smooth_curve_modal_start, get_curve_modal_running, set_torus_modal_running, get_mirror_context, \
+    set_mirror_context
+from ...global_manager import global_manager
+from ...back_and_forward import record_state
 
 def soft_fill():
     name = bpy.context.scene.leftWindowObj
@@ -27,6 +29,9 @@ def soft_fill():
             bpy.context.scene.shiFouShangBuQieGeMianBanR = False
         if bpy.context.scene.KongQiangMianBanTypeEnumR != 'OP1':
             bpy.context.scene.KongQiangMianBanTypeEnumR = 'OP1'
+        if bpy.context.scene.jiHuoBianYuanHouDuR:
+            bpy.context.scene.jiHuoBianYuanHouDuR = False
+        bpy.context.scene.zongHouDuR = 2
     elif name == '左耳':
         if bpy.context.scene.neiBianJiXianL:
             bpy.context.scene.neiBianJiXianL = False
@@ -34,6 +39,9 @@ def soft_fill():
             bpy.context.scene.shiFouShangBuQieGeMianBanL = False
         if bpy.context.scene.KongQiangMianBanTypeEnumL != 'OP1':
             bpy.context.scene.KongQiangMianBanTypeEnumL = 'OP1'
+        if bpy.context.scene.jiHuoBianYuanHouDuL:
+            bpy.context.scene.jiHuoBianYuanHouDuL = False
+        bpy.context.scene.zongHouDuL = 2
     set_finish(True)
     copyModel(name)  # 复制一份底部切割完成后的物体用于回退
     soft_eardrum()
@@ -227,16 +235,28 @@ def border_smooth():
         replace_obj.hide_set(False)
         replace_obj.select_set(True)
         bpy.ops.object.mode_set(mode='EDIT')
+        bm = bmesh.from_edit_mesh(replace_obj.data)
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+        bpy.ops.object.vertex_group_select()
+        border_verts = [v for v in bm.verts if v.select]
+
         bpy.ops.mesh.select_all(action='DESELECT')
         bpy.ops.object.vertex_group_set_active(group='CutBorderInnerVertex')
         bpy.ops.object.vertex_group_select()
+        cut_verts = [v for v in bm.verts if v.select]
+        min_dis = float('inf')
+        for border_vert in border_verts:
+            for cut_vert in cut_verts:
+                dis = (border_vert.co - cut_vert.co).length
+                if dis < min_dis:
+                    min_dis = dis
         bpy.ops.mesh.select_mode(type='EDGE')
         bpy.ops.mesh.region_to_loop()
         if pianyi > 0:
             global now_radius
             bpy.ops.mesh.remove_doubles(threshold=0.5)
-            # todo: 存在把底部的内边界切掉的问题
-            bpy.ops.circle.smooth(width=pianyi, center_border_group_name='CutBorderInnerVertex',
+            bpy.ops.circle.smooth(width=min(pianyi, min_dis * 0.95), center_border_group_name='CutBorderInnerVertex',
                                   max_smooth_width=3, circle_radius=now_radius)
         else:
             bpy.ops.mesh.select_all(action='DESELECT')
@@ -379,6 +399,7 @@ def border_smooth_upper():
 
 def fill():
     name = bpy.context.scene.leftWindowObj
+    enum = bpy.context.scene.muJuTypeEnum
     if name == '右耳':
         kongqiangeunm = bpy.context.scene.KongQiangMianBanTypeEnumR
         shangbuqiege = bpy.context.scene.shiFouShangBuQieGeMianBanR
@@ -408,20 +429,10 @@ def fill():
     bpy.ops.mesh.remove_doubles(threshold=0.5)
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.mode_set(mode='OBJECT')
-    # 局部重拓扑
-    # retopo(obj.name, "BottomOuterBorderVertex", 0.5)
 
     if shangbuqiege:
         obj = soft_eardrum_outer_cut(obj)
     inner_obj = soft_eardrum_thickness(obj)
-    # 重拓扑内外壁
-    # outer_offset = bpy.context.scene.waiBianYuanSheRuPianYi
-    # inner_offset = bpy.context.scene.neiBianYuanSheRuPianYi
-    # if outer_offset != 0:
-    #     soft_retopo_offset_cut(name, "BottomOuterBorderVertex", 0.5)
-    # if inner_offset != 0:
-    #     soft_retopo_offset_cut(inner_obj.name, "BottomInnerBorderVertex", 0.5)
-    # save_outer_and_inner_retopo()
 
     if kongqiangeunm == 'OP1':
         inner_obj = soft_eardrum_inner_cut(inner_obj)
@@ -452,134 +463,25 @@ def fill():
             moveToLeft(softeardrum_for_smooth_obj)
         softeardrum_for_smooth_obj.hide_set(True)
 
-        # 软耳模边缘平滑
+        # # 软耳模边缘平滑
+        # if enum == "OP1":
+        #     soft_step_modifier_smooth()        #内边缘平滑   先分段平滑
+        #     soft_offset_cut_smooth()           #外边缘平滑   再offset_cut平滑
+        # # 框架式耳膜边缘平滑
+        # elif enum == "OP4":
         soft_extrude_smooth_initial()
-
-    # soft_eardrum_bottom_fill()
-    # # 设置新的内外区域顶点组
-    # soft_eardrum_vertex = obj.vertex_groups.get('OuterVertexNew')
-    # if (soft_eardrum_vertex != None):
-    #     bpy.ops.object.mode_set(mode='EDIT')
-    #     bpy.ops.object.vertex_group_set_active('OuterVertexNew')
-    #     bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
-    #     bpy.ops.object.mode_set(mode='OBJECT')
-    # soft_eardrum_vertex = obj.vertex_groups.new(name='OuterVertexNew')
-    # bpy.ops.object.mode_set(mode='EDIT')
-    # bpy.ops.mesh.select_all(action='SELECT')
-    # bpy.ops.object.vertex_group_set_active(group='Inner')
-    # bpy.ops.object.vertex_group_deselect()
-    # bpy.ops.object.vertex_group_set_active(group='OuterVertexNew')
-    # bpy.ops.object.vertex_group_assign()
-    # bpy.ops.object.mode_set(mode='OBJECT')
-    #
-    # soft_eardrum_vertex = obj.vertex_groups.get('InnerVertexNew')
-    # if (soft_eardrum_vertex != None):
-    #     bpy.ops.object.mode_set(mode='EDIT')
-    #     bpy.ops.object.vertex_group_set_active('InnerVertexNew')
-    #     bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
-    #     bpy.ops.object.mode_set(mode='OBJECT')
-    # soft_eardrum_vertex = obj.vertex_groups.new(name='InnerVertexNew')
-    # bpy.ops.object.mode_set(mode='EDIT')
-    # bpy.ops.mesh.select_all(action='DESELECT')
-    # bpy.ops.object.vertex_group_set_active(group='Inner')
-    # bpy.ops.object.vertex_group_select()
-    # bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
-    # bpy.ops.object.vertex_group_deselect()
-    # bpy.ops.object.vertex_group_set_active(group='InnerVertexNew')
-    # bpy.ops.object.vertex_group_assign()
-    # bpy.ops.object.mode_set(mode='OBJECT')
-    #
-    # # 将桥接后的顶点细分并将顶点指定到顶点组BottomBorderVertex
-    # obj = bpy.data.objects[name]
-    # soft_eardrum_vertex = obj.vertex_groups.get('BottomBorderVertex')
-    # if (soft_eardrum_vertex != None):
-    #     bpy.ops.object.mode_set(mode='EDIT')
-    #     bpy.ops.object.vertex_group_set_active('BottomBorderVertex')
-    #     bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
-    #     bpy.ops.object.mode_set(mode='OBJECT')
-    # soft_eardrum_vertex = obj.vertex_groups.new(name='BottomBorderVertex')
-    # bpy.ops.object.mode_set(mode='EDIT')
-    # bpy.ops.mesh.select_all(action='DESELECT')
-    # bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
-    # bpy.ops.object.vertex_group_select()
-    # bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
-    # bpy.ops.object.vertex_group_select()
-    # bpy.ops.object.vertex_group_set_active(group='BottomBorderVertex')
-    # bpy.ops.object.vertex_group_assign()
-    # bpy.ops.object.mode_set(mode='OBJECT')
-    #
-    #
-    # #设置新的内外边缘平滑顶点组   原本的边缘顶点组包含了细分后的顶点
-    # soft_eardrum_vertex = obj.vertex_groups.get('BottomOuterBorderVertexNew')
-    # if (soft_eardrum_vertex != None):
-    #     bpy.ops.object.mode_set(mode='EDIT')
-    #     bpy.ops.object.vertex_group_set_active('BottomOuterBorderVertexNew')
-    #     bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
-    #     bpy.ops.object.mode_set(mode='OBJECT')
-    # soft_eardrum_vertex = obj.vertex_groups.new(name='BottomOuterBorderVertexNew')
-    # bpy.ops.object.mode_set(mode='EDIT')
-    # bpy.ops.mesh.select_all(action='DESELECT')
-    # bpy.ops.object.vertex_group_set_active(group='BottomBorderVertex')
-    # bpy.ops.object.vertex_group_select()
-    # bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
-    # bpy.ops.object.vertex_group_deselect()
-    # bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertexNew')
-    # bpy.ops.object.vertex_group_assign()
-    # bpy.ops.object.mode_set(mode='OBJECT')
-    #
-    # soft_eardrum_vertex = obj.vertex_groups.get('BottomInnerBorderVertexNew')
-    # if (soft_eardrum_vertex != None):
-    #     bpy.ops.object.mode_set(mode='EDIT')
-    #     bpy.ops.object.vertex_group_set_active('BottomInnerBorderVertexNew')
-    #     bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
-    #     bpy.ops.object.mode_set(mode='OBJECT')
-    # soft_eardrum_vertex = obj.vertex_groups.new(name='BottomInnerBorderVertexNew')
-    # bpy.ops.object.mode_set(mode='EDIT')
-    # bpy.ops.mesh.select_all(action='DESELECT')
-    # bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
-    # bpy.ops.object.vertex_group_select()
-    # bpy.ops.mesh.select_more()
-    # bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
-    # bpy.ops.object.vertex_group_deselect()
-    # bpy.ops.object.vertex_group_set_active(group='OuterVertexNew')
-    # bpy.ops.object.vertex_group_deselect()
-    # bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertexNew')
-    # bpy.ops.object.vertex_group_assign()
-    # bpy.ops.object.mode_set(mode='OBJECT')
-    #
-    #
-    #
-    # # soft_retopo_offset_cut(name, "BottomOuterBorderVertexNew", bpy.context.scene.zongHouDuR * 2 / 3)
-    # # bpy.ops.object.mode_set(mode='EDIT')
-    # # bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0.2, offset_pct=96, segments=10, profile=0.5,
-    # #                    mark_seam=True, mark_sharp=True, release_confirm=True)
-    # # bpy.ops.object.mode_set(mode='OBJECT')
-    #
-    # # 根据物体ForSmooth复制出一份物体用来平滑回退,每次调整平滑参数都会根据该物体重新复制出一份物体用于平滑
-    # name = bpy.context.scene.leftWindowObj
-    # obj = bpy.data.objects.get(name)
-    # soft_eardrum_smooth_name = name + "SoftEarDrumForSmooth"
-    # soft_eardrum_smooth_obj = bpy.data.objects.get(soft_eardrum_smooth_name)
-    # if (soft_eardrum_smooth_obj != None):
-    #     bpy.data.objects.remove(soft_eardrum_smooth_obj, do_unlink=True)
-    # duplicate_obj = obj.copy()
-    # duplicate_obj.data = obj.data.copy()
-    # duplicate_obj.name = obj.name + "SoftEarDrumForSmooth"
-    # duplicate_obj.animation_data_clear()
-    # bpy.context.scene.collection.objects.link(duplicate_obj)
-    # if name == '右耳':
-    #     moveToRight(duplicate_obj)
-    # else:
-    #     moveToLeft(duplicate_obj)
-    # duplicate_obj.hide_set(True)
-    #
-    # #调用平滑修改器函数进行平滑,外边缘平滑
-    # soft_smooth_initial()
 
 
 def soft_eardrum_thickness(obj):
+    '''
+    根据面板厚度参数,使用实体化修改器将物体向内收缩得到内壁
+    为实体化得到的内外壁物体设置顶点组,Inner,Outer,BottomInnerBorderVertex,BottomOuterBorderVertex
+    使用平滑修改器平滑实体化后的内壁
+    将模型内外壁分离,外壁复制softcutsmoothforreset用于回退,内壁返回
+    '''
     number = 0
     name = bpy.context.scene.leftWindowObj
+    enum = bpy.context.scene.muJuTypeEnum
     for o in bpy.data.objects:
         if re.match(name + 'HoleBorderCurve', o.name) != None:
             number += 1
@@ -595,35 +497,12 @@ def soft_eardrum_thickness(obj):
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    # bpy.ops.object.mode_set(mode='EDIT')
-    # bpy.ops.mesh.select_all(action='DESELECT')
-    # bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
-    # bpy.ops.object.vertex_group_select()
-    # if number >= 1:
-    #     for i in range(1, number + 1):
-    #         bpy.ops.object.vertex_group_set_active(group='HoleBorderVertex' + str(i))
-    #         bpy.ops.object.vertex_group_select()
-    # bpy.ops.mesh.remove_doubles(threshold=0.5)
-
-    # 记录外边界顶点坐标
-    # mesh = obj.data
-    # bm = bmesh.from_edit_mesh(mesh)
-    # ndigits = 1
-    # bottom_outer_border_co = [(round(v.co[0], ndigits), round(v.co[1], ndigits), round(v.co[2], ndigits)) for v in
-    #                           bm.verts if v.select]
-    # bottom_outer_border_co = [v.co for v in bm.verts if v.select]
-    # first_bottom_vert_co = obj.matrix_world @ bottom_outer_border_co[0]
-
-    # bpy.ops.mesh.select_all(action='DESELECT')
-    # bpy.ops.object.mode_set(mode='OBJECT')
 
     # 首先，根据厚度使用一个实体化修改器
     if name == '右耳':
         thickness = bpy.context.scene.zongHouDuR
-        # bianjixian = bpy.context.scene.neiBianJiXianR
     elif name == '左耳':
         thickness = bpy.context.scene.zongHouDuL
-        # bianjixian = bpy.context.scene.neiBianJiXianL
 
     modifier = obj.modifiers.new(name="Thickness", type='SOLIDIFY')
     bpy.context.object.modifiers["Thickness"].solidify_mode = 'NON_MANIFOLD'
@@ -653,59 +532,116 @@ def soft_eardrum_thickness(obj):
     set_vert_group("BottomOuterBorderVertex", outer_index)
     set_vert_group("BottomInnerBorderVertex", inner_index)
 
-    # bpy.ops.object.mode_set(mode='EDIT')
-    # bm = bmesh.from_edit_mesh(obj.data)
-    # bpy.ops.mesh.select_all(action='DESELECT')
 
-    # 选中与记录下的顶点坐标最接近的顶点，选中相连元素即为外壁
-    # min_dist = float('inf')
-    # closest_vertex = None
-    # bm.verts.ensure_lookup_table()
-    # verts = [v for v in bm.verts if v.is_boundary]
-    # for vert in verts:
-    #     world_co = obj.matrix_world @ vert.co
-    #     dist = (world_co - first_bottom_vert_co).length
-    #     if dist < min_dist:
-    #         min_dist = dist
-    #         closest_vertex = vert
-
-    # 选择最近的顶点
-    # if closest_vertex is not None:
-    #     closest_vertex.select = True
-    # bpy.ops.mesh.select_linked(delimit=set())
-    # bpy.ops.mesh.select_all(action='INVERT')
-
-    # 根据最高点分离出内外壁
-    # top_vert = None
-    # top_z = -math.inf
-    # for v in bm.verts:
-    #     if v.co[2] > top_z:
-    #         top_z = v.co[2]
-    #         top_vert = v
-    # top_vert.select_set(True)
-    # bpy.ops.mesh.select_linked(delimit=set())
-    # bpy.ops.mesh.select_all(action='INVERT')
-
-    # 根据底部边界的坐标分离出内外壁
-    # bpy.ops.mesh.select_all(action='DESELECT')
-    # bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
-    # bpy.ops.object.vertex_group_select()
-    # verts = [v for v in bm.verts if v.select]
-    # bpy.ops.mesh.select_all(action='DESELECT')
-    # for v in verts:
-    #     vert_co = (round(v.co[0], ndigits), round(v.co[1], ndigits), round(v.co[2], ndigits))
-    #     if vert_co not in bottom_outer_border_co:
-    #         v.select = True
-    # bpy.ops.mesh.select_linked(delimit=set())
-
-    # 使用平滑修改器平滑内壁
-    modifier = obj.modifiers.new(name="Smooth", type='SMOOTH')
-    bpy.context.object.modifiers["Smooth"].factor = 1
-    bpy.context.object.modifiers["Smooth"].iterations = int(round(thickness, 1) * 10)
-    bpy.context.object.modifiers["Smooth"].vertex_group = "Inner"
-    bpy.ops.object.modifier_apply(modifier="Smooth", single_user=True)
+    # # 使用平滑修改器平滑内壁
+    # modifier = obj.modifiers.new(name="Smooth", type='SMOOTH')
+    # bpy.context.object.modifiers["Smooth"].factor = 1
+    # bpy.context.object.modifiers["Smooth"].iterations = int(round(thickness, 1) * 10)
+    # bpy.context.object.modifiers["Smooth"].vertex_group = "Inner"
+    # bpy.ops.object.modifier_apply(modifier="Smooth", single_user=True)
 
     bpy.ops.object.mode_set(mode='EDIT')
+    # 对切割底部内边缘进行松弛,平滑该曲线
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
+    #使用插件的体积平滑平滑内壁
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='Inner')
+    bpy.ops.object.vertex_group_select()
+    smooth_iterator = int(round(thickness, 1) * 10)
+    if(smooth_iterator >= 20):
+        #厚度比较大时多平滑一轮
+        bpy.ops.mesh.vol_smooth(smooth_amount=1, iteration_amount=smooth_iterator, sharp_edge_weight=0, freeze_border=True,
+                            normal_smooth=1, Inflate=2)
+    bpy.ops.mesh.vol_smooth(smooth_amount=1, iteration_amount=smooth_iterator, sharp_edge_weight=0, freeze_border=True,
+                            normal_smooth=1, Inflate=2)
+    # #将内边缘附近顶点选中作自身交集并将其删除,提高后续offset_cut的成功率
+    # bpy.ops.mesh.select_all(action='DESELECT')
+    # bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    # bpy.ops.mesh.select_more()
+    # bpy.ops.mesh.select_more()
+    # bpy.ops.mesh.select_more()
+    # bpy.ops.mesh.intersect(mode='SELECT', separate_mode='NONE', solver='EXACT')
+    # bpy.ops.mesh.select_all(action='DESELECT')
+    # bpy.ops.mesh.select_interior_faces()
+    # bpy.ops.mesh.select_mode(type='FACE')
+    # bpy.ops.mesh.delete(type='FACE')
+    # bpy.ops.mesh.select_mode(type='VERT')
+    # bpy.ops.mesh.select_all(action='SELECT')
+    # bpy.ops.mesh.normals_make_consistent(inside=False)
+
+    # #TODO  整合底面分离的代码    offset_cut平滑软耳膜,框架式边缘时使用
+    # if enum == 'OP1':
+    #     # 将底面分离出来并细分
+    #     bpy.ops.mesh.select_all(action='DESELECT')
+    #     bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
+    #     bpy.ops.object.vertex_group_select()
+    #     bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    #     bpy.ops.object.vertex_group_select()
+    #     bpy.ops.mesh.separate(type='SELECTED')
+    #     for obj1 in bpy.data.objects:
+    #         if obj1.select_get() and obj1 != obj:
+    #             bottom_obj = obj1
+    #             break
+    #     bpy.ops.object.mode_set(mode='OBJECT')
+    #     bpy.ops.object.select_all(action='DESELECT')
+    #     bottom_obj.select_set(True)
+    #     bpy.context.view_layer.objects.active = bottom_obj
+    #     bottom_obj.name = name + "SoftBottom"
+    #     if name == '右耳':
+    #         moveToRight(bottom_obj)
+    #     elif name == '左耳':
+    #         moveToLeft(bottom_obj)
+    #     bpy.ops.object.mode_set(mode='EDIT')            # 将分离出的底面细分
+    #     bpy.ops.mesh.select_all(action='SELECT')
+    #     bm = bmesh.from_edit_mesh(bottom_obj.data)
+    #     edges = [e for e in bm.edges if e.select]
+    #     bpy.ops.mesh.select_all(action='DESELECT')
+    #     bpy.ops.mesh.select_mode(type='EDGE')
+    #     for e in edges:
+    #         if not e.is_boundary:
+    #             e.select_set(True)
+    #     bpy.ops.mesh.subdivide(number_cuts=6, ngon=False, quadcorner='INNERVERT')
+    #     bpy.ops.mesh.select_all(action='DESELECT')
+    #     bpy.ops.mesh.select_mode(type='VERT')
+    #     bpy.ops.object.mode_set(mode='OBJECT')
+    #     bpy.ops.object.select_all(action='DESELECT')    # 将分离出的底面与软耳膜模型合并
+    #     bottom_obj.select_set(True)
+    #     obj.select_set(True)
+    #     bpy.context.view_layer.objects.active = obj
+    #     bpy.ops.object.join()
+    #     bpy.ops.object.mode_set(mode='EDIT')
+    #     bpy.ops.mesh.select_all(action='SELECT')
+    #     bpy.ops.mesh.remove_doubles(threshold=0.001)
+    #     bpy.ops.mesh.select_all(action='DESELECT')
+    #     soft_eardrum_vertex = obj.vertex_groups.get('BottomOuterBorderVertexNew')        # 重置底部内外边缘顶点组
+    #     if (soft_eardrum_vertex != None):
+    #         bpy.ops.object.vertex_group_set_active('BottomOuterBorderVertexNew')
+    #         bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
+    #     soft_eardrum_vertex = obj.vertex_groups.new(name='BottomOuterBorderVertexNew')
+    #     bpy.ops.mesh.select_all(action='DESELECT')
+    #     bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
+    #     bpy.ops.object.vertex_group_select()
+    #     bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    #     bpy.ops.object.vertex_group_deselect()
+    #     bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertexNew')
+    #     bpy.ops.object.vertex_group_assign()
+    #     soft_eardrum_vertex = obj.vertex_groups.get('BottomInnerBorderVertexNew')
+    #     if (soft_eardrum_vertex != None):
+    #         bpy.ops.object.vertex_group_set_active('BottomInnerBorderVertexNew')
+    #         bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
+    #     soft_eardrum_vertex = obj.vertex_groups.new(name='BottomInnerBorderVertexNew')
+    #     bpy.ops.mesh.select_all(action='DESELECT')
+    #     bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertex')
+    #     bpy.ops.object.vertex_group_select()
+    #     bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
+    #     bpy.ops.object.vertex_group_deselect()
+    #     bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertexNew')
+    #     bpy.ops.object.vertex_group_assign()
+
+    #将内壁选中并分离
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.vertex_group_set_active(group='Inner')
     bpy.ops.object.vertex_group_select()
@@ -738,135 +674,6 @@ def soft_eardrum_thickness(obj):
     save_outer_and_inner_origin()
     return inner_obj
 
-    if number == 0 and not bianjixian:  # 不存在内编辑线
-        # 重新设置内外壁顶点组和内壁顶点组
-        bpy.ops.object.select_all(action='DESELECT')
-        obj.select_set(True)
-        bpy.context.view_layer.objects.active = obj
-        # delete_vert_group('BottomOuterBorderVertex')
-        delete_vert_group('Outer')
-        bpy.ops.object.mode_set(mode='EDIT')
-        # bpy.ops.mesh.select_all(action='DESELECT')
-        # bm = bmesh.from_edit_mesh(obj.data)
-        # for v in bm.verts:
-        #     if v.is_boundary:
-        #         v.select_set(True)
-        # obj.vertex_groups.new(name="BottomOuterBorderVertex")
-        # bpy.ops.object.vertex_group_assign()
-        bpy.ops.mesh.select_all(action='SELECT')
-        obj.vertex_groups.new(name="Outer")
-        bpy.ops.object.vertex_group_assign()
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-        bpy.ops.object.select_all(action='DESELECT')
-        inner_obj.select_set(True)
-        bpy.context.view_layer.objects.active = inner_obj
-        delete_vert_group('BottomOuterBorderVertex')
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bm = bmesh.from_edit_mesh(inner_obj.data)
-        for v in bm.verts:
-            if v.is_boundary:
-                v.select_set(True)
-        inner_obj.vertex_groups.new(name="BottomInnerBorderVertex")
-        bpy.ops.object.vertex_group_assign()
-        # bpy.ops.mesh.select_all(action='SELECT')
-        # inner_obj.vertex_groups.new(name="Inner")
-        # bpy.ops.object.vertex_group_assign()
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-    elif number >= 1 and bianjixian:
-        # 计算外壁顶点组的中心
-        vertex_group_dict = {}
-        bpy.ops.object.select_all(action='DESELECT')
-        obj.select_set(True)
-        bpy.context.view_layer.objects.active = obj
-        delete_vert_group('Outer')
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        obj.vertex_groups.new(name="Outer")
-        bpy.ops.object.vertex_group_assign()
-
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertex')
-        bpy.ops.object.vertex_group_select()
-        bm = bmesh.from_edit_mesh(obj.data)
-        bm.verts.ensure_lookup_table()
-        bottom_index = [v.index for v in bm.verts if v.select]
-        bottom_center = sum([bm.verts[index].co for index in bottom_index], Vector()) / len(bottom_index)
-        vertex_group_dict['BottomOuterBorderVertex'] = bottom_center
-
-        for i in range(1, number + 1):
-            bpy.ops.mesh.select_all(action='DESELECT')
-            bpy.ops.object.vertex_group_set_active(group='HoleBorderVertex' + str(i))
-            bpy.ops.object.vertex_group_select()
-            hole_index = [v.index for v in bm.verts if v.select]
-            hole_center = sum([bm.verts[index].co for index in hole_index], Vector()) / len(hole_index)
-            vertex_group_dict['HoleBorderVertex' + str(i)] = hole_center
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-        bpy.ops.object.select_all(action='DESELECT')
-        inner_obj.select_set(True)
-        bpy.context.view_layer.objects.active = inner_obj
-        delete_vert_group('BottomOuterBorderVertex')
-        for i in range(1, number + 1):
-            delete_vert_group("HoleBorderVertex" + str(i))
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bm = bmesh.from_edit_mesh(inner_obj.data)
-        bm.verts.ensure_lookup_table()
-        for v in bm.verts:
-            if v.is_boundary:
-                v.select_set(True)
-        border_verts_index = [v.index for v in bm.verts if v.select]
-        # bpy.ops.mesh.select_all(action='SELECT')
-        # inner_obj.vertex_groups.new(name="Inner")
-        # bpy.ops.object.vertex_group_assign()
-
-        bpy.ops.mesh.select_all(action='DESELECT')
-        upper_index = []
-        while (len(border_verts_index) > 0):
-            start_vert_index = border_verts_index[0]
-            bm.verts[start_vert_index].select = True
-            border_verts_index.remove(start_vert_index)
-            now_vert_index = get_linked_unprocessed_index(bm, start_vert_index, border_verts_index)
-            while (now_vert_index != None):
-                bm.verts[now_vert_index].select = True
-                border_verts_index.remove(now_vert_index)
-                now_vert_index = get_linked_unprocessed_index(bm, now_vert_index, border_verts_index)
-            select_verts_index = [v.index for v in bm.verts if v.select]
-            center = sum([bm.verts[index].co for index in select_verts_index], Vector()) / len(select_verts_index)
-            min_dis = float('inf')
-            min_key = None
-            for key in vertex_group_dict:
-                ori_center = vertex_group_dict[key]
-                dis = (center - ori_center).length
-                if dis < min_dis:
-                    min_dis = dis
-                    min_key = key
-            vertex_group_dict.pop(min_key)
-            if min_key == 'BottomOuterBorderVertex':
-                inner_obj.vertex_groups.new(name="BottomInnerBorderVertex")
-                bpy.ops.object.vertex_group_assign()
-            else:
-                inner_obj.vertex_groups.new(name="HoleInnerBorderVertex" + min_key[-1])
-                bpy.ops.object.vertex_group_assign()
-                upper_index.extend(select_verts_index)
-            bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.object.mode_set(mode='OBJECT')
-        set_vert_group("UpInnerBorderVertex", upper_index)
-
-    # 使用平滑修改器平滑内壁
-    modifier = inner_obj.modifiers.new(name="Smooth", type='SMOOTH')
-    bpy.context.object.modifiers["Smooth"].factor = 1
-    bpy.context.object.modifiers["Smooth"].iterations = int(round(thickness, 1) * 10)
-    bpy.ops.object.modifier_apply(modifier="Smooth", single_user=True)
-
-    # 保存初始的内外壁, 用于红环切割、平滑时的回退
-    save_outer_and_inner_origin()
-    return inner_obj
 
 
 def soft_eardrum_inner_cut(inner_obj):
@@ -887,6 +694,10 @@ def soft_eardrum_inner_cut(inner_obj):
             vertices=32, radius=last_radius, fill_type='NGON', calc_uvs=True, enter_editmode=False, align='WORLD',
             location=last_loc, rotation=(last_ratation[0], last_ratation[1], last_ratation[2]), scale=(1.0, 1.0, 1.0))
         circle = bpy.context.active_object
+        if name == "右耳":
+            moveToRight(circle)
+        elif name == "左耳":
+            moveToLeft(circle)
         normal = circle.matrix_world.to_3x3() @ circle.data.polygons[0].normal
         if normal.z > 0:
             bpy.ops.object.mode_set(mode='EDIT')
@@ -899,8 +710,11 @@ def soft_eardrum_inner_cut(inner_obj):
         circle.select_set(True)
         bpy.ops.object.booltool_auto_difference()
     else:
-        bpy.context.view_layer.objects.active = bpy.data.objects[inner_obj.name]
-        utils_bool_difference(inner_obj.name, name + "Circle")
+        main_obj = bpy.data.objects[inner_obj.name]
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.context.view_layer.objects.active = main_obj
+        main_obj.select_set(True)
+        utils_bool_difference(name + "Circle")
 
     # 切割完成后，设置切割边界顶点组
     bpy.ops.object.mode_set(mode='EDIT')
@@ -931,7 +745,7 @@ def soft_eardrum_inner_cut(inner_obj):
 
     # 补面
     # bpy.ops.mesh.remove_doubles(threshold=0.5)
-    bpy.ops.mesh.fill()
+    bpy.ops.mesh.fill()   # 当圆环切到蓝线下方时有可能补不上面
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.mode_set(mode='OBJECT')
 
@@ -976,6 +790,10 @@ def soft_eardrum_outer_cut(outer_obj):
             vertices=32, radius=last_radius, fill_type='NGON', calc_uvs=True, enter_editmode=False, align='WORLD',
             location=last_loc, rotation=(last_ratation[0], last_ratation[1], last_ratation[2]), scale=(1.0, 1.0, 1.0))
         circle = bpy.context.active_object
+        if name == "右耳":
+            moveToRight(circle)
+        elif name == "左耳":
+            moveToLeft(circle)
         normal = circle.matrix_world.to_3x3() @ circle.data.polygons[0].normal
         if normal.z > 0:
             bpy.ops.object.mode_set(mode='EDIT')
@@ -988,8 +806,11 @@ def soft_eardrum_outer_cut(outer_obj):
         circle.select_set(True)
         bpy.ops.object.booltool_auto_difference()
     else:
-        bpy.context.view_layer.objects.active = bpy.data.objects[outer_obj.name]
-        utils_bool_difference(outer_obj.name, name + "UpperCircle")
+        main_obj = bpy.data.objects[outer_obj.name]
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.context.view_layer.objects.active = main_obj
+        main_obj.select_set(True)
+        utils_bool_difference(name + "UpperCircle")
 
     # 切割完成后，设置切割边界顶点组
     bpy.ops.object.mode_set(mode='EDIT')
@@ -1575,10 +1396,404 @@ def extrudeOuterVertex(outer_smooth):
             # print("新增顶点数:", len(new_vertex_index))
             # print("保存之前的顶点数:", len(prev_vertex_index))
 
+def soft_offset_cut_smooth():
+    '''
+    使用offset_cut工具对边缘进行平滑    方案一
+    '''
+    # try:
+    name = bpy.context.scene.leftWindowObj
+    # 若内边缘使用过平滑,则在内边缘的基础上再进行外边缘平滑
+    if bpy.data.objects.get(name + 'AfterInnerSmooth'):
+        obj = bpy.data.objects[name + 'AfterInnerSmooth']
+    else:
+        obj = bpy.data.objects.get(name + "SoftEarDrumForSmooth")
+    duplicate_obj = obj.copy()
+    duplicate_obj.data = obj.data.copy()
+    duplicate_obj.name = obj.name + "Copy"
+    duplicate_obj.animation_data_clear()
+    bpy.context.scene.collection.objects.link(duplicate_obj)
+    if bpy.context.scene.leftWindowObj == '右耳':
+        moveToRight(duplicate_obj)
+    else:
+        moveToLeft(duplicate_obj)
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = duplicate_obj
+    duplicate_obj.hide_set(False)
+    duplicate_obj.select_set(True)
+
+
+    bpy.ops.object.mode_set(mode='EDIT')
+    soft_eardrum_outer_smooth = 0
+    soft_eardrum_inner_smooth = 0
+    if (name == "右耳"):
+        soft_eardrum_outer_smooth = round(bpy.context.scene.waiBianYuanSheRuPianYiR, 1)
+        soft_eardrum_inner_smooth = round(bpy.context.scene.neiBianYuanSheRuPianYiR, 1)
+        thickness = bpy.context.scene.zongHouDuR
+    elif (name == "左耳"):
+        soft_eardrum_outer_smooth = round(bpy.context.scene.waiBianYuanSheRuPianYiL, 1)
+        soft_eardrum_inner_smooth = round(bpy.context.scene.neiBianYuanSheRuPianYiL, 1)
+        thickness = bpy.context.scene.zongHouDuL
+    soft_eardrum_outer_smooth = soft_eardrum_outer_smooth / 3 * thickness     #归一化处理,外平滑参数为3时,offset_cut切割到内边缘
+    if(soft_eardrum_outer_smooth > 0.3):
+        print("外边缘平滑")
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertexNew')
+        bpy.ops.object.vertex_group_select()
+        bpy.ops.hardeardrum.smooth(width=soft_eardrum_outer_smooth,
+                                   center_border_group_name='BottomOuterBorderVertexNew')
+    # if(soft_eardrum_inner_smooth > 0.3):
+    #     print("内边缘平滑")
+    #     bpy.ops.object.mode_set(mode='EDIT')
+    #     bpy.ops.mesh.select_all(action='DESELECT')
+    #     bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertexNew')
+    #     bpy.ops.object.vertex_group_select()
+    #     bpy.ops.hardeardrum.smooth(width=soft_eardrum_inner_smooth,
+    #                                center_border_group_name='BottomInnerBorderVertexNew')
+
+    # 用边缘平滑成功后的物体将当前物体替换
+    bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.data.objects.remove(bpy.data.objects[name], do_unlink=True)
+    duplicate_obj.name = name
+
+
+
+
+    # except:
+    #     if bpy.data.objects.get(name + 'SoftEarDrumForSmoothCopy'):
+    #         bpy.data.objects.remove(bpy.data.objects[name + 'SoftEarDrumForSmoothCopy'], do_unlink=True)
+    #     if bpy.data.objects.get(name + 'SoftEarDrumForSmoothCopyBridgeBorder'):
+    #         bpy.data.objects.remove(bpy.data.objects[name + 'SoftEarDrumForSmoothCopyBridgeBorder'], do_unlink=True)
+    #     bpy.ops.object.select_all(action='DESELECT')
+    #     bpy.context.view_layer.objects.active = bpy.data.objects[name]
+    #     bpy.data.objects[name].select_set(True)
+    #     bpy.ops.object.mode_set(mode='EDIT')
+    #     bpy.ops.mesh.select_mode(type='VERT')
+    #     bpy.ops.object.mode_set(mode='OBJECT')
+    #     bpy.ops.object.shade_smooth()
+    #     print('底部平滑失败')
+
+
+
+def soft_step_modifier_smooth():
+    '''
+    使用平滑修改器对边缘进行平滑      方案一
+    主要用于平滑内边缘
+    '''
+    name = bpy.context.scene.leftWindowObj
+    cur_obj = bpy.data.objects.get(name)
+    softeardrum_for_smooth_obj = bpy.data.objects.get(name + "SoftEarDrumForSmooth")
+
+    soft_eardrum_inner_smooth = 0
+    if (name == "右耳"):
+        soft_eardrum_inner_smooth = round(bpy.context.scene.neiBianYuanSheRuPianYiR, 1)
+    elif (name == "左耳"):
+        soft_eardrum_inner_smooth = round(bpy.context.scene.neiBianYuanSheRuPianYiL, 1)
+    print("内边缘平滑")
+    print(soft_eardrum_inner_smooth)
+    if (cur_obj != None and softeardrum_for_smooth_obj != None):
+        # try:
+        obj = softeardrum_for_smooth_obj.copy()
+        obj.data = softeardrum_for_smooth_obj.data.copy()
+        obj.animation_data_clear()
+        obj.name = name + "SoftEarDrumForSmoothing"
+        bpy.context.scene.collection.objects.link(obj)
+        if name == '右耳':
+            moveToRight(obj)
+        else:
+            moveToLeft(obj)
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.hide_set(False)
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+
+        if(soft_eardrum_inner_smooth > 0):
+            # 计算软耳膜内边缘平滑的分组距离并设置顶点组
+            select_vert_index = []  # 保存根据底部顶点扩散得到的顶点
+            soft_eardrum_vert_index1 = []  # 保存用于底部平滑的顶点
+            soft_eardrum_vert_index2 = []  # 保存用于底部平滑的顶点
+            soft_eardrum_vert_index3 = []  # 保存用于底部平滑的顶点
+            soft_eardrum_vert_index4 = []  # 保存用于底部平滑的顶点
+            global soft_eardrum_inner_vert_index1
+            global soft_eardrum_inner_vert_index2
+            global soft_eardrum_inner_vert_index3
+            soft_eardrum_inner_vert_index1 = []  # 保存用于smooth函数边缘平滑的顶点
+            soft_eardrum_inner_vert_index2 = []  # 保存用于smooth函数边缘平滑的顶点
+            soft_eardrum_inner_vert_index3 = []  # 保存用于smooth函数边缘平滑的顶点
+
+            # 将底部内边缘复制并分离挤出用于计算顶点距离
+            bpy.ops.object.select_all(action='DESELECT')
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+            # 将底部一圈顶点复制出来用于计算最短距离
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertexNew')
+            bpy.ops.object.vertex_group_select()
+            bpy.ops.mesh.duplicate()
+            bpy.ops.mesh.separate(type='SELECTED')
+            for obj1 in bpy.data.objects:
+                if obj1.select_get() and obj1 != obj:
+                    bottom_edge = obj1
+                    break
+            bpy.ops.object.mode_set(mode='OBJECT')
+            bottom_edge.name = name + "SoftEarDrumForSmoothingBottomEdge"
+            if (name == "右耳"):
+                moveToRight(bottom_edge)
+            elif (name == "左耳"):
+                moveToLeft(bottom_edge)
+            # 将该复制出的平面设置为当前激活物体
+            obj.select_set(False)
+            bottom_edge.select_set(True)
+            bpy.context.view_layer.objects.active = bottom_edge
+            # 选中底面复制出的一圈顶点并挤出形成一个柱面
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='SELECT')
+            bpy.ops.mesh.extrude_edges_move(TRANSFORM_OT_translate={"value": (0, 0, -0.05), "orient_type": 'GLOBAL',
+                                                                    "orient_matrix": (
+                                                                    (1, 0, 0), (0, 1, 0), (0, 0, 1)), })
+            bpy.ops.object.mode_set(mode='OBJECT')
+            # 将激活物体重新设置为左右耳模型
+            bottom_edge.select_set(False)
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+
+            # 根据底部顶点组将扩散选中的顶点保存到数组中
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.vertex_group_set_active(group='BottomInnerBorderVertexNew')
+            bpy.ops.object.vertex_group_select()
+            for i in range(0, 12):
+                bpy.ops.mesh.select_more()
+                bpy.ops.object.vertex_group_set_active(group='BottomOuterBorderVertexNew')
+                bpy.ops.object.vertex_group_deselect()
+            bpy.ops.object.mode_set(mode='OBJECT')
+            if obj.type == 'MESH':
+                me = obj.data
+                bm = bmesh.new()
+                bm.from_mesh(me)
+                bm.verts.ensure_lookup_table()
+                for vert in bm.verts:
+                    if (vert.select == True):
+                        select_vert_index.append(vert.index)
+                bm.to_mesh(me)
+                bm.free()
+            # 根据距离选中顶点
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.mode_set(mode='OBJECT')
+            if obj.type == 'MESH':
+                me = obj.data
+                bm = bmesh.new()
+                bm.from_mesh(me)
+                bm.verts.ensure_lookup_table()
+                for vert_index in select_vert_index:
+                    vert_co = bm.verts[vert_index].co
+                    _, closest_co, _, _ = bottom_edge.closest_point_on_mesh(vert_co)
+                    min_distance = math.sqrt((vert_co[0] - closest_co[0]) ** 2 + (vert_co[1] - closest_co[1]) ** 2 + (
+                            vert_co[2] - closest_co[2]) ** 2)
+                    if (soft_eardrum_inner_smooth < 0.5):
+                        # 调用平滑函数分段
+                        if (min_distance < 0.6):
+                            soft_eardrum_inner_vert_index1.append(vert_index)
+                        if (min_distance > 0.4 and min_distance < 0.8):
+                            soft_eardrum_inner_vert_index2.append(vert_index)
+                        if (min_distance < 1):
+                            soft_eardrum_inner_vert_index3.append(vert_index)
+                        # 调用平滑修改器分段
+                        if (min_distance < (0.25 + 0.1)):
+                            soft_eardrum_vert_index1.append(vert_index)
+                        if (min_distance > (0.25 - 0.1) and min_distance < (0.5 + 0.1)):
+                            soft_eardrum_vert_index2.append(vert_index)
+                        if (min_distance > (0.5 - 0.1) and min_distance < (0.75 + 0.1)):
+                            soft_eardrum_vert_index3.append(vert_index)
+                        if (min_distance > (0.75 - 0.1) and min_distance < 1):
+                            soft_eardrum_vert_index4.append(vert_index)
+                    else:
+                        # 调用平滑函数分段
+                        if (min_distance < soft_eardrum_inner_smooth * 0.4):
+                            soft_eardrum_inner_vert_index1.append(vert_index)
+                        if (min_distance > soft_eardrum_inner_smooth * 0.3 and min_distance < soft_eardrum_inner_smooth * 0.6):
+                            soft_eardrum_inner_vert_index2.append(vert_index)
+                        if (min_distance < soft_eardrum_inner_smooth):
+                            soft_eardrum_inner_vert_index3.append(vert_index)
+                        # 调用平滑修改器分段
+                        if (min_distance < soft_eardrum_inner_smooth * (0.25 + 0.1)):
+                            soft_eardrum_vert_index1.append(vert_index)
+                        if (min_distance > soft_eardrum_inner_smooth * (
+                                0.25 - 0.1) and min_distance < soft_eardrum_inner_smooth * (0.5 + 0.1)):
+                            soft_eardrum_vert_index2.append(vert_index)
+                        if (min_distance > soft_eardrum_inner_smooth * (
+                                0.5 - 0.1) and min_distance < soft_eardrum_inner_smooth * (0.75 + 0.1)):
+                            soft_eardrum_vert_index3.append(vert_index)
+                        if (min_distance > soft_eardrum_inner_smooth * (
+                                0.75 - 0.1) and min_distance < soft_eardrum_inner_smooth):
+                            soft_eardrum_vert_index4.append(vert_index)
+
+            # 将用于计算距离的底部平面删除
+            bpy.data.objects.remove(bottom_edge, do_unlink=True)
+
+            # 根据顶点索引将选中的顶点保存到顶点组中
+            vert_index_to_vertex_group(soft_eardrum_vert_index1, "SoftEarDrumInnerVertex1")
+            vert_index_to_vertex_group(soft_eardrum_vert_index2, "SoftEarDrumInnerVertex2")
+            vert_index_to_vertex_group(soft_eardrum_vert_index3, "SoftEarDrumInnerVertex3")
+            vert_index_to_vertex_group(soft_eardrum_vert_index4, "SoftEarDrumInnerVertex4")
+
+            # 设置矫正平滑顶点组
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.vertex_group_set_active(group='SoftEarDrumInnerVertex1')
+            bpy.ops.object.vertex_group_select()
+            bpy.ops.object.vertex_group_set_active(group='SoftEarDrumInnerVertex2')
+            bpy.ops.object.vertex_group_select()
+            bpy.ops.object.vertex_group_set_active(group='SoftEarDrumInnerVertex3')
+            bpy.ops.object.vertex_group_select()
+            bpy.ops.object.vertex_group_set_active(group='SoftEarDrumInnerVertex4')
+            bpy.ops.object.vertex_group_select()
+            soft_eardrum_vertex = obj.vertex_groups.get("SoftEarDrumInnerVertex5")
+            if (soft_eardrum_vertex != None):
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.object.vertex_group_set_active(group="SoftEarDrumInnerVertex5")
+                bpy.ops.object.vertex_group_remove(all=False, all_unlocked=False)
+                bpy.ops.object.mode_set(mode='OBJECT')
+            soft_eardrum_vertex = obj.vertex_groups.new(name="SoftEarDrumInnerVertex5")
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.object.vertex_group_set_active(group="SoftEarDrumInnerVertex5")
+            bpy.ops.object.vertex_group_assign()
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+
+            # 内边缘平滑
+            # bpy.ops.object.mode_set(mode='EDIT')
+            # bpy.ops.mesh.select_all(action='DESELECT')
+            # bpy.ops.mesh.select_all(action='DESELECT')
+            # bpy.ops.object.vertex_group_set_active(group='SoftEarDrumInnerVertex5')
+            # bpy.ops.object.vertex_group_select()
+            # bpy.ops.mesh.vertices_smooth(factor=1, wait_for_input=False)
+            # bpy.ops.object.mode_set(mode='OBJECT')
+
+
+
+
+            # 创建平滑修改器,指定软耳膜内边缘平滑顶点组
+            modifier_name = "SoftEarDrumModifier4"
+            target_modifier = None
+            for modifier in obj.modifiers:
+                if modifier.name == modifier_name:
+                    target_modifier = modifier
+            if (target_modifier == None):
+                modifierSoftEarDrumSmooth = obj.modifiers.new(name="SoftEarDrumModifier4", type='SMOOTH')
+                modifierSoftEarDrumSmooth.vertex_group = "SoftEarDrumInnerVertex4"
+                target_modifier = modifierSoftEarDrumSmooth
+            target_modifier.factor = 0.3
+            target_modifier.iterations = int(soft_eardrum_inner_smooth)
+            bpy.ops.object.modifier_apply(modifier="SoftEarDrumModifier4")
+
+            # 创建平滑修改器,指定软耳膜内边缘平滑顶点组
+            modifier_name = "SoftEarDrumModifier3"
+            target_modifier = None
+            for modifier in obj.modifiers:
+                if modifier.name == modifier_name:
+                    target_modifier = modifier
+            if (target_modifier == None):
+                modifierSoftEarDrumSmooth = obj.modifiers.new(name="SoftEarDrumModifier3", type='SMOOTH')
+                modifierSoftEarDrumSmooth.vertex_group = "SoftEarDrumInnerVertex3"
+                target_modifier = modifierSoftEarDrumSmooth
+            target_modifier.factor = 0.3
+            target_modifier.iterations = int(soft_eardrum_inner_smooth * 3)
+            bpy.ops.object.modifier_apply(modifier="SoftEarDrumModifier3")
+
+            # 创建平滑修改器,指定软耳膜内边缘平滑顶点组
+            modifier_name = "SoftEarDrumModifier2"
+            target_modifier = None
+            for modifier in obj.modifiers:
+                if modifier.name == modifier_name:
+                    target_modifier = modifier
+            if (target_modifier == None):
+                modifierSoftEarDrumSmooth = obj.modifiers.new(name="SoftEarDrumModifier2", type='SMOOTH')
+                modifierSoftEarDrumSmooth.vertex_group = "SoftEarDrumInnerVertex2"
+                target_modifier = modifierSoftEarDrumSmooth
+            target_modifier.factor = 0.4
+            target_modifier.iterations = int(soft_eardrum_inner_smooth * 7)
+            bpy.ops.object.modifier_apply(modifier="SoftEarDrumModifier2")
+
+            # 创建平滑修改器,指定软耳膜内边缘平滑顶点组
+            modifier_name = "SoftEarDrumModifier1"
+            target_modifier = None
+            for modifier in obj.modifiers:
+                if modifier.name == modifier_name:
+                    target_modifier = modifier
+            if (target_modifier == None):
+                modifierSoftEarDrumSmooth = obj.modifiers.new(name="SoftEarDrumModifier1", type='SMOOTH')
+                modifierSoftEarDrumSmooth.vertex_group = "SoftEarDrumInnerVertex1"
+                target_modifier = modifierSoftEarDrumSmooth
+            target_modifier.factor = 0.6
+            target_modifier.iterations = int(soft_eardrum_inner_smooth * 10)
+            bpy.ops.object.modifier_apply(modifier="SoftEarDrumModifier1")
+
+
+            if soft_eardrum_inner_smooth != 0:
+                # 创建矫正平滑修改器,指定软耳膜内边缘平滑顶点组
+                modifier_name = "SoftEarDrumModifier5"
+                target_modifier = None
+                for modifier in obj.modifiers:
+                    if modifier.name == modifier_name:
+                        target_modifier = modifier
+                if (target_modifier == None):
+                    modifierSoftEarDrumSmooth = obj.modifiers.new(name="SoftEarDrumModifier5", type='CORRECTIVE_SMOOTH')
+                    modifierSoftEarDrumSmooth.smooth_type = 'LENGTH_WEIGHTED'
+                    modifierSoftEarDrumSmooth.vertex_group = "SoftEarDrumInnerVertex5"
+                    modifierSoftEarDrumSmooth.scale = 0
+                    target_modifier = modifierSoftEarDrumSmooth
+                target_modifier.factor = 0.5
+                target_modifier.iterations = 5
+                bpy.ops.object.modifier_apply(modifier="SoftEarDrumModifier5")
+                bpy.ops.object.mode_set(mode='EDIT')
+                if (soft_eardrum_inner_smooth < 0.5):
+                    for i in range(2):
+                        laplacian_smooth(getSoftEarDrumInnerIndex3(), 0.8 * soft_eardrum_inner_smooth)
+                else:
+                    for i in range(2):
+                        laplacian_smooth(getSoftEarDrumInnerIndex3(), 0.4)
+                bpy.ops.object.mode_set(mode='OBJECT')
+
+        # 平滑成功之后,用平滑后的物体替换左/右耳
+        bpy.data.objects.remove(cur_obj, do_unlink=True)
+        obj.name = bpy.context.scene.leftWindowObj
+
+        # 复制平滑成功后的物体,用于后续的外边缘平滑
+        if bpy.data.objects.get(name + 'AfterInnerSmooth'):
+            bpy.data.objects.remove(bpy.data.objects[name + 'AfterInnerSmooth'], do_unlink=True)
+        inner_smooth_obj = obj.copy()
+        inner_smooth_obj.data = obj.data.copy()
+        inner_smooth_obj.name = obj.name + "AfterInnerSmooth"
+        inner_smooth_obj.animation_data_clear()
+        bpy.context.scene.collection.objects.link(inner_smooth_obj)
+        if name == '右耳':
+            moveToRight(inner_smooth_obj)
+        elif name == '左耳':
+            moveToLeft(inner_smooth_obj)
+        inner_smooth_obj.hide_set(True)
+
+        # except:
+        #     print("软耳膜边缘平滑失败")
+        #     if bpy.data.objects.get(name + 'SoftEarDrumForSmoothing'):
+        #         bpy.data.objects.remove(bpy.data.objects[name + 'SoftEarDrumForSmoothing'],do_unlink=True)
+        #     if bpy.data.objects.get(name + 'SoftEarDrumForSmoothingBottomEdge'):
+        #         bpy.data.objects.remove(bpy.data.objects[name + 'SoftEarDrumForSmoothingBottomEdge'],do_unlink=True)
+        #     bpy.ops.object.select_all(action='DESELECT')
+        #     bpy.context.view_layer.objects.active = cur_obj
+        #     cur_obj.select_set(True)
+        #     if bpy.data.materials.get("error_yellow") == None:
+        #         mat = newColor("error_yellow", 1, 1, 0, 0, 1)
+        #         mat.use_backface_culling = False
+        #     bpy.data.objects[name].data.materials.clear()
+        #     bpy.data.objects[name].data.materials.append(bpy.data.materials["error_yellow"])
 
 def soft_extrude_smooth_initial():
     '''
-    处理软耳膜内外边缘切割后桥接得到的底面
+    处理软耳膜内外边缘切割后桥接得到的底面             方案二
     根据面板的内外边缘参数决定底面外边缘向内挤出的距离,对内外边缘进行平滑
     '''
 
@@ -1887,7 +2102,7 @@ def soft_smooth_initial():
     soft_eardrum_outer_vert_index2 = []  # 保存用于smooth函数边缘平滑的顶点
     soft_eardrum_outer_vert_index3 = []  # 保存用于smooth函数边缘平滑的顶点
 
-    print("软耳膜平滑初始化开始:", datetime.datetime.now())
+    track_time("软耳膜平滑初始化开始")
     # 将底部一圈顶点复制出来用于计算最短距离
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='DESELECT')
@@ -1938,7 +2153,7 @@ def soft_smooth_initial():
                 select_vert_index.append(vert.index)
         bm.to_mesh(me)
         bm.free()
-    print("开始计算距离:", datetime.datetime.now())
+    track_time("开始计算距离")
     # 根据距离选中顶点
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='DESELECT')
@@ -1991,7 +2206,7 @@ def soft_smooth_initial():
     #将用于计算距离的底部平面删除
     bpy.data.objects.remove(bottom_outer_obj, do_unlink=True)
 
-    print("将顶点索引赋值给顶点组:", datetime.datetime.now())
+    track_time("将顶点索引赋值给顶点组")
     #根据顶点索引将选中的顶点保存到顶点组中
     vert_index_to_vertex_group(soft_eardrum_vert_index1, "SoftEarDrumOuterVertex1")
     vert_index_to_vertex_group(soft_eardrum_vert_index2, "SoftEarDrumOuterVertex2")
@@ -2051,7 +2266,7 @@ def soft_smooth_initial():
     soft_eardrum_inner_vert_index2 = []  # 保存用于smooth函数边缘平滑的顶点
     soft_eardrum_inner_vert_index3 = []  # 保存用于smooth函数边缘平滑的顶点
 
-    print("软耳膜平滑初始化开始:", datetime.datetime.now())
+    track_time("软耳膜平滑初始化开始")
     bpy.ops.object.select_all(action='DESELECT')
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
@@ -2104,7 +2319,7 @@ def soft_smooth_initial():
                 select_vert_index.append(vert.index)
         bm.to_mesh(me)
         bm.free()
-    print("开始计算距离:", datetime.datetime.now())
+    track_time("开始计算距离")
     # 根据距离选中顶点
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='DESELECT')
@@ -2157,7 +2372,7 @@ def soft_smooth_initial():
     # 将用于计算距离的底部平面删除
     bpy.data.objects.remove(bottom_inner_obj, do_unlink=True)
 
-    print("将顶点索引赋值给顶点组:", datetime.datetime.now())
+    track_time("将顶点索引赋值给顶点组")
     # 根据顶点索引将选中的顶点保存到顶点组中
     vert_index_to_vertex_group(soft_eardrum_vert_index1, "SoftEarDrumInnerVertex1")
     vert_index_to_vertex_group(soft_eardrum_vert_index2, "SoftEarDrumInnerVertex2")
@@ -2228,7 +2443,7 @@ def soft_smooth_initial():
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
-    # print("创建修改器:", datetime.datetime.now())
+    # track_time("创建修改器")
     # modifier_name = "SoftEarDrumModifier10"
     # target_modifier = None
     # for modifier in obj.modifiers:
@@ -2371,7 +2586,7 @@ def soft_smooth_initial():
         target_modifier.factor = 0.5
         target_modifier.iterations = 10
         bpy.ops.object.modifier_apply(modifier="SoftEarDrumModifier5")
-        print("调用smooth平滑函数:", datetime.datetime.now())
+        track_time("调用smooth平滑函数")
         bpy.ops.object.mode_set(mode='EDIT')
         if(soft_eardrum_outer_smooth < 0.5):
             # for i in range(7):
@@ -2405,7 +2620,7 @@ def soft_smooth_initial():
         target_modifier.factor = 0.5
         target_modifier.iterations = 5
         bpy.ops.object.modifier_apply(modifier="SoftEarDrumModifier5")
-        print("调用smooth平滑函数:", datetime.datetime.now())
+        track_time("调用smooth平滑函数")
         bpy.ops.object.mode_set(mode='EDIT')
         if (soft_eardrum_inner_smooth < 0.5):
             # for i in range(7):
@@ -2422,7 +2637,7 @@ def soft_smooth_initial():
             for i in range(2):
                 laplacian_smooth(getSoftEarDrumInnerIndex3(), 0.4)
         bpy.ops.object.mode_set(mode='OBJECT')
-    print("平滑初始化结束:", datetime.datetime.now())
+    track_time("平滑初始化结束")
 
     #平滑成功之后,用平滑后的物体替换左/右耳
     bpy.data.objects.remove(bpy.data.objects[bpy.context.scene.leftWindowObj], do_unlink=True)
@@ -2471,7 +2686,7 @@ def soft_smooth_initial1():
     soft_eardrum_inner_vert_index3 = []  # 保存用于smooth函数边缘平滑的顶点
 
     if (obj != None):
-        print("硬耳膜平滑初始化开始:", datetime.datetime.now())
+        track_time("硬耳膜平滑初始化开始:")
         # 将底部一圈顶点复制出来用于计算最短距离
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='DESELECT')
@@ -2522,7 +2737,7 @@ def soft_smooth_initial1():
                     select_vert_index.append(vert.index)
             bm.to_mesh(me)
             bm.free()
-        print("开始计算距离:", datetime.datetime.now())
+        track_time("开始计算距离")
         # 根据距离选中顶点
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='DESELECT')
@@ -2577,7 +2792,7 @@ def soft_smooth_initial1():
         #将用于计算距离的底部平面删除
         bpy.data.objects.remove(bottom_outer_obj, do_unlink=True)
 
-        print("将顶点索引赋值给顶点组:", datetime.datetime.now())
+        track_time("将顶点索引赋值给顶点组")
         #根据顶点索引将选中的顶点保存到顶点组中
         vert_index_to_vertex_group(hard_eardrum_vert_index1, "HardEarDrumInnerVertex1")
         vert_index_to_vertex_group(hard_eardrum_vert_index2, "HardEarDrumInnerVertex2")
@@ -2608,7 +2823,7 @@ def soft_smooth_initial1():
         bpy.ops.mesh.select_all(action='DESELECT')
         bpy.ops.object.mode_set(mode='OBJECT')
 
-        print("创建修改器:", datetime.datetime.now())
+        track_time("创建修改器")
 
         # 创建平滑修改器,指定硬耳膜平滑顶点组
         modifier_name = "HardEarDrumModifier4"
@@ -2682,7 +2897,7 @@ def soft_smooth_initial1():
             target_modifier.factor = 0.5
             target_modifier.iterations = 5
             bpy.ops.object.modifier_apply(modifier="HardEarDrumModifier5")
-            print("调用smooth平滑函数:", datetime.datetime.now())
+            track_time("调用smooth平滑函数")
             bpy.ops.object.mode_set(mode='EDIT')
             if(hard_eardrum_smooth < 1):
                 for i in range(7):
@@ -2699,7 +2914,8 @@ def soft_smooth_initial1():
                 for i in range(2):
                     laplacian_smooth(getSoftEarDrumInnerIndex3(), 0.3)
             bpy.ops.object.mode_set(mode='OBJECT')
-        print("平滑初始化结束:", datetime.datetime.now())
+        track_time("平滑初始化结束")
+        reset_time_tracker()
 
         #平滑成功之后,用平滑后的物体替换左/右耳
         bpy.data.objects.remove(bpy.data.objects[bpy.context.scene.leftWindowObj], do_unlink=True)
@@ -2960,6 +3176,7 @@ def refill_after_cavity_plane_change():
         # 首先reset到实体化完成
         reset_to_after_thickness()
         name = bpy.context.scene.leftWindowObj
+        enum = bpy.context.scene.muJuTypeEnum
         obj = bpy.data.objects[name + "InnerOrigin"]
         # 重新获取内壁并且完成切割填充
         inner_obj = obj.copy()
@@ -3012,7 +3229,12 @@ def refill_after_cavity_plane_change():
                 moveToLeft(softeardrum_for_smooth_obj)
             softeardrum_for_smooth_obj.hide_set(True)
 
-            # 软耳模边缘平滑
+            # # 软耳模边缘平滑
+            # if enum == "OP1":
+            #     soft_step_modifier_smooth()        #内边缘平滑   先分段平滑
+            #     soft_offset_cut_smooth()           #外边缘平滑   再offset_cut平滑
+            # # 框架式耳膜边缘平滑
+            # elif enum == "OP4":
             soft_extrude_smooth_initial()
 
     except:
@@ -3079,9 +3301,10 @@ def refill_after_cavity_plane_change():
 
 def refill_after_cavity_smooth():
     try:
-        smooth__obj = border_smooth()
-        if smooth__obj is not None:
+        smooth_obj = border_smooth()
+        if smooth_obj is not None:
             name = bpy.context.scene.leftWindowObj
+            enum = bpy.context.scene.muJuTypeEnum
             if name == '右耳':
                 shangbuqiege = bpy.context.scene.shiFouShangBuQieGeMianBanR
             else:
@@ -3134,7 +3357,12 @@ def refill_after_cavity_smooth():
                     moveToLeft(softeardrum_for_smooth_obj)
                 softeardrum_for_smooth_obj.hide_set(True)
 
-                # 软耳模边缘平滑
+                # # 软耳模边缘平滑
+                # if enum == "OP1":
+                #     soft_step_modifier_smooth()        #内边缘平滑   先分段平滑
+                #     soft_offset_cut_smooth()           #外边缘平滑   再offset_cut平滑
+                # # 框架式耳膜边缘平滑
+                # elif enum == "OP4":
                 soft_extrude_smooth_initial()
 
     except:
@@ -3152,6 +3380,7 @@ def refill_after_upper_smooth():
         smooth_upper_obj = border_smooth_upper()
         if smooth_upper_obj is not None:
             name = bpy.context.scene.leftWindowObj
+            enum = bpy.context.scene.muJuTypeEnum
             if name == '右耳':
                 kongqiangeunm = bpy.context.scene.KongQiangMianBanTypeEnumR
             else:
@@ -3202,7 +3431,13 @@ def refill_after_upper_smooth():
                     moveToLeft(softeardrum_for_smooth_obj)
                 softeardrum_for_smooth_obj.hide_set(True)
 
-                # 软耳模边缘平滑
+                # # 软耳模边缘平滑
+                # # 软耳模边缘平滑
+                # if enum == "OP1":
+                #     soft_step_modifier_smooth()        #内边缘平滑   先分段平滑
+                #     soft_offset_cut_smooth()           #外边缘平滑   再offset_cut平滑
+                # # 框架式耳膜边缘平滑
+                # elif enum == "OP4":
                 soft_extrude_smooth_initial()
 
     except:
@@ -3367,7 +3602,7 @@ def soft_eardrum_smooth_initial():
                 bpy.context.object.modifiers["SoftEarDrumAllInnerSmoothModifier"].iterations = 16
 
 
-finish = True  # 用于控制modal的运行, True表示modal暂停
+finish = False  # 用于控制modal的运行, True表示modal暂停
 
 old_radius = 8.0
 old_radius_upper = 8.0
@@ -3401,15 +3636,76 @@ operator_circle_obj = None
 
 mouse_loc = None  # 记录鼠标在圆环上的位置
 
+right_last_loc_list = []
+right_last_ratation_list = []
+left_last_loc_list = []
+left_last_ratation_list = []
+right_last_loc_upper_list = []
+right_last_ratation_upper_list = []
+left_last_loc_upper_list = []
+left_last_ratation_upper_list = []
+
+
+def register_soft_eardrum_globals():
+    global right_last_loc_list, right_last_ratation_list, left_last_loc_list, left_last_ratation_list
+    global right_last_loc, left_last_loc, right_last_ratation, left_last_ratation, right_last_radius, left_last_radius
+    global right_last_loc_upper, left_last_loc_upper, right_last_ratation_upper, left_last_ratation_upper, right_last_radius_upper, left_last_radius_upper
+    global right_last_loc_upper_list, right_last_ratation_upper_list, left_last_loc_upper_list, left_last_ratation_upper_list
+    global old_radius, old_radius_upper
+    if right_last_loc is not None:
+        right_last_loc_list = right_last_loc[:]
+        right_last_ratation_list = right_last_ratation[:]
+    if left_last_loc is not None:
+        left_last_loc_list = left_last_loc[:]
+        left_last_ratation_list = left_last_ratation[:]
+    if right_last_loc_upper is not None:
+        right_last_loc_upper_list = right_last_loc_upper[:]
+        right_last_ratation_upper_list = right_last_ratation_upper[:]
+    if left_last_loc_upper is not None:
+        left_last_loc_upper_list = left_last_loc_upper[:]
+        left_last_ratation_upper_list = left_last_ratation_upper[:]
+    global_manager.register('right_last_loc_list', right_last_loc_list)
+    global_manager.register('right_last_ratation_list', right_last_ratation_list)
+    global_manager.register('right_last_radius', right_last_radius)
+    global_manager.register('left_last_loc_list', left_last_loc_list)
+    global_manager.register('left_last_ratation_list', left_last_ratation_list)
+    global_manager.register('left_last_radius', left_last_radius)
+    global_manager.register('right_last_loc_upper_list', right_last_loc_upper_list)
+    global_manager.register('right_last_ratation_upper_list', right_last_ratation_upper_list)
+    global_manager.register('right_last_radius_upper', right_last_radius_upper)
+    global_manager.register('left_last_loc_upper_list', left_last_loc_upper_list)
+    global_manager.register('left_last_ratation_upper_list', left_last_ratation_upper_list)
+    global_manager.register('left_last_radius_upper', left_last_radius_upper)
+    global_manager.register('old_radius', old_radius)
+    global_manager.register('old_radius_upper', old_radius_upper)
+
+
+def load_soft_eardrum_globals():
+    global right_last_loc_list, right_last_ratation_list, left_last_loc_list, left_last_ratation_list
+    global right_last_loc, left_last_loc, right_last_ratation, left_last_ratation
+    global right_last_ratation_upper_list, left_last_ratation_upper_list, right_last_loc_upper_list, left_last_loc_upper_list
+    global right_last_loc_upper, left_last_loc_upper, right_last_ratation_upper, left_last_ratation_upper
+    if len(right_last_loc_list) != 0:
+        right_last_loc = Vector(right_last_loc_list)
+        right_last_ratation = Euler(right_last_ratation_list, 'XYZ')
+    if len(left_last_loc_list) != 0:
+        left_last_loc = Vector(left_last_loc_list)
+        left_last_ratation = Euler(left_last_ratation_list, 'XYZ')
+    if len(right_last_loc_upper_list) != 0:
+        right_last_loc_upper = Vector(right_last_loc_upper_list)
+        right_last_ratation_upper = Euler(right_last_ratation_upper_list, 'XYZ')
+    if len(left_last_loc_upper_list) != 0:
+        left_last_loc_upper = Vector(left_last_loc_upper_list)
+        left_last_ratation_upper = Euler(left_last_ratation_upper_list, 'XYZ')
+
 
 # 判断鼠标是否在物体上
-def is_mouse_on_object(context, event):
+def is_mouse_on_object(context, event, is_moving):
     global mouse_loc, operator_obj, operator_torus_obj, operator_circle_obj
 
     torus_name = [operator_obj + 'Torus', operator_obj + 'UpperTorus']
     # active_obj = bpy.data.objects[operator_obj+'Torus']
     is_on_object = False  # 初始化变量
-    cast_loc = None
 
     # 获取鼠标光标的区域坐标
     override1 = getOverride()
@@ -3466,7 +3762,6 @@ def is_mouse_on_object(context, event):
                 loc, _, fidx, _ = tree.ray_cast(mwi_start, mwi_dir, 2000.0)
 
                 if fidx is not None:
-                    co = loc
                     mouse_loc = loc
                     # print('loc',loc)
                     # if(co.x > 0 and co.y >0):
@@ -3478,11 +3773,12 @@ def is_mouse_on_object(context, event):
                     # elif(co.x > 0 and co.y < 0):
                     #     print('右下')
                     is_on_object = True  # 如果发生交叉，将变量设为True
-                    operator_torus_obj = obj_name
-                    if operator_torus_obj == operator_obj + 'Torus':
-                        operator_circle_obj = operator_obj + 'Circle'
-                    else:
-                        operator_circle_obj = operator_obj + 'UpperCircle'
+                    if not is_moving:
+                        operator_torus_obj = obj_name
+                        if operator_torus_obj == operator_obj + 'Torus':
+                            operator_circle_obj = operator_obj + 'Circle'
+                        else:
+                            operator_circle_obj = operator_obj + 'UpperCircle'
     return is_on_object
 
 
@@ -3550,7 +3846,7 @@ def newColor(id, r, g, b, is_transparency, transparency_degree):
     shader.inputs[7].default_value = 0
     shader.inputs[9].default_value = 0.472
     shader.inputs[14].default_value = 1
-    shader.inputs[15].default_value = 0.105
+    shader.inputs[15].default_value = 1
     links.new(shader.outputs[0], output.inputs[0])
     if is_transparency:
         mat.blend_method = "BLEND"
@@ -3873,10 +4169,21 @@ def draw_cut_plane_upper(obj_name):
         bpy.ops.object.mode_set(mode='OBJECT')
 
 
-# 获取截面半径
-def getRadius(op):
-    global old_radius, scale_ratio, now_radius, on_obj, operator_obj, mouse_loc
+def get_3d_coords_from_2d(context, x, y):
+    region = context.region
+    rv3d = context.region_data
 
+    # 将2D屏幕坐标转换为3D视图坐标
+    coords_3d = bpy_extras.view3d_utils.region_2d_to_location_3d(region, rv3d, (x, y), (0, 0, 0))
+
+    return coords_3d
+
+
+# 获取截面半径
+def getRadius(op, context, event):
+    global old_radius, scale_ratio, now_radius, on_obj, operator_obj
+
+    mouse_loc = get_3d_coords_from_2d(context, event.mouse_region_x, event.mouse_region_y)
     # 翻转圆环法线
     obj_torus = bpy.data.objects[operator_obj + 'Torus']
     obj_circle = bpy.data.objects[operator_obj + 'Circle']
@@ -4019,9 +4326,10 @@ def getRadius(op):
         obj_torus.scale = (scale_ratio, scale_ratio, 1)
 
 
-def getRadius_upper(op):
-    global old_radius_upper, scale_ratio, now_radius_upper, on_obj, operator_obj, mouse_loc
+def getRadius_upper(op, context, event):
+    global old_radius_upper, scale_ratio, now_radius_upper, on_obj, operator_obj
 
+    mouse_loc = get_3d_coords_from_2d(context, event.mouse_region_x, event.mouse_region_y)
     # 翻转圆环法线
     obj_torus = bpy.data.objects[operator_obj + 'UpperTorus']
     obj_circle = bpy.data.objects[operator_obj + 'UpperCircle']
@@ -4281,40 +4589,54 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
         op_cls = Soft_Eardrum_Circle_Cut
         mould_type = bpy.context.scene.muJuTypeEnum
 
-        mouse_x = event.mouse_x
-        mouse_y = event.mouse_y
-        override1 = getOverride()
-        area = override1['area']
+        if get_mirror_context():
+            set_soft_modal_start(False)
+            print("soft_modal finish")
+            if (not get_point_qiehuan_modal_start() and not get_drag_curve_modal_start()
+                    and not get_smooth_curve_modal_start()):
+                set_mirror_context(False)
+            return {'FINISHED'}
+
+        if get_curve_modal_running():
+            return {'PASS_THROUGH'}
 
         if bpy.context.screen.areas[0].spaces.active.context == 'SCENE':
+            # 点击创建模具完成按钮后退出modal的运行
+            if bpy.context.scene.pressfinish:
+                set_soft_modal_start(False)
+                print("soft_modal finish")
+                return {'FINISHED'}
 
             # 物体处在报错状态下, 将暂停的状态取消
-            if bpy.data.objects[context.scene.leftWindowObj].data.materials[0].name == "error_yellow" and \
-                    context.mode == 'OBJECT' and finish:
-                finish = False
+            if bpy.data.objects.get(context.scene.leftWindowObj) is not None:
+                if bpy.data.objects[context.scene.leftWindowObj].data.materials[0].name == "error_yellow" and \
+                        context.mode == 'OBJECT' and finish:
+                    finish = False
 
             # 未切割时起效
-            if mouse_x < area.width and area.y < mouse_y < area.y+area.height and finish == False:
-                if mould_type == "OP1":  # 初始化圆环物体及双窗口下的操作
-                    mouse_x = event.mouse_x
-                    mouse_y = event.mouse_y
-                    override1 = getOverride()
-                    area = override1['area']
-                    override2 = getOverride2()
-                    area2 = override2['area']
+            if not finish:
+                if mould_type == "OP1" or mould_type == "OP4":  # 初始化圆环物体及双窗口下的操作
+                    operator_obj = context.scene.leftWindowObj
 
-                    workspace = bpy.context.window.workspace.name
+                    # mouse_x = event.mouse_x
+                    # mouse_y = event.mouse_y
+                    # override1 = getOverride()
+                    # area = override1['area']
+                    # override2 = getOverride2()
+                    # area2 = override2['area']
+                    # workspace = bpy.context.window.workspace.name
+
                     # 双窗口模式下
-                    if workspace == '布局.001':
-                        # 根据鼠标位置判断当前操作窗口
-                        if (mouse_x > area.width and mouse_y > area2.y):
-                            # print('右窗口')
-                            operator_obj = context.scene.rightWindowObj
-                        else:
-                            # print('左窗口')
-                            operator_obj = context.scene.leftWindowObj
-                    elif workspace == '布局':
-                        operator_obj = context.scene.leftWindowObj
+                    # if workspace == '布局.001':
+                    #     # 根据鼠标位置判断当前操作窗口
+                    #     if (mouse_x > area.width and mouse_y > area2.y):
+                    #         # print('右窗口')
+                    #         operator_obj = context.scene.rightWindowObj
+                    #     else:
+                    #         # print('左窗口')
+                    #         operator_obj = context.scene.leftWindowObj
+                    # elif workspace == '布局':
+                    #     operator_obj = context.scene.leftWindowObj
 
                     obj_torus = bpy.data.objects.get(operator_obj + 'Torus')
                     obj_upper_torus = bpy.data.objects.get(operator_obj + 'UpperTorus')
@@ -4385,7 +4707,7 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                         return {'PASS_THROUGH'}
 
                 # 鼠标是否在圆环上
-                if (mould_type == "OP1" or mould_type == "OP4") and is_mouse_on_object(context, event):
+                if (mould_type == "OP1" or mould_type == "OP4") and is_mouse_on_object(context, event, op_cls.__is_moving):
                     if operator_circle_obj is None or operator_torus_obj is None:
                         return {'PASS_THROUGH'}
                     obj_torus = bpy.data.objects.get(operator_torus_obj)
@@ -4399,6 +4721,7 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
 
                     if event.type == 'LEFTMOUSE':
                         if event.value == 'PRESS':
+                            set_torus_modal_running(True)
                             op_cls.__is_moving = True
                             op_cls.__left_mouse_down = True
                             op_cls.__initial_rotation_x = obj_torus.rotation_euler[0]
@@ -4453,13 +4776,15 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                                     print('反转后法线', active_obj.matrix_world.to_3x3(
                                     ) @ active_obj.data.polygons[0].normal)
                             # soft_eardrum_smooth_initial()
-                            # bpy.ops.object.timer_softeardrum_add_modifier_after_qmesh()\
+                            # bpy.ops.object.timer_softeardrum_add_modifier_after_qmesh()
                             if operator_torus_obj == operator_obj + 'Torus':
                                 saveCir()  # 保存数据 圆环位置,旋转,尺寸大小
                                 refill_after_cavity_plane_change()  # 重新补面填充
+                                record_state()
                             elif operator_torus_obj == operator_obj + 'UpperTorus':
                                 saveCir_upper()
                                 reset_and_refill()
+                                record_state()
 
                             op_cls.__is_moving = False
                             op_cls.__left_mouse_down = False
@@ -4468,11 +4793,13 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                             op_cls.__initial_rotation_z = None
                             op_cls.__initial_mouse_x = None
                             op_cls.__initial_mouse_y = None
+                            set_torus_modal_running(False)
 
                         return {'RUNNING_MODAL'}
 
                     elif event.type == 'RIGHTMOUSE':
                         if event.value == 'PRESS':
+                            set_torus_modal_running(True)
                             op_cls.__is_moving = True
                             op_cls.__right_mouse_down = True
                             op_cls.__initial_mouse_x = event.mouse_region_x
@@ -4483,14 +4810,17 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                             if operator_torus_obj == operator_obj + 'Torus':
                                 saveCir()  # 保存数据 圆环位置,旋转,尺寸大小
                                 refill_after_cavity_plane_change()  # 重新补面填充
+                                record_state()
                             elif operator_torus_obj == operator_obj + 'UpperTorus':
                                 saveCir_upper()
                                 reset_and_refill()
+                                record_state()
 
                             op_cls.__is_moving = False
                             op_cls.__right_mouse_down = False
                             op_cls.__initial_mouse_x = None
                             op_cls.__initial_mouse_y = None
+                            set_torus_modal_running(False)
 
                         return {'RUNNING_MODAL'}
 
@@ -4531,9 +4861,9 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                             obj_torus.rotation_euler[2] = active_obj.rotation_euler[2]
 
                             if operator_torus_obj == operator_obj + 'Torus':
-                                getRadius('rotate')
+                                getRadius('rotate', context, event)
                             elif operator_torus_obj == operator_obj + 'UpperTorus':
-                                getRadius_upper('rotate')
+                                getRadius_upper('rotate', context, event)
                             return {'RUNNING_MODAL'}
                         elif op_cls.__right_mouse_down:
                             # 平面法线方向
@@ -4548,9 +4878,9 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                             obj_torus.location -= normal * dis * 0.05
 
                             if operator_torus_obj == operator_obj + 'Torus':
-                                getRadius('move')
+                                getRadius('move', context, event)
                             elif operator_torus_obj == operator_obj + 'UpperTorus':
-                                getRadius_upper('move')
+                                getRadius_upper('move', context, event)
                             return {'RUNNING_MODAL'}
 
                     return {'PASS_THROUGH'}
@@ -4623,9 +4953,11 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                         if operator_torus_obj == operator_obj + 'Torus':
                             saveCir()
                             refill_after_cavity_plane_change()  # 重新补面填充
+                            record_state()
                         elif operator_torus_obj == operator_obj + 'UpperTorus':
                             saveCir_upper()
                             reset_and_refill()
+                            record_state()
 
                         op_cls.__is_moving = False
                         op_cls.__left_mouse_down = False
@@ -4635,6 +4967,7 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                         op_cls.__initial_rotation_z = None
                         op_cls.__initial_mouse_x = None
                         op_cls.__initial_mouse_y = None
+                        set_torus_modal_running(False)
 
                     if event.type == 'MOUSEMOVE':
                         # 左键按住旋转
@@ -4677,9 +5010,9 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                             obj_torus.rotation_euler[2] = active_obj.rotation_euler[2]
 
                             if operator_torus_obj == operator_obj + 'Torus':
-                                getRadius('rotate')
+                                getRadius('rotate', context, event)
                             elif operator_torus_obj == operator_obj + 'UpperTorus':
-                                getRadius_upper('rotate')
+                                getRadius_upper('rotate', context, event)
                             return {'RUNNING_MODAL'}
 
                         elif op_cls.__right_mouse_down:
@@ -4694,9 +5027,9 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                             active_obj.location -= normal * dis * 0.05
                             obj_torus.location -= normal * dis * 0.05
                             if operator_torus_obj == operator_obj + 'Torus':
-                                getRadius('move')
+                                getRadius('move', context, event)
                             elif operator_torus_obj == operator_obj + 'UpperTorus':
-                                getRadius_upper('move')
+                                getRadius_upper('move', context, event)
                             return {'RUNNING_MODAL'}
                     return {'PASS_THROUGH'}
 
@@ -4704,14 +5037,9 @@ class Soft_Eardrum_Circle_Cut(bpy.types.Operator):
                 return {'PASS_THROUGH'}
 
         else:
-            if get_switch_time() != None and time.time() - get_switch_time() > 0.3 and get_switch_flag():
-                set_soft_modal_start(False)
-                print("soft_modal finish")
-                if (not get_point_qiehuan_modal_start() and not get_drag_curve_modal_start()
-                        and not get_smooth_curve_modal_start()):
-                    set_switch_time(None)
-                return {'FINISHED'}
-            return {'PASS_THROUGH'}
+            set_soft_modal_start(False)
+            print("soft_modal finish")
+            return {'FINISHED'}
 
 
 # 根据点到平面的距离，计算移动的长度

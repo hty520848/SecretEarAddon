@@ -3,11 +3,27 @@ import bmesh
 from bpy_extras import view3d_utils
 from ..tool import moveToRight, moveToLeft, newMaterial, get_region_and_space, set_vert_group, delete_vert_group, \
                     utils_re_color, change_mat_mould, laplacian_smooth
+from ..register_tool import unregister_tools
 import mathutils
 from mathutils import Vector
 from math import sqrt
+from ..global_manager import global_manager
+from ..back_and_forward import record_state, backup_state, forward_state
 
 color_mode = 0
+
+
+def register_cut_mould_globals():
+    global color_mode
+    global_manager.register('color_mode', color_mode)
+
+
+def cut_mould_backup():
+    backup_state()
+
+
+def cut_mould_forward():
+    forward_state()
 
 
 def get_color_mode():
@@ -173,6 +189,10 @@ def newColor(id, r, g, b, is_transparency, transparency_degree, is_use_backface_
 def apply_cut_mould(mode):
     main_obj = bpy.data.objects[bpy.context.scene.leftWindowObj]
     cut_obj = bpy.data.objects.get(bpy.context.scene.leftWindowObj + 'cutmouldpoint_mesh_obj')
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = cut_obj
+    cut_obj.select_set(True)
+    bpy.ops.object.modifier_remove(modifier='Solidify', report=False)
     # 切割
     bpy.ops.object.select_all(action='DESELECT')
     bpy.context.view_layer.objects.active = main_obj
@@ -186,58 +206,170 @@ def apply_cut_mould(mode):
     bpy.ops.mesh.delete(type='FACE')
     bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.remove_doubles(threshold=0.5)
-    bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='25', regular=True)
-    # bpy.ops.mesh.looptools_space(influence=100, input='selected', interpolation='cubic', lock_x=False, lock_y=False, lock_z=False)
-    bpy.ops.mesh.separate(type='SELECTED')
-    for obj in bpy.data.objects:
-        if obj.select_get() and obj != main_obj:
-            inner_obj = obj
-            break
-    bpy.ops.object.mode_set(mode='OBJECT')
+    bm = bmesh.from_edit_mesh(main_obj.data)
+    selected_verts = [v for v in bm.verts if v.select]
+    if len(selected_verts) == 0:
+        bpy.ops.object.mode_set(mode='OBJECT')
+    else:
+        bpy.ops.mesh.fill()
+        bpy.ops.object.mode_set(mode='OBJECT')
+        apply_smooth(main_obj)
+    delete_objects_and_recolor(mode)
+
+
+def apply_smooth(main_obj):
+    duplicate_obj = main_obj.copy()
+    duplicate_obj.data = main_obj.data.copy()
+    duplicate_obj.animation_data_clear()
+    duplicate_obj.name = main_obj.name + "ForCut"
+    bpy.context.collection.objects.link(duplicate_obj)
+    if bpy.context.scene.leftWindowObj == '右耳':
+        moveToRight(duplicate_obj)
+    else:
+        moveToLeft(duplicate_obj)
     bpy.ops.object.select_all(action='DESELECT')
-    inner_obj.select_set(True)
-    bpy.context.view_layer.objects.active = inner_obj
-    inner_obj.name = main_obj.name + "切割边界"
-    if main_obj.name == '右耳':
-        moveToRight(inner_obj)
-    elif main_obj.name == '左耳':
-        moveToLeft(inner_obj)
+    bpy.context.view_layer.objects.active = duplicate_obj
+    duplicate_obj.select_set(True)
     bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.fill(use_beauty=False)
-    bm = bmesh.from_edit_mesh(inner_obj.data)
-    edges = [e for e in bm.edges if e.select]
     bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='CutVertex')
+    bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.select_mode(type='EDGE')
-    for e in edges:
-        if not e.is_boundary:
-            e.select_set(True)
-    bpy.ops.mesh.subdivide(number_cuts=10, ngon=False, quadcorner='INNERVERT')
+    bpy.ops.mesh.region_to_loop()
+    if bpy.context.scene.leftWindowObj == '右耳':
+        pianyi = bpy.context.scene.cutmouldpianyiR
+    else:
+        pianyi = bpy.context.scene.cutmouldpianyiL
+    if pianyi > 0:
+        try:
+            bm = bmesh.from_edit_mesh(duplicate_obj.data)
+            verts = [v for v in bm.verts if v.select]
+            center = sum((v.co for v in verts), Vector()) / len(verts)
+            max_distance = float('-inf')
+            # 遍历的每个顶点并计算距离
+            for vertex in verts:
+                distance = (vertex.co - center).length
+                max_distance = max(max_distance, distance)
+            bpy.ops.circle.smooth(width=pianyi, center_border_group_name='CutVertex',
+                                  max_smooth_width=4, circle_radius=round(max_distance, 2) + 0.5, delete_vertex_group=False)
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.vertex_group_set_active(group='CutVertex')
+            bpy.ops.object.vertex_group_select()
+            bpy.ops.mesh.select_more()
+            # bpy.ops.mesh.region_to_loop()
+            # bpy.ops.mesh.remove_doubles(threshold=0.2)
+            # bpy.ops.mesh.select_all(action='DESELECT')
+            # bpy.ops.object.vertex_group_set_active(group='CutVertex')
+            # bpy.ops.object.vertex_group_select()
+            # bpy.ops.mesh.select_more()
+            bm = bmesh.from_edit_mesh(duplicate_obj.data)
+            verts = [v for v in bm.verts if v.select]
+            float_vector_layer_vertex_origin = bm.verts.layers.float_vector['OriginVertex']
+            float_vector_layer_normal_origin = bm.verts.layers.float_vector['OriginNormal']
+            for v in verts:
+                v[float_vector_layer_vertex_origin] = v.co
+                v[float_vector_layer_normal_origin] = v.normal
+            bmesh.update_edit_mesh(duplicate_obj.data)
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.mode_set(mode='OBJECT')
+            delete_vert_group("CutVertex")
+            bpy.data.objects.remove(main_obj, do_unlink=True)
+            duplicate_obj.name = bpy.context.scene.leftWindowObj
+        except:
+            if duplicate_obj:
+                bpy.data.objects.remove(duplicate_obj, do_unlink=True)
+            if bpy.data.objects.get(bpy.context.scene.leftWindowObj + 'ForCutcopyBridgeBorder'):
+                bpy.data.objects.remove(bpy.data.objects[bpy.context.scene.leftWindowObj + 'ForCutcopyBridgeBorder'],
+                                        do_unlink=True)
+            bpy.context.view_layer.objects.active = main_obj
+            bpy.ops.object.mode_set(mode='OBJECT')
+            bpy.ops.object.select_all(action='DESELECT')
+            main_obj.select_set(True)
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_mode(type='VERT')
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.vertex_group_set_active(group='CutVertex')
+            bpy.ops.object.vertex_group_select()
+            bm = bmesh.from_edit_mesh(main_obj.data)
+            verts = [v for v in bm.verts if v.select]
+            float_vector_layer_vertex_origin = bm.verts.layers.float_vector['OriginVertex']
+            float_vector_layer_normal_origin = bm.verts.layers.float_vector['OriginNormal']
+            for v in verts:
+                v[float_vector_layer_vertex_origin] = v.co
+                v[float_vector_layer_normal_origin] = v.normal
+            bmesh.update_edit_mesh(main_obj.data)
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.mode_set(mode='OBJECT')
+            delete_vert_group("CutVertex")
 
-    bpy.ops.mesh.select_mode(type='VERT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    verts = [v for v in bm.verts if v.select]
-    bpy.ops.mesh.select_all(action='DESELECT')
-    for v in verts:
-        if not v.is_boundary:
-            v.select_set(True)
-    bm = bmesh.from_edit_mesh(inner_obj.data)
-    verts_index = [v.index for v in bm.verts if v.select]
-    laplacian_smooth(verts_index, 0.5, 10)
+    else:
+        bm = bmesh.from_edit_mesh(main_obj.data)
+        verts = [v for v in bm.verts if v.select]
+        float_vector_layer_vertex_origin = bm.verts.layers.float_vector['OriginVertex']
+        float_vector_layer_normal_origin = bm.verts.layers.float_vector['OriginNormal']
+        for v in verts:
+            v[float_vector_layer_vertex_origin] = v.co
+            v[float_vector_layer_normal_origin] = v.normal
+        bmesh.update_edit_mesh(main_obj.data)
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        delete_vert_group("CutVertex")
 
-    bpy.ops.object.select_all(action='DESELECT')
-    bpy.context.view_layer.objects.active = main_obj
-    main_obj.select_set(True)
-    inner_obj.select_set(True)
-    bpy.ops.object.join()
+    # bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='25', regular=True)
+    # bpy.ops.mesh.separate(type='SELECTED')
+    # for obj in bpy.data.objects:
+    #     if obj.select_get() and obj != main_obj:
+    #         inner_obj = obj
+    #         break
+    # bpy.ops.object.mode_set(mode='OBJECT')
+    # bpy.ops.object.select_all(action='DESELECT')
+    # inner_obj.select_set(True)
+    # bpy.context.view_layer.objects.active = inner_obj
+    # inner_obj.name = main_obj.name + "切割边界"
+    # if main_obj.name == '右耳':
+    #     moveToRight(inner_obj)
+    # elif main_obj.name == '左耳':
+    #     moveToLeft(inner_obj)
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.mesh.select_all(action='SELECT')
+    # bpy.ops.mesh.fill(use_beauty=False)
+    # bm = bmesh.from_edit_mesh(inner_obj.data)
+    # edges = [e for e in bm.edges if e.select]
+    # bpy.ops.mesh.select_all(action='DESELECT')
+    # bpy.ops.mesh.select_mode(type='EDGE')
+    # for e in edges:
+    #     if not e.is_boundary:
+    #         e.select_set(True)
+    # bpy.ops.mesh.subdivide(number_cuts=10, ngon=False, quadcorner='INNERVERT')
+    #
+    # bpy.ops.mesh.select_mode(type='VERT')
+    # bpy.ops.mesh.select_all(action='SELECT')
+    # verts = [v for v in bm.verts if v.select]
+    # bpy.ops.mesh.select_all(action='DESELECT')
+    # for v in verts:
+    #     if not v.is_boundary:
+    #         v.select_set(True)
+    # bm = bmesh.from_edit_mesh(inner_obj.data)
+    # verts_index = [v.index for v in bm.verts if v.select]
+    # laplacian_smooth(verts_index, 0.5, 10)
+    #
+    # bpy.ops.object.select_all(action='DESELECT')
+    # bpy.context.view_layer.objects.active = main_obj
+    # main_obj.select_set(True)
+    # inner_obj.select_set(True)
+    # bpy.ops.object.join()
+    #
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.mesh.select_all(action='SELECT')
+    # bpy.ops.mesh.remove_doubles()
+    # bpy.ops.mesh.normals_make_consistent(inside=False)
+    # bpy.ops.mesh.select_all(action='DESELECT')
+    # bpy.ops.object.mode_set(mode='OBJECT')
+    # delete_vert_group("CutVertex")
 
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.remove_doubles()
-    bpy.ops.mesh.normals_make_consistent(inside=False)
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.mode_set(mode='OBJECT')
-    delete_vert_group("CutVertex")
+
+def delete_objects_and_recolor(mode):
     # 删除用不到的物体
     del_objs = [bpy.context.scene.leftWindowObj + 'cutmouldpoint',
                 bpy.context.scene.leftWindowObj + 'cutmouldpoint_extruded',
@@ -281,6 +413,10 @@ def get_view_direction():
 
 # 挤出曲线并生成面
 def extrude_curve_and_generate_faces(curve_obj, distance):
+    area = next(a for a in bpy.context.window.screen.areas if a.type == 'VIEW_3D')
+    r3d = area.spaces[0].region_3d
+    cam_loc = r3d.view_matrix.inverted().translation
+
     # 获取曲线数据
     curve_data = curve_obj.data
 
@@ -299,21 +435,28 @@ def extrude_curve_and_generate_faces(curve_obj, distance):
         moveToLeft(new_curve_obj2)
 
     # 设置挤出方向
-    view_direction = get_view_direction()
-    if view_direction is None:
-        print("无法获取视图方向")
-        return
+    # view_direction = get_view_direction()
+    # if view_direction is None:
+    #     print("无法获取视图方向")
+    #     return
 
     # 挤出曲线
-    distance = view_direction * distance
+    # distance = view_direction * distance
     for point1, point2 in zip(new_curve_data.splines[0].points, new_curve_data2.splines[0].points):
-        point1.co = [point1.co[0] + distance[0], point1.co[1] + distance[1], point1.co[2] + distance[2], point1.co[3]]
-        point2.co = [point2.co[0] - distance[0], point2.co[1] - distance[1], point2.co[2] - distance[2], point2.co[3]]
+        vertex_co = Vector(point1.co[0:3])
+        move_co1 = vertex_co + (vertex_co - cam_loc).normalized() * distance
+        move_co2 = vertex_co + (cam_loc - vertex_co).normalized() * distance
+        point1.co = [move_co1[0], move_co1[1], move_co1[2], 1]
+        point2.co = [move_co2[0], move_co2[1], move_co2[2], 1]
 
     # 创建新的网格对象
     mesh_data = bpy.data.meshes.new(curve_obj.name + "_mesh")
     mesh_obj = bpy.data.objects.new(curve_obj.name + "_mesh_obj", mesh_data)
     bpy.context.collection.objects.link(mesh_obj)
+    if bpy.context.scene.leftWindowObj == '右耳':
+        moveToRight(mesh_obj)
+    else:
+        moveToLeft(mesh_obj)
 
     # 使用 BMesh 生成面
     bm = bmesh.new()
@@ -364,9 +507,14 @@ def extrude_curve_and_generate_faces(curve_obj, distance):
     bpy.ops.object.mode_set(mode='OBJECT')
 
     # 隐藏物体
-    curve_obj.hide_set(True)
-    new_curve_obj.hide_set(True)
-    new_curve_obj2.hide_set(True)
+    bpy.ops.object.modifier_add(type='SOLIDIFY')
+    bpy.context.object.modifiers["Solidify"].thickness = -0.5
+    # curve_obj.hide_set(True)
+    # new_curve_obj.hide_set(True)
+    # new_curve_obj2.hide_set(True)
+    bpy.data.objects.remove(curve_obj, do_unlink=True)
+    bpy.data.objects.remove(new_curve_obj, do_unlink=True)
+    bpy.data.objects.remove(new_curve_obj2, do_unlink=True)
 
 
 def start_curve():
@@ -405,6 +553,7 @@ class Reset_CutMould(bpy.types.Operator):
     def invoke(self, context, event):
         bpy.context.scene.var = 90
         self.execute(context)
+        record_state()
         return {'FINISHED'}
 
     def execute(self, context):
@@ -432,6 +581,7 @@ class Finish_CutMould(bpy.types.Operator):
     def invoke(self, context, event):
         bpy.context.scene.var = 91
         self.execute(context)
+        record_state()
         return {'FINISHED'}
 
     def execute(self, context):
@@ -440,9 +590,14 @@ class Finish_CutMould(bpy.types.Operator):
         cut_obj = bpy.data.objects.get(context.scene.leftWindowObj + 'cutmouldpoint_mesh_obj')
         if cut_obj:
             apply_cut_mould(color_mode)
-            bpy.ops.wm.tool_set_by_id(name="tool.cutmouldswitch1")
+            # bpy.ops.wm.tool_set_by_id(name="tool.cutmouldswitch1")
+            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         else:
             bpy.ops.wm.tool_set_by_id(name="tool.cutmouldswitch2")
+
+        if not bpy.context.scene.pressfinish:
+            unregister_tools()
+            bpy.context.scene.pressfinish = True
 
 
 class TEST_OT_cutmouldstart(bpy.types.Operator):
@@ -468,7 +623,7 @@ class TEST_OT_cutmouldstart(bpy.types.Operator):
             moveToRight(new_curve_obj)
         elif name == '左耳':
             moveToLeft(new_curve_obj)
-        newColor('blue', 0, 0, 1, 1, 1)
+        newColor('blue', 0, 0, 1, 0, 1)
         new_curve_data.materials.append(bpy.data.materials['blue'])
         new_curve_data.splines.clear()
         new_spline = new_curve_data.splines.new(type='NURBS')
@@ -490,6 +645,7 @@ class TEST_OT_cutmouldfinish(bpy.types.Operator):
         return {'FINISHED'}
 
     def execute(self, context):
+        global color_mode
         co = get_co()
         add_curve_name = context.scene.leftWindowObj + 'cutmouldpoint'
         curve_obj = bpy.data.objects[add_curve_name]
@@ -510,13 +666,18 @@ class TEST_OT_cutmouldfinish(bpy.types.Operator):
             # for _ in range(10):
             #     bpy.ops.curve.smooth()
             # bpy.ops.object.mode_set(mode='OBJECT')
+            cut_obj = bpy.data.objects.get(bpy.context.scene.leftWindowObj + 'cutmouldpoint_mesh_obj')
+            if cut_obj:  # 如果没有应用切割将其提交
+                apply_cut_mould(color_mode)
 
             # 生成切割用的物体
             extrude_curve_and_generate_faces(curve_obj, 20)
             bpy.ops.object.select_all(action='DESELECT')
             bpy.context.view_layer.objects.active = bpy.data.objects[context.scene.leftWindowObj]
             bpy.data.objects[context.scene.leftWindowObj].select_set(True)
-            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+            bpy.ops.wm.tool_set_by_id(name="tool.cutmouldswitch1")
+            record_state()
+            # bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
 
         else:
             pass
@@ -583,100 +744,6 @@ class TEST_OT_cutmoulddeletepoint(bpy.types.Operator):
                 pass
 
 
-class Tool_ResetCutMould(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "tool.cutmouldreset"
-    bl_label = "重置模具切割"
-    bl_description = (
-        "点击重置模具切割"
-    )
-    bl_icon = "brush.paint_texture.multiply"
-    bl_widget = None
-    bl_keymap = (
-        ("cutmould.resetcut", {"type": 'MOUSEMOVE', "value": 'ANY'}, {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class Tool_FinishCutMould(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "tool.cutmouldfinish"
-    bl_label = "完成模具切割"
-    bl_description = (
-        "点击完成模具切割"
-    )
-    bl_icon = "brush.paint_texture.smear"
-    bl_widget = None
-    bl_keymap = (
-        ("cutmould.finishcut", {"type": 'MOUSEMOVE', "value": 'ANY'}, {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class Switch_CutMould1(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "tool.cutmouldswitch1"
-    bl_label = "开始切割模具"
-    bl_description = (
-        "点击开始切割模具"
-    )
-    bl_icon = "brush.paint_texture.soften"
-    bl_widget = None
-    bl_keymap = (
-        ("cutmould.start", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
-        ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
-        ("view3d.view_roll", {"type": 'LEFTMOUSE', "value": 'PRESS', "ctrl": True}, None)
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class Switch_CutMould2(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "tool.cutmouldswitch2"
-    bl_label = "切割模具"
-    bl_description = (
-        "进行切割模具"
-    )
-    bl_icon = "brush.paint_weight.average"
-    bl_widget = None
-    bl_keymap = (
-        ("cutmould.finish", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
-        ("cutmould.addpoint", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
-        ("cutmould.deletepoint", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None)
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-def register_cutmould_tools():
-    bpy.utils.register_tool(Tool_ResetCutMould)
-    bpy.utils.register_tool(Tool_FinishCutMould, separator=True, group=False, after={Tool_ResetCutMould.bl_idname})
-
-    bpy.utils.register_tool(Switch_CutMould1)
-    bpy.utils.register_tool(Switch_CutMould2)
-
-
 def register():
     bpy.utils.register_class(Reset_CutMould)
     bpy.utils.register_class(Finish_CutMould)
@@ -684,12 +751,6 @@ def register():
     bpy.utils.register_class(TEST_OT_cutmouldaddpoint)
     bpy.utils.register_class(TEST_OT_cutmoulddeletepoint)
     bpy.utils.register_class(TEST_OT_cutmouldfinish)
-
-    # bpy.utils.register_tool(Tool_ResetCutMould)
-    # bpy.utils.register_tool(Tool_FinishCutMould, separator=True, group=False, after={Tool_ResetCutMould.bl_idname})
-    #
-    # bpy.utils.register_tool(Switch_CutMould1)
-    # bpy.utils.register_tool(Switch_CutMould2)
 
 
 def unregister():
@@ -699,8 +760,3 @@ def unregister():
     bpy.utils.unregister_class(TEST_OT_cutmouldaddpoint)
     bpy.utils.unregister_class(TEST_OT_cutmoulddeletepoint)
     bpy.utils.unregister_class(TEST_OT_cutmouldfinish)
-
-    bpy.utils.unregister_tool(Tool_ResetCutMould)
-    bpy.utils.unregister_tool(Tool_FinishCutMould)
-    bpy.utils.unregister_tool(Switch_CutMould1)
-    bpy.utils.unregister_tool(Switch_CutMould2)

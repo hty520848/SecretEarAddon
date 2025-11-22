@@ -3,11 +3,12 @@ import mathutils
 import bmesh
 import math
 import numpy as np
-from ...tool import moveToRight, moveToLeft, getOverride, delete_vert_group
+from ...tool import moveToRight, moveToLeft, getOverride, delete_vert_group, track_time
 import copy
 import datetime
 from mathutils import Vector, Euler
 import time
+from ...back_and_forward import record_state
 
 is_qmesh_finish = False
 
@@ -501,7 +502,7 @@ def smooth_initial():
     hard_eardrum_vert_index7 = []  # 保存用于smooth函数边缘平滑的顶点
 
     if (obj != None):
-        print("硬耳膜平滑初始化开始:", datetime.datetime.now())
+        track_time("硬耳膜平滑初始化开始:")
         # 将底部一圈顶点复制出来用于计算最短距离
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='DESELECT')
@@ -550,7 +551,7 @@ def smooth_initial():
                     select_vert_index.append(vert.index)
             bm.to_mesh(me)
             bm.free()
-        print("开始计算距离:", datetime.datetime.now())
+        track_time("开始计算距离:")
         # 根据距离选中顶点
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='DESELECT')
@@ -604,7 +605,7 @@ def smooth_initial():
         #将用于计算距离的底部平面删除
         bpy.data.objects.remove(bottom_outer_obj, do_unlink=True)
 
-        print("将顶点索引赋值给顶点组:", datetime.datetime.now())
+        track_time("将顶点索引赋值给顶点组:")
         #根据顶点索引将选中的顶点保存到顶点组中
         vert_index_to_vertex_group(hard_eardrum_vert_index1, "HardEarDrumOuterVertex1")
         vert_index_to_vertex_group(hard_eardrum_vert_index2, "HardEarDrumOuterVertex2")
@@ -635,7 +636,7 @@ def smooth_initial():
         bpy.ops.mesh.select_all(action='DESELECT')
         bpy.ops.object.mode_set(mode='OBJECT')
 
-        print("创建修改器:", datetime.datetime.now())
+        track_time("创建修改器:")
 
         # 创建平滑修改器,指定硬耳膜平滑顶点组
         modifier_name = "HardEarDrumModifier4"
@@ -709,7 +710,7 @@ def smooth_initial():
             target_modifier.factor = 0.5
             target_modifier.iterations = 5
             bpy.ops.object.modifier_apply(modifier="HardEarDrumModifier5")
-            print("调用smooth平滑函数:", datetime.datetime.now())
+            track_time("调用smooth平滑函数:")
             bpy.ops.object.mode_set(mode='EDIT')
             if(hard_eardrum_smooth < 1):
                 for i in range(7):
@@ -726,7 +727,7 @@ def smooth_initial():
                 for i in range(2):
                     laplacian_smooth(getIndex7(), 0.3)
             bpy.ops.object.mode_set(mode='OBJECT')
-        print("平滑初始化结束:", datetime.datetime.now())
+        track_time("平滑初始化结束:")
 
         #平滑成功之后,用平滑后的物体替换左/右耳
         bpy.data.objects.remove(bpy.data.objects[bpy.context.scene.leftWindowObj], do_unlink=True)
@@ -1182,7 +1183,13 @@ class InnerBorderQmesh(bpy.types.Operator):
             bpy.ops.object.select_all(action='DESELECT')
             bpy.context.view_layer.objects.active = retopo_obj
             retopo_obj.select_set(True)
-            offset_center(retopo_obj, 2)
+            try:
+                offset_center(retopo_obj, 2)
+                record_state()
+            except:
+                if retopo_obj:
+                    bpy.data.objects.remove(retopo_obj, do_unlink=True)
+                recover_before_fill()
             is_qmesh_finish = False
             return {'FINISHED'}
 

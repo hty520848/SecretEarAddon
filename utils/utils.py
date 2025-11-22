@@ -262,29 +262,34 @@ def get_cut_plane():
 
 def plane_boolean_cut():
     name = bpy.context.scene.leftWindowObj
-    for obj in bpy.data.objects:
-        obj.select_set(False)
-        if obj.name == name:
-            obj.select_set(True)
-            bpy.context.view_layer.objects.active = obj
+    obj = bpy.data.objects[name]
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    # for obj in bpy.data.objects:
+    #     obj.select_set(False)
+    #     if obj.name == name:
+    #         obj.select_set(True)
+    #         bpy.context.view_layer.objects.active = obj
+
     # 获取活动对象
-    obj = bpy.context.active_object
+    # obj = bpy.context.active_object
 
     # 存一下原先的顶点
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bm = bmesh.from_edit_mesh(obj.data)
-    ori_border_index = [v.index for v in bm.verts if v.select]
-    all_index = [v for v in bm.verts]
-    all_index.sort(key=lambda vert: vert.co[2])
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.mesh.select_all(action='SELECT')
+    # bm = bmesh.from_edit_mesh(obj.data)
+    ori_border_index = [v.index for v in obj.data.vertices]
+    all_verts = [v for v in obj.data.vertices]
+    all_verts.sort(key=lambda vert: vert.co[2])
     global min_z_before_cut, max_z_before_cut
-    min_z_before_cut = all_index[0].co[2]
-    max_z_before_cut = all_index[-1].co[2]
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.mode_set(mode='OBJECT')
+    min_z_before_cut = all_verts[0].co[2]
+    max_z_before_cut = all_verts[-1].co[2]
+    # bpy.ops.mesh.select_all(action='DESELECT')
+    # bpy.ops.object.mode_set(mode='OBJECT')
     set_vert_group("all", ori_border_index)
 
-    utils_bool_difference(obj.name, name + "CutPlane")
+    utils_bool_difference(name + "CutPlane")
 
     # 获取下边界顶点用于挤出
     bpy.ops.object.mode_set(mode='EDIT')
@@ -404,10 +409,10 @@ def utils_plane_cut():
     delete_useless_part()
 
 
-def utils_bool_difference(main_obj_name, cut_obj_name):
+def utils_bool_difference(cut_obj_name):
     name = bpy.context.scene.leftWindowObj
-    bpy.ops.object.select_all(action='DESELECT')
-    bpy.data.objects[main_obj_name].select_set(True)
+    # bpy.ops.object.select_all(action='DESELECT')
+    # bpy.data.objects[main_obj_name].select_set(True)
     cut_obj = bpy.data.objects[cut_obj_name]
     # 该布尔插件会直接删掉切割平面，最好是使用复制去切，以防后续会用到
     duplicate_obj = cut_obj.copy()
@@ -454,7 +459,8 @@ def resample_curve(point_num, curve_name):
     bpy.ops.object.convert(target='CURVE')
     bpy.context.object.data.bevel_depth = 0.18
     # bpy.ops.object.shade_smooth(use_auto_smooth=True)
-    newColor('blue', 0, 0, 1, 1, 1)
+    if not bpy.data.materials.get('blue'):
+        newColor('blue', 0, 0, 1, 0, 1)
     bpy.data.objects[curve_name].data.materials.append(bpy.data.materials['blue'])
 
     bpy.ops.object.select_all(action='DESELECT')
@@ -462,3 +468,88 @@ def resample_curve(point_num, curve_name):
     main_obj.select_set(True)
     # 2024/05/30 几何节点用完之后，删除掉，避免无限堆积
     bpy.data.node_groups.remove(node_tree)
+
+
+def generate_cut_plane(step_number_in, step_number_out):
+    name = bpy.context.scene.leftWindowObj
+    active_obj = bpy.data.objects[name + 'BottomRingBorderR']
+
+    duplicate_obj = active_obj.copy()
+    duplicate_obj.data = active_obj.data.copy()
+    duplicate_obj.name = name + "CutPlane"
+    duplicate_obj.animation_data_clear()
+    # 将复制的物体加入到场景集合中
+    bpy.context.collection.objects.link(duplicate_obj)
+    if name == '右耳':
+        moveToRight(duplicate_obj)
+    elif name == '左耳':
+        moveToLeft(duplicate_obj)
+
+    duplicate_obj.data.bevel_depth = 0
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = duplicate_obj
+    duplicate_obj.select_set(state=True)
+    bpy.ops.object.convert(target='MESH')
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+
+    duplicate_obj.vertex_groups.new(name='Center')
+    bpy.ops.object.vertex_group_assign()
+    extrude_direction = {}
+    bm = bmesh.from_edit_mesh(duplicate_obj.data)
+    target_object = bpy.data.objects[name + "MouldReset"]
+
+    for vert in bm.verts:
+        # 获取顶点原位置
+        vertex_co = duplicate_obj.matrix_world @ vert.co
+        _, _, normal, _ = target_object.closest_point_on_mesh(vertex_co)
+        key = (vertex_co[0], vertex_co[1], vertex_co[2])
+        extrude_direction[key] = normal
+
+    # 复制选中的顶点并沿着各自的法线方向移动
+    bpy.ops.mesh.duplicate()
+
+    # 获取所有选中的顶点
+    inside_border_vert = [v for v in bm.verts if v.select]
+    for vert in inside_border_vert:
+        vertex_co = duplicate_obj.matrix_world @ vert.co
+        key = (vertex_co[0], vertex_co[1], vertex_co[2])
+        dir = extrude_direction[key]
+        vert.co -= dir * step_number_in
+    duplicate_obj.vertex_groups.new(name='Inner')
+    bpy.ops.object.vertex_group_assign()
+    bpy.ops.object.vertex_group_set_active(group="Center")
+    bpy.ops.object.vertex_group_remove_from()
+    bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.bridge_edge_loops()
+
+    bpy.ops.object.vertex_group_set_active(group="Inner")
+    bpy.ops.object.vertex_group_deselect()
+
+    # 复制选中的顶点并沿着各自的法线方向移动
+    bpy.ops.mesh.duplicate()
+
+    # 获取所有选中的顶点
+    outside_border_vert = [v for v in bm.verts if v.select]
+    for vert in outside_border_vert:
+        vertex_co = duplicate_obj.matrix_world @ vert.co
+        key = (vertex_co[0], vertex_co[1], vertex_co[2])
+        dir = extrude_direction[key]
+        vert.co += dir * step_number_out
+    duplicate_obj.vertex_groups.new(name='Outer')
+    bpy.ops.object.vertex_group_assign()
+    bpy.ops.object.vertex_group_set_active(group="Center")
+    bpy.ops.object.vertex_group_remove_from()
+    bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.bridge_edge_loops()
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    if judge_normals():
+        bpy.ops.mesh.flip_normals()
+
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+

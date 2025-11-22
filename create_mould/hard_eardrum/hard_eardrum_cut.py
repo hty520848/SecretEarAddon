@@ -3,11 +3,18 @@ import bmesh
 import numpy as np
 from ...utils.utils import utils_get_order_border_vert, utils_draw_curve, resample_curve
 from ...tool import delete_vert_group, set_vert_group, subdivide, convert_to_mesh, moveToRight, moveToLeft, delete_useless_object, newColor
-from ..parameters_for_create_mould import get_template_high, get_template_low, get_left_template_high, get_left_template_low
+from ...parameters_for_templates import get_right_template_high, get_right_template_low, get_left_template_high, get_left_template_low
 import math
+from ...global_manager import global_manager
 
 min_z_before_cut = None
 max_z_before_cut = None
+
+def register_hard_eardrum_cut_globals():
+    global min_z_before_cut, max_z_before_cut
+    global_manager.register("min_z_before_cut", min_z_before_cut)
+    global_manager.register("max_z_before_cut", max_z_before_cut)
+
 
 def hard_recover_before_cut_and_remind_border():
     '''
@@ -93,8 +100,8 @@ def get_target_high_and_low():
 
 
 def get_actual_co(origin_co, target_high, target_low):
-    template_high = get_template_high()
-    template_low = get_template_low()
+    template_high = get_right_template_high()
+    template_low = get_right_template_low()
 
     templateL_high = get_left_template_high()
     templateL_low = get_left_template_low()
@@ -222,27 +229,32 @@ def get_bigger_cut_plane():
 
 
 def plane_cut():
-    for obj in bpy.data.objects:
-        obj.select_set(False)
-        name = bpy.context.scene.leftWindowObj
-        if obj.name == name:
-            obj.select_set(True)
-            bpy.context.view_layer.objects.active = obj
-    # 获取活动对象
-    obj = bpy.context.active_object
+    name = bpy.context.scene.leftWindowObj
+    obj = bpy.data.objects[name]
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    # for obj in bpy.data.objects:
+    #     obj.select_set(False)
+    #     name = bpy.context.scene.leftWindowObj
+    #     if obj.name == name:
+    #         obj.select_set(True)
+    #         bpy.context.view_layer.objects.active = obj
+    # # 获取活动对象
+    # obj = bpy.context.active_object
 
     # 存一下原先的顶点
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bm = bmesh.from_edit_mesh(obj.data)
-    ori_border_index = [v.index for v in bm.verts if v.select]
-    all_index = [v for v in bm.verts]
-    all_index.sort(key=lambda vert: vert.co[2])
+    # bpy.ops.object.mode_set(mode='EDIT')
+    # bpy.ops.mesh.select_all(action='SELECT')
+    # bm = bmesh.from_edit_mesh(obj.data)
+    ori_border_index = [v.index for v in obj.data.vertices]
+    all_verts = [v for v in obj.data.vertices]
+    all_verts.sort(key=lambda vert: vert.co[2])
     global min_z_before_cut, max_z_before_cut
-    min_z_before_cut = all_index[0].co[2]
-    max_z_before_cut = all_index[-1].co[2]
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.mode_set(mode='OBJECT')
+    min_z_before_cut = all_verts[0].co[2]
+    max_z_before_cut = all_verts[-1].co[2]
+    # bpy.ops.mesh.select_all(action='DESELECT')
+    # bpy.ops.object.mode_set(mode='OBJECT')
     set_vert_group("all", ori_border_index)
 
     # 添加一个修饰器
@@ -405,7 +417,7 @@ def draw_cut_border_point():
     bpy.ops.object.mode_set(mode='OBJECT')
     utils_draw_curve(utils_get_order_border_vert(border_co), name + "BottomRingBorderR", 0.18)
     blue_mat = bpy.data.materials.get('blue')
-    newColor('blue', 0, 0, 1, 1, 1)
+    newColor('blue', 0, 0, 1, 0, 1)
     bpy.data.objects[name + "BottomRingBorderR"].data.materials.append(bpy.data.materials['blue'])
     if name == '右耳':
         moveToRight(bpy.data.objects[name + "BottomRingBorderR"])
@@ -521,7 +533,6 @@ def get_cut_plane_for_re_cut():
     # 拼接成面
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
 
     # # 最内补面
     # bpy.ops.mesh.select_all(action='DESELECT')
@@ -533,6 +544,7 @@ def get_cut_plane_for_re_cut():
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.vertex_group_set_active(group='Inner')
     bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
     bpy.ops.object.vertex_group_set_active(group='Center')
     bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.bridge_edge_loops()
@@ -540,11 +552,13 @@ def get_cut_plane_for_re_cut():
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.vertex_group_set_active(group='Outer')
     bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
     bpy.ops.object.vertex_group_set_active(group='Center')
     bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.bridge_edge_loops()
 
     bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
     if judge_normals():
         bpy.ops.mesh.flip_normals()
 
@@ -562,7 +576,7 @@ def get_cut_plane_for_re_cut():
 #     name = bpy.context.scene.leftWindowObj
 #     utils_draw_curve(hard_eardrum_border, name + "BottomRingBorderR", 0.18)
 #     # 给蓝线上色
-#     newColor('blue', 0, 0, 1, 1, 1)
+#     newColor('blue', 0, 0, 1, 0, 1)
 #     bpy.data.objects[name + "BottomRingBorderR"].data.materials.append(bpy.data.materials['blue'])
 #     resample_curve(160,name + "BottomRingBorderR")
 #     convert_to_mesh(name + 'BottomRingBorderR', name + 'meshBottomRingBorderR', 0.18)
@@ -611,27 +625,28 @@ def re_hard_cut(hard_eardrum_border_and_normal, step_out, step_in):
     name = bpy.context.scene.leftWindowObj
     # 进入这里说明移动过蓝线了，进行二次切割，传入的参数已经是排序好的圆环数据，不需要重新排序
     center_border = list()
-    inner_border = list()
-    cut_plane_border = list()
+    # inner_border = list()
+    # cut_plane_border = list()
     for item in hard_eardrum_border_and_normal:
         border_co = item[0]
         normal = item[1]
         center_border.append(border_co)
-        cut_plane_border.append((border_co[0] + normal[0] * step_out, border_co[1] + normal[1] * step_out, border_co[2] + normal[2] * step_out))
-        inner_border.append((border_co[0] - normal[0] * step_in, border_co[1] - normal[1] * step_in, border_co[2] - normal[2] * step_in))
+        # cut_plane_border.append((border_co[0] + normal[0] * step_out, border_co[1] + normal[1] * step_out, border_co[2] + normal[2] * step_out))
+        # inner_border.append((border_co[0] - normal[0] * step_in, border_co[1] - normal[1] * step_in, border_co[2] - normal[2] * step_in))
     utils_draw_curve(center_border, name + "BottomRingBorderR", 0.18)
     # 给蓝线上色
-    newColor('blue', 0, 0, 1, 1, 1)
-    bpy.data.objects[name + "BottomRingBorderR"].data.materials.append(bpy.data.materials['blue'])
-    resample_curve(160,name + "BottomRingBorderR")
+    # newColor('blue', 0, 0, 1, 0, 1)
+    # bpy.data.objects[name + "BottomRingBorderR"].data.materials.append(bpy.data.materials['blue'])
+    resample_curve(160, name + "BottomRingBorderR")
     convert_to_mesh(name + 'BottomRingBorderR', name + 'meshBottomRingBorderR', 0.18)
 
-    utils_draw_curve(center_border, name + "Center", 0)
-    utils_draw_curve(cut_plane_border, name + "CutPlane", 0)
-    utils_draw_curve(inner_border, name + "Inner", 0)
+    # utils_draw_curve(center_border, name + "Center", 0)
+    # utils_draw_curve(cut_plane_border, name + "CutPlane", 0)
+    # utils_draw_curve(inner_border, name + "Inner", 0)
 
     # 根据中内外三圈绘制切割平面
-    get_cut_plane_for_re_cut()
+    # get_cut_plane_for_re_cut()
+    generate_cut_plane(step_out, step_in)
     # 套用切割
     plane_cut()
     # 下面这个函数有改动，先删一下切出来的面
@@ -719,3 +734,85 @@ def convex_hull(points):
         hull.append(point)
 
     return hull
+
+
+def generate_cut_plane(step_number_in, step_number_out):
+    name = bpy.context.scene.leftWindowObj
+    active_obj = bpy.data.objects[name + 'BottomRingBorderR']
+
+    duplicate_obj = active_obj.copy()
+    duplicate_obj.data = active_obj.data.copy()
+    duplicate_obj.name = name + "CutPlane"
+    duplicate_obj.animation_data_clear()
+    # 将复制的物体加入到场景集合中
+    bpy.context.collection.objects.link(duplicate_obj)
+    if name == '右耳':
+        moveToRight(duplicate_obj)
+    elif name == '左耳':
+        moveToLeft(duplicate_obj)
+
+    duplicate_obj.data.bevel_depth = 0
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = duplicate_obj
+    duplicate_obj.select_set(state=True)
+    bpy.ops.object.convert(target='MESH')
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+
+    duplicate_obj.vertex_groups.new(name='Center')
+    bpy.ops.object.vertex_group_assign()
+    extrude_direction = {}
+    bm = bmesh.from_edit_mesh(duplicate_obj.data)
+    target_object = bpy.data.objects[name + "MouldReset"]
+
+    for vert in bm.verts:
+        # 获取顶点原位置
+        vertex_co = duplicate_obj.matrix_world @ vert.co
+        _, _, normal, _ = target_object.closest_point_on_mesh(vertex_co)
+        key = (vertex_co[0], vertex_co[1], vertex_co[2])
+        extrude_direction[key] = normal
+
+    # 复制选中的顶点并沿着各自的法线方向移动
+    bpy.ops.mesh.duplicate()
+
+    # 获取所有选中的顶点
+    inside_border_vert = [v for v in bm.verts if v.select]
+    for vert in inside_border_vert:
+        vertex_co = duplicate_obj.matrix_world @ vert.co
+        key = (vertex_co[0], vertex_co[1], vertex_co[2])
+        dir = extrude_direction[key]
+        vert.co -= dir * step_number_in
+    duplicate_obj.vertex_groups.new(name='Inner')
+    bpy.ops.object.vertex_group_assign()
+    bpy.ops.object.vertex_group_set_active(group="Center")
+    bpy.ops.object.vertex_group_remove_from()
+    bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.bridge_edge_loops()
+
+    bpy.ops.object.vertex_group_set_active(group="Inner")
+    bpy.ops.object.vertex_group_deselect()
+
+    # 复制选中的顶点并沿着各自的法线方向移动
+    bpy.ops.mesh.duplicate()
+
+    # 获取所有选中的顶点
+    outside_border_vert = [v for v in bm.verts if v.select]
+    for vert in outside_border_vert:
+        vertex_co = duplicate_obj.matrix_world @ vert.co
+        key = (vertex_co[0], vertex_co[1], vertex_co[2])
+        dir = extrude_direction[key]
+        vert.co += dir * step_number_out
+    duplicate_obj.vertex_groups.new(name='Outer')
+    bpy.ops.object.vertex_group_assign()
+    bpy.ops.object.vertex_group_set_active(group="Center")
+    bpy.ops.object.vertex_group_remove_from()
+    bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.bridge_edge_loops()
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    if judge_normals():
+        bpy.ops.mesh.flip_normals()
+
+    bpy.ops.object.mode_set(mode='OBJECT')

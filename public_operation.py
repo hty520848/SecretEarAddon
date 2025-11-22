@@ -2,40 +2,39 @@ import bpy
 import blf
 import time
 from .jiahou import frontToLocalThickening, frontFromLocalThickening, backFromLocalThickening, backToLocalThickening, \
-    backup, forward
-from .damo import backFromDamo, backToDamo, frontFromDamo, frontToDamo
-from .create_tip.qiege import frontToQieGe, frontFromQieGe, backFromQieGe, backToQieGe
+    jiahou_backup, jiahou_forward
+from .damo import backFromDamo, backToDamo, frontFromDamo, frontToDamo, damo_backup, damo_forward
+from .create_tip.qiege import frontToQieGe, frontFromQieGe, backFromQieGe, backToQieGe, qiege_backup, qiege_forward
 from .label import frontToLabel, frontFromLabel, backFromLabel, backToLabel, label_forward, label_backup
 from .handle import frontToHandle, frontFromHandle, backFromHandle, backToHandle, handle_forward, handle_backup
-from .support import frontToSupport, frontFromSupport, backFromSupport, backToSupport
+from .support import frontToSupport, frontFromSupport, backFromSupport, backToSupport, support_forward, support_backup
 from .sprue import frontToSprue, frontFromSprue, backFromSprue, backToSprue, sprue_forward, sprue_backup
-from .create_mould.create_mould import frontToCreateMould, frontFromCreateMould, backToCreateMould, backFromCreateMould
-from .sound_canal import frontToSoundCanal, frontFromSoundCanal, backFromSoundCanal, backToSoundCanal
-from .vent_canal import frontToVentCanal, frontFromVentCanal, backFromVentCanal, backToVentCanal
-from .casting import frontToCasting, frontFromCasting, backFromCasting, backToCasting
-from .last_damo import frontToLastDamo, frontFromLastDamo
-from .create_tip.cut_mould import frontToCutMould, frontFromCutMould
+from .create_mould.create_mould import frontToCreateMould, frontFromCreateMould, backToCreateMould, backFromCreateMould, mould_backup, mould_forward
+from .sound_canal import frontToSoundCanal, frontFromSoundCanal, backFromSoundCanal, backToSoundCanal, sound_canal_backup, sound_canal_forward
+from .vent_canal import frontToVentCanal, frontFromVentCanal, backFromVentCanal, backToVentCanal, vent_canal_backup, vent_canal_forward
+from .casting import frontToCasting, frontFromCasting, backFromCasting, backToCasting, casting_backup, casting_forward
+from .last_damo import frontToLastDamo, frontFromLastDamo, last_damo_backup, last_damo_forward
+from .create_tip.cut_mould import frontToCutMould, frontFromCutMould, cut_mould_backup, cut_mould_forward
 from .tool import getOverride, getOverride2, get_layer_collection, change_mat_mould
 from .parameter import set_switch_flag, get_switch_flag, set_switch_time, get_switch_time, get_process_finish
+from .register_tool import register_tools
+from .global_manager import global_manager
+from .back_and_forward import record_state
 
 prev_properties_context = "RENDER"       # 保存Properties窗口切换时上次Properties窗口中的上下文,记录由哪个模式切换而来
 
 before_cut_mould = "打磨"              # 保存切割模具之前的模块,用于切割模具之后判断是否回退
 
-
-#主要用于左右耳窗口切换,  每次切换模块  的时候记录当前窗口的当前模块和上一个模块
-switch_R_current = "RENDER"             #右耳窗口    记录右耳切换到左耳的时候,记录点击 切换 模块之前的模块
-switch_R_prev = "RENDER"                #右耳窗口    记录右耳切换到左耳的时候,记录点击 切换 模块之前的模块的上一个模块
-switch_L_current = "RENDER"             #左耳窗口    记录左耳切换到右耳的时候,记录点击 切换 模块之前的模块
-switch_L_prev = "RENDER"                #左耳窗口    记录左耳切换到右耳的时候,记录点击 切换 模块之前的模块的上一个模块
-
+#记录左右耳切换时,点击切换模块之前的上一个模块    主要用于点击切换模块之后设置激活的模块物体   bpy.context.screen.areas[0].spaces.active.context = right_context
+#只有在点击切换模块按钮之前的时候才会赋值记录该参数的值
+right_context = 'RENDER'
+left_context = 'RENDER'
 
 is_fallback = False                     #主要用于判断模块是否需要回退  点击排气孔的按钮,检测是否存在铸造法;经过铸造法之后才能够使用排气孔,否则回退到之前的模块
 right_var = 0                           #模块切换时记录右耳正在运行的modal
 left_var = 0                            #模块切换时记录左耳正在运行的modal
 
 # is_msgbus_start = False  # 模块切换操作符是否启动
-
 # is_msgbus_start2 = False
 
 
@@ -60,15 +59,7 @@ processing_stage_dict = {
 order_processing_list = ["打磨", "局部加厚", "切割", "创建模具", "传声孔", "通气孔", "耳膜附件", "编号",
                          "铸造法软耳模", "支撑", "排气孔", "布局切换", "切割模具", "后期打磨"]
 
-
 # prev_workspace = '布局'
-
-
-
-#记录左右耳切换时,点击切换模块之前的上一个模块    主要用于点击切换模块之后设置激活的模块物体   bpy.context.screen.areas[0].spaces.active.context = right_context
-#只有在点击切换模块按钮之前的时候才会赋值记录该参数的值
-right_context = 'RENDER'
-left_context = 'RENDER'
 
 
 '''
@@ -92,6 +83,19 @@ Demo:
                         但是此时current_tab并未改变,下次重新进入model的时候current_tab获取当前激活模块为附件,上一个模块prev_properties_context为环切
                         系统再次从回退的环切切换到附件模块
 '''
+
+
+def register_public_operation_globals():
+    global prev_properties_context
+    global right_context, left_context
+    global right_var, left_var
+    global before_cut_mould
+    global_manager.register("prev_properties_context", prev_properties_context)
+    global_manager.register("right_context", right_context)
+    global_manager.register("left_context", left_context)
+    global_manager.register("right_var", right_var)
+    global_manager.register("left_var", left_var)
+    global_manager.register("before_cut_mould", before_cut_mould)
 
 
 def set_prev_context(context_value):
@@ -195,16 +199,33 @@ class BackUp(bpy.types.Operator):
     def execute(self, context):
         current_tab = bpy.context.screen.areas[0].spaces.active.context
         submit_process = processing_stage_dict[current_tab]
-        if(submit_process == '局部加厚'):
-            backup(context)
+        if (submit_process == '打磨'):
+            damo_backup()
+        elif(submit_process == '局部加厚'):
+            jiahou_backup()
+        elif(submit_process == '切割'):
+            qiege_backup()
+        elif(submit_process == '创建模具'):
+            mould_backup()
+        elif(submit_process == '传声孔'):
+            sound_canal_backup()
+        elif (submit_process == '通气孔'):
+            vent_canal_backup()
         elif(submit_process == '耳膜附件'):
             handle_backup()
         elif(submit_process == '编号'):
             label_backup()
+        elif(submit_process == '铸造法软耳模'):
+            casting_backup()
+        elif(submit_process == '支撑'):
+            support_backup()
         elif(submit_process == '排气孔'):
             sprue_backup()
-
-
+        elif(submit_process == '切割模具'):
+            cut_mould_backup()
+        elif(submit_process == '后期打磨'):
+            last_damo_backup()
+       
         return {'FINISHED'}
 
 
@@ -215,19 +236,45 @@ class Forward(bpy.types.Operator):
     def execute(self, context):
         current_tab = bpy.context.screen.areas[0].spaces.active.context
         submit_process = processing_stage_dict[current_tab]
-        if (submit_process == '局部加厚'):
+        if (submit_process == '打磨'):
+            print("打磨前进")
+            damo_forward()
+        elif (submit_process == '局部加厚'):
             print("局部加厚前进")
-            forward(context)
+            jiahou_forward()
+        elif(submit_process == '切割'):
+            print("切割前进")
+            qiege_forward()
+        elif (submit_process == '创建模具'):
+            print("创建模具前进")
+            mould_forward()
+        elif (submit_process == '传声孔'):
+            print("传声孔前进")
+            sound_canal_forward()
+        elif (submit_process == '通气孔'):
+            print("通气孔前进")
+            vent_canal_forward()
         elif (submit_process == '耳膜附件'):
             print("附件前进")
             handle_forward()
         elif (submit_process == '编号'):
             print("字体前进")
             label_forward()
+        elif (submit_process == '铸造法软耳模'):
+            print("铸造法前进")
+            casting_forward()
+        elif (submit_process == '支撑'):
+            print("支撑前进")
+            support_forward()
         elif (submit_process == '排气孔'):
             print("排气孔前进")
             sprue_forward()
-
+        elif (submit_process == '切割模具'):
+            print("切割模具前进")
+            cut_mould_forward()
+        elif (submit_process == '后期打磨'):
+            print("后期打磨前进")
+            last_damo_forward()
 
         return {'FINISHED'}
 
@@ -254,6 +301,14 @@ class MsgbusCallBack(bpy.types.Operator):
 
     def invoke(self, context, event):
         print("模块切换invoke")
+        register_tools()
+        override1 = getOverride()
+        # 激活物体刷新3D界面
+        with bpy.context.temp_override(**override1):
+            name = bpy.context.scene.leftWindowObj
+            obj = bpy.data.objects.get(name)
+            bpy.context.view_layer.objects.active = obj
+            obj.select_set(True)
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
 
@@ -262,11 +317,6 @@ class MsgbusCallBack(bpy.types.Operator):
         global processing_stage_dict
         # global prev_workspace
         global left_context,right_context
-
-        global switch_R_current
-        global switch_R_prev
-        global switch_L_current
-        global switch_L_prev
         global is_fallback
         global order_processing_list
         global before_cut_mould
@@ -277,14 +327,18 @@ class MsgbusCallBack(bpy.types.Operator):
         name = bpy.context.scene.leftWindowObj
         obj = bpy.data.objects.get(name)
         if (obj != None):
-            if (prev_properties_context != current_tab and get_switch_flag()):
+            if prev_properties_context != current_tab and get_switch_flag():
+                if bpy.context.scene.pressfinish:
+                    register_tools()
+                    bpy.context.scene.pressfinish = False
+
                 set_switch_flag(False)
-                set_switch_time(None)
+                # set_switch_time(None)
                 var = bpy.context.scene.var
                 # context.window.cursor_warp(context.window.width // 2, context.window.height // 2)
 
                 #将所有模块的model都关闭
-                # bpy.context.scene.var = 0
+                bpy.context.scene.var = 0
 
                 # 重新上色
                 # utils_re_color(bpy.context.scene.leftWindowObj, (1, 0.319, 0.133))
@@ -327,13 +381,14 @@ class MsgbusCallBack(bpy.types.Operator):
                                 bpy.context.scene.transparent3EnumR = 'OP3'
                             elif context.scene.leftWindowObj == '左耳':
                                 bpy.context.scene.transparent3EnumL = 'OP3'
+                    # 切割模具模块（最后一个模块）显示为透明
                     elif (current_tab == 'MATERIAL'):
                         mat.blend_method = 'BLEND'
                         if context.scene.leftWindowObj == '右耳':
                             bpy.context.scene.transparent3EnumR = 'OP3'
                         elif context.scene.leftWindowObj == '左耳':
                             bpy.context.scene.transparent3EnumL = 'OP3'
-                    # 其余模块的材质展示方式为不透明
+                    # 打磨模块显示为非透明，并切换到第二种模型展示方式（打磨前）
                     elif (current_tab == 'RENDER'):
                         mat.blend_method = 'OPAQUE'
                         mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 1
@@ -341,6 +396,7 @@ class MsgbusCallBack(bpy.types.Operator):
                             bpy.context.scene.transparent2EnumR = 'OP1'
                         elif context.scene.leftWindowObj == '左耳':
                             bpy.context.scene.transparent2EnumL = 'OP1'
+                    # 其余模块的材质展示方式为不透明
                     else:
                         mat.blend_method = 'OPAQUE'
                         mat.node_tree.nodes["Principled BSDF"].inputs[21].default_value = 1
@@ -408,17 +464,22 @@ class MsgbusCallBack(bpy.types.Operator):
                             right_var = bpy.context.scene.var
                             bpy.context.screen.areas[0].spaces.active.context = left_context
                             bpy.context.screen.areas[0].spaces.active.context = left_context
+                            prev_properties_context = left_context
+                            current_tab = left_context
                         else:
                             left_context = prev_properties_context
                             left_var = bpy.context.scene.var
                             bpy.context.screen.areas[0].spaces.active.context = right_context
                             bpy.context.screen.areas[0].spaces.active.context = right_context
+                            prev_properties_context = right_context
+                            current_tab = right_context
                         print('left_context',left_context)
                         print('right_context',right_context)
 
 
                         # 交换左右窗口物体(两个集合隐藏与显示的反转)
-                        #leftWindowObj 和 rightWindowObj 分别记录左边大窗口和右边小窗口中操作的集合(左耳还是右耳)
+                        # leftWindowObj 和 rightWindowObj 分别记录左边大窗口和右边小窗口中操作的集合(左耳还是右耳)
+                        # 此时的name表示的是切换之后的集合物体
                         tar_obj = context.scene.leftWindowObj
                         ori_obj = context.scene.rightWindowObj
                         context.scene.leftWindowObj = ori_obj
@@ -428,26 +489,6 @@ class MsgbusCallBack(bpy.types.Operator):
                         with bpy.context.temp_override(**override1):
                             bpy.context.view_layer.objects.active = bpy.data.objects[ori_obj]
                             bpy.data.objects[ori_obj].select_set(True)
-
-
-                        #此时的name表示的是切换之后窗口中的集合物体
-                        #点击切换模块按钮之后,根据之前左右耳切换中保存的记录switchR/L重置current_tab,prev_properties_context
-                        #比如点击切换之前右耳由 切割模块切换到附件模块 再点击切换按钮;之后由左耳切回到右耳的时候
-                        #重置重置current_tab,prev_properties_context,让物体由附件切回环切,再由环切切换回附件,使得附件的model被激活能够操作
-                        name = context.scene.leftWindowObj  # 点击切换模块之后 左边大窗口中存储操作的物体
-                        if (name == "右耳"):
-                            current_tab = switch_R_current
-                            prev_properties_context = switch_R_current
-                        elif (name == "左耳"):
-                            current_tab = switch_L_current
-                            prev_properties_context = switch_L_current
-
-                        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-                        print("左右耳模块切换之后重置的current_tab",prev_properties_context)
-                        print("current_tab:",current_tab)
-                        print("prev_properties_context:",prev_properties_context)
-                        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-
 
                         # 绘制字体
                         draw_font()
@@ -463,91 +504,6 @@ class MsgbusCallBack(bpy.types.Operator):
                             bpy.context.screen.areas[0].spaces.active.context = now_context
                             bpy.context.screen.areas[0].spaces.active.context = now_context
                             current_tab = prev_properties_context
-
-
-                # if (current_tab == 'DATA'):
-                #     #将导出菜单变量设置为True,弹出导出菜单
-                #     # 重置current_tab,prev_properties_context,让物体能够从导出按钮切换回之前的模块并且激活其modal
-                #     name = context.scene.leftWindowObj
-                #     #记录点击导出按钮前的上一个模块,将改模块提交
-                #     submit_process = None
-                #     if (name == "右耳"):
-                #         current_tab = switch_R_current
-                #         prev_properties_context = switch_R_current
-                #         bpy.context.screen.areas[0].spaces.active.context = switch_R_current
-                #         bpy.context.screen.areas[0].spaces.active.context = switch_R_current
-                #         submit_process = processing_stage_dict[switch_R_current]
-                #     elif (name == "左耳"):
-                #         current_tab = switch_L_current
-                #         prev_properties_context = switch_L_current
-                #         bpy.context.screen.areas[0].spaces.active.context = switch_L_current
-                #         bpy.context.screen.areas[0].spaces.active.context = switch_L_current
-                #         submit_process = processing_stage_dict[switch_L_current]
-                #     if (submit_process == '打磨'):
-                #         pass
-                #     elif(submit_process == '局部加厚'):
-                #         override = getOverride()
-                #         with bpy.context.temp_override(**override):
-                #             bpy.ops.obj.localthickeningsubmit('INVOKE_DEFAULT')
-                #     elif (submit_process == '切割'):
-                #         override = getOverride()
-                #         with bpy.context.temp_override(**override):
-                #             bpy.ops.object.finishcut('INVOKE_DEFAULT')
-                #     elif (submit_process == '创建模具'):
-                #         override = getOverride()
-                #         with bpy.context.temp_override(**override):
-                #             bpy.ops.object.handlesubmit('INVOKE_DEFAULT')
-                #     elif (submit_process == '传声孔'):
-                #         override = getOverride()
-                #         with bpy.context.temp_override(**override):
-                #             bpy.ops.object.finishsoundcanal('INVOKE_DEFAULT')
-                #     elif (submit_process == '通气孔'):
-                #         override = getOverride()
-                #         with bpy.context.temp_override(**override):
-                #             bpy.ops.object.finishventcanal('INVOKE_DEFAULT')
-                #     elif (submit_process == '耳膜附件'):
-                #         override = getOverride()
-                #         with bpy.context.temp_override(**override):
-                #             bpy.ops.object.handlesubmit('INVOKE_DEFAULT')
-                #     elif (submit_process == '编号'):
-                #         override = getOverride()
-                #         with bpy.context.temp_override(**override):
-                #             bpy.ops.object.labelsubmit('INVOKE_DEFAULT')
-                #     elif (submit_process == '铸造法软耳模'):
-                #         override = getOverride()
-                #         with bpy.context.temp_override(**override):
-                #             bpy.ops.object.castingsubmit('INVOKE_DEFAULT')
-                #             # 为铸造法外壳添加透明材质
-                #             name = bpy.context.scene.leftWindowObj
-                #             casting_name = name + "CastingCompare"
-                #             casting_compare_obj = bpy.data.objects.get(casting_name)
-                #             if (casting_compare_obj != None):
-                #                 mat.blend_method = 'BLEND'
-                #                 bpy.context.scene.transparent3Enum = 'OP3'
-                #     elif (submit_process == '支撑'):
-                #         override = getOverride()
-                #         with bpy.context.temp_override(**override):
-                #             bpy.ops.object.supportsubmit('INVOKE_DEFAULT')
-                #             # 为铸造法外壳添加透明材质
-                #             name = bpy.context.scene.leftWindowObj
-                #             casting_name = name + "CastingCompare"
-                #             casting_compare_obj = bpy.data.objects.get(casting_name)
-                #             if (casting_compare_obj != None):
-                #                 mat.blend_method = 'BLEND'
-                #                 bpy.context.scene.transparent3Enum = 'OP3'
-                #     elif (submit_process == '排气孔'):
-                #         override = getOverride()
-                #         with bpy.context.temp_override(**override):
-                #             bpy.ops.object.spruesubmit('INVOKE_DEFAULT')
-                #             #为铸造法外壳添加透明材质
-                #             mat.blend_method = 'BLEND'
-                #             bpy.context.scene.transparent3Enum = 'OP3'
-                #     elif(submit_process == '后期打磨'):
-                #         pass
-                #     #打开文件导出窗口
-                #     context.window.cursor_warp(context.window.width // 2, (context.window.height // 2) + 60)
-                #     bpy.ops.screen.userpref_show(section='SYSTEM')
-
 
                 # 点击排气孔的按钮,检测是否存在铸造法;经过铸造法之后才能够使用排气孔,否则回退到之前的模块
                 if (current_tab == 'CONSTRAINT'):
@@ -565,20 +521,19 @@ class MsgbusCallBack(bpy.types.Operator):
                             bpy.context.scene.transparent3EnumR = 'OP1'
                         elif context.scene.leftWindowObj == '左耳':
                             bpy.context.scene.transparent3EnumL = 'OP1'
-                        # 重置current_tab,prev_properties_context,让物体能够从导出按钮切换回之前的模块并且激活其modal
-                        # 记录点击导出按钮前的上一个模块,将该模块重新激活
+                        # 回退到之前操作的模块
                         if (name == "右耳"):
                             is_fallback = True
-                            current_tab = switch_R_current
-                            prev_properties_context = switch_R_current
-                            bpy.context.screen.areas[0].spaces.active.context = switch_R_current
-                            bpy.context.screen.areas[0].spaces.active.context = switch_R_current
+                            now_context = prev_properties_context
+                            bpy.context.screen.areas[0].spaces.active.context = now_context
+                            bpy.context.screen.areas[0].spaces.active.context = now_context
+                            current_tab = prev_properties_context
                         elif (name == "左耳"):
                             is_fallback = True
-                            current_tab = switch_L_current
-                            prev_properties_context = switch_L_current
-                            bpy.context.screen.areas[0].spaces.active.context = switch_L_current
-                            bpy.context.screen.areas[0].spaces.active.context = switch_L_current
+                            now_context = prev_properties_context
+                            bpy.context.screen.areas[0].spaces.active.context = now_context
+                            bpy.context.screen.areas[0].spaces.active.context = now_context
+                            current_tab = prev_properties_context
 
 
                 #切换到  左右耳切换  未经铸造法切换到排气孔   切换到后期打磨  等模块的时候
@@ -593,6 +548,10 @@ class MsgbusCallBack(bpy.types.Operator):
                         mat = bpy.data.materials.get("YellowL")
                         var = left_var
                     submit_process = processing_stage_dict[current_tab]
+                    if left_var == 0 and (right_var == 1 or right_var == 2):
+                        var = right_var
+                    elif right_var == 0 and (left_var == 1 or left_var == 2):
+                        var = left_var
                     if (submit_process == '打磨'):
                         change_mat_mould(1)
                         if var == 1:
@@ -789,7 +748,6 @@ class MsgbusCallBack(bpy.types.Operator):
                 # 模块切换
                 current_process = processing_stage_dict[current_tab]
                 prev_process = processing_stage_dict[prev_properties_context]
-
                 if (current_process == '打磨'):
                     if (prev_process == '局部加厚'):
                         print("LocalThickToDaMo")
@@ -1815,31 +1773,16 @@ class MsgbusCallBack(bpy.types.Operator):
                 for selected_obj in selected_objs:
                     print(selected_obj.name)
                 print("~~~~~~~~~~~~~~~~~~~")
-
-
-                #记录当前窗口的当前模块和上一个模块
-                name = bpy.context.scene.leftWindowObj
-                if (name == "右耳"):
-                    switch_R_prev = prev_properties_context
-                    switch_R_current = current_tab
-                elif (name == "左耳"):
-                    switch_L_prev = prev_properties_context
-                    switch_L_current = current_tab
                 prev_properties_context = current_tab
-
-                print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-                print("切换当前模块:", switch_R_current)
-                print("切换上一个模块:", switch_R_prev)
-                print("切换当前模块:", switch_L_current)
-                print("切换上一个模块:", switch_L_prev)
-                print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-                print("--------------------------------------------------------------------------------")
+                # 在模块切换时记录当前状态，左右耳切换时除外
+                if current_process != prev_process:
+                    record_state()
                 # prev_workspace = workspace
 
                 # 在左右耳切换时不结束modal
-                if current_process != prev_process:
-                    if get_process_finish(var, prev_process):
-                        set_switch_time(time.time())
+                # if current_process != prev_process:
+                #     if get_process_finish(var, prev_process):
+                #         set_switch_time(time.time())
                 # 切换结束
                 set_switch_flag(True)
 
@@ -1849,21 +1792,20 @@ class MsgbusCallBack(bpy.types.Operator):
 
 class MsgbusCallBack2(bpy.types.Operator):
     bl_idname = "object.msgbuscallback2"
-    bl_label = "左右耳切换"
+    bl_label = "暂停切换"
 
     def invoke(self, context, event):
-        print("左右耳切换invoke")
-        context.window_manager.modal_handler_add(self)
-        return {'RUNNING_MODAL'}
+        set_switch_flag(False)
+        return {'FINISHED'}
 
-    def modal(self, context, event):
-        if get_switch_flag() and get_switch_time() == None:
-            current_tab = bpy.context.screen.areas[0].spaces.active.context
-            submit_process = processing_stage_dict[current_tab]
-            fallback(submit_process)
-            return {'FINISHED'}
-        return {'PASS_THROUGH'}
+class MsgbusCallBack3(bpy.types.Operator):
+    bl_idname = "object.msgbuscallback3"
+    bl_label = "开启切换"
 
+    def invoke(self, context, event):
+        set_switch_flag(True)
+        return {'FINISHED'}
+   
 
 font_info_public = {
     "font_id": 0,
@@ -2059,7 +2001,8 @@ _classes = [
     Forward,
     SwitchTest,
     MsgbusCallBack,
-    # MsgbusCallBack2,
+    MsgbusCallBack2,
+    MsgbusCallBack3,
     DialogOperator,
     SprueDialogOperator,
 ]

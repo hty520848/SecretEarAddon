@@ -1,7 +1,7 @@
 import bpy
 import bmesh
 import datetime
-from ...tool import moveToLeft, moveToRight, newColor
+from ...tool import moveToLeft, moveToRight, newColor, track_time, reset_time_tracker
 import math
 
 #分段存储框架式耳膜平滑中用于Smooth函数的顶点索引
@@ -602,7 +602,7 @@ def frame_smooth_initial():
     frame_eardrum_outer_vert_index2 = []  # 保存用于smooth函数边缘平滑的顶点
     frame_eardrum_outer_vert_index3 = []  # 保存用于smooth函数边缘平滑的顶点
 
-    print("框架式耳膜平滑初始化开始:", datetime.datetime.now())
+    track_time("框架式耳膜平滑初始化开始")
     # 将底部一圈顶点复制出来用于计算最短距离
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='DESELECT')
@@ -652,7 +652,7 @@ def frame_smooth_initial():
                 select_vert_index.append(vert.index)
         bm.to_mesh(me)
         bm.free()
-    print("开始计算距离:", datetime.datetime.now())
+    track_time("开始计算距离")
     # 根据距离选中顶点
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='DESELECT')
@@ -705,7 +705,7 @@ def frame_smooth_initial():
     #将用于计算距离的底部平面删除
     bpy.data.objects.remove(bottom_outer_obj, do_unlink=True)
 
-    print("将顶点索引赋值给顶点组:", datetime.datetime.now())
+    track_time("将顶点索引赋值给顶点组")
     #根据顶点索引将选中的顶点保存到顶点组中
     vert_index_to_vertex_group(frame_eardrum_vert_index1, "FrameEarDrumOuterVertex1")
     vert_index_to_vertex_group(frame_eardrum_vert_index2, "FrameEarDrumOuterVertex2")
@@ -756,7 +756,7 @@ def frame_smooth_initial():
     frame_eardrum_inner_vert_index2 = []  # 保存用于smooth函数边缘平滑的顶点
     frame_eardrum_inner_vert_index3 = []  # 保存用于smooth函数边缘平滑的顶点
 
-    print("框架式耳膜平滑初始化开始:", datetime.datetime.now())
+    track_time("框架式耳膜平滑初始化开始")
     bpy.ops.object.select_all(action='DESELECT')
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
@@ -809,7 +809,7 @@ def frame_smooth_initial():
                 select_vert_index.append(vert.index)
         bm.to_mesh(me)
         bm.free()
-    print("开始计算距离:", datetime.datetime.now())
+    track_time("开始计算距离")
     # 根据距离选中顶点
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='DESELECT')
@@ -862,7 +862,7 @@ def frame_smooth_initial():
     # 将用于计算距离的底部平面删除
     bpy.data.objects.remove(bottom_inner_obj, do_unlink=True)
 
-    print("将顶点索引赋值给顶点组:", datetime.datetime.now())
+    track_time("将顶点索引赋值给顶点组")
     # 根据顶点索引将选中的顶点保存到顶点组中
     vert_index_to_vertex_group(frame_eardrum_vert_index1, "FrameEarDrumInnerVertex1")
     vert_index_to_vertex_group(frame_eardrum_vert_index2, "FrameEarDrumInnerVertex2")
@@ -925,7 +925,7 @@ def frame_smooth_initial():
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
-    # print("创建修改器:", datetime.datetime.now())
+    # track_time("创建修改器")
     # modifier_name = "FrameEarDrumModifier10"
     # target_modifier = None
     # for modifier in obj.modifiers:
@@ -1066,7 +1066,7 @@ def frame_smooth_initial():
         target_modifier.factor = 0.5
         target_modifier.iterations = 10
         bpy.ops.object.modifier_apply(modifier="FrameEarDrumModifier5")
-        print("调用smooth平滑函数:", datetime.datetime.now())
+        track_time("调用smooth平滑函数")
         bpy.ops.object.mode_set(mode='EDIT')
         if(frame_eardrum_outer_smooth < 0.5):
             # for i in range(7):
@@ -1100,7 +1100,7 @@ def frame_smooth_initial():
         target_modifier.factor = 0.5
         target_modifier.iterations = 5
         bpy.ops.object.modifier_apply(modifier="FrameEarDrumModifier5")
-        print("调用smooth平滑函数:", datetime.datetime.now())
+        track_time("调用smooth平滑函数")
         bpy.ops.object.mode_set(mode='EDIT')
         if (frame_eardrum_inner_smooth < 0.5):
             # for i in range(7):
@@ -1117,7 +1117,8 @@ def frame_smooth_initial():
             for i in range(2):
                 laplacian_smooth(getFrameEarDrumInnerIndex3(), 0.4)
         bpy.ops.object.mode_set(mode='OBJECT')
-    print("平滑初始化结束:", datetime.datetime.now())
+    track_time("平滑初始化结束")
+    reset_time_tracker()
 
     #平滑成功之后,用平滑后的物体替换左/右耳
     bpy.data.objects.remove(bpy.data.objects[bpy.context.scene.leftWindowObj], do_unlink=True)

@@ -5,7 +5,7 @@ from mathutils import Vector, Matrix
 import gpu
 from gpu_extras.batch import batch_for_shader
 from math import degrees, radians, sin, cos, pi
-from ..tool import delete_vert_group
+from ..tool import delete_vert_group, track_time
 import mathutils
 import math
 
@@ -35,6 +35,7 @@ class Circle_Smooth(bpy.types.Operator):
     center_border_group_name: bpy.props.StringProperty(name="CenterBorderGroupName", default="CenterBorder")
     max_smooth_width: FloatProperty(name="max_width", default=0)
     circle_radius: FloatProperty(name="circle_radius", default=0)
+    delete_vertex_group: BoolProperty(name="delete_vertex_group", default=True)
 
     shade_smooth: BoolProperty(default=False)
     mark_sharp: BoolProperty(default=False)
@@ -133,7 +134,9 @@ class Circle_Smooth(bpy.types.Operator):
         for idx in range(len(pipes)):
             self.boolean_pipe(bm, face_layer, idx)
 
+        track_time("边缘平滑生成管道")
         pipe_cut()
+        track_time("边缘平滑管道切割")
 
         # return {'FINISHED'}
 
@@ -180,10 +183,10 @@ class Circle_Smooth(bpy.types.Operator):
         bpy.ops.mesh.delete(type='FACE')
         bpy.ops.mesh.select_all(action='DESELECT')
 
-        bpy.ops.object.vertex_group_set_active(group='CircleCutOuter')
-        bpy.ops.object.vertex_group_select()
-        bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
-        bpy.ops.mesh.select_all(action='DESELECT')
+        # bpy.ops.object.vertex_group_set_active(group='CircleCutOuter')
+        # bpy.ops.object.vertex_group_select()
+        # bpy.ops.mesh.looptools_relax(input='selected', interpolation='cubic', iterations='10', regular=True)
+        # bpy.ops.mesh.select_all(action='DESELECT')
 
         get_outer_and_inner_vert_group()
         delete_inner_part()
@@ -223,10 +226,13 @@ class Circle_Smooth(bpy.types.Operator):
             max_scale_factor = 0.8
         scale_factor = 0.1 + (self.max_smooth_width - self.width) / self.max_smooth_width * max_scale_factor
         scale_border(scale_factor, self.center_border_group_name, vert_layer)
+        track_time("边缘平滑生成循环边")
 
         bridge_border(self.width, self.center_border_group_name)
+        track_time("边缘平滑桥接循环边")
 
         fill_inner_part()
+        boolean_cleanup(self.center_border_group_name)
 
         bm = bmesh.new()
         bm.from_mesh(active.data)
@@ -252,7 +258,8 @@ class Circle_Smooth(bpy.types.Operator):
 
         # 删除顶点组
         delete_vert_group("CircleCutOuter")
-        delete_vert_group(self.center_border_group_name)
+        if self.delete_vertex_group:
+            delete_vert_group(self.center_border_group_name)
         delete_vert_group("CircleCutInner")
         delete_vert_group("All_Vertex")
 
@@ -1325,6 +1332,8 @@ def bridge_border(width, center_border_group_name):
                        release_confirm=True)
     bpy.ops.object.vertex_group_set_active(group='CircleCutInner')
     bpy.ops.object.vertex_group_remove_from()
+    bpy.ops.object.vertex_group_set_active(group='CircleCutOuter')
+    bpy.ops.object.vertex_group_remove_from()
     bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.mesh.normals_make_consistent(inside=False)
 
@@ -1452,6 +1461,25 @@ def fill_inner_part():
     bpy.ops.object.vertex_group_set_active(group='CircleCutInner')
     bpy.ops.object.vertex_group_select()
     bpy.ops.mesh.fill()
+    bpy.ops.mesh.select_all(action='DESELECT')
+
+
+def boolean_cleanup(center_group_name):
+    bpy.ops.object.vertex_group_set_active(group='CircleCutOuter')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.remove_doubles(threshold=0.5)
+    bpy.ops.mesh.select_more()
+    bpy.ops.object.vertex_group_deselect()
+    bpy.ops.object.vertex_group_set_active(group=center_group_name)
+    bpy.ops.object.vertex_group_deselect()
+    bpy.ops.mesh.vertices_smooth(factor=0.5, repeat=2)
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.vertex_group_set_active(group='CircleCutOuter')
+    bpy.ops.object.vertex_group_select()
+    bpy.ops.mesh.select_more()
+    bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
     bpy.ops.mesh.select_all(action='DESELECT')
     bpy.ops.object.mode_set(mode='OBJECT')
 

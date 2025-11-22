@@ -4,7 +4,9 @@ import math
 import re
 import sys
 import os
-
+import inspect
+import datetime
+import time
 import mathutils
 import bpy_extras
 from bpy_extras import view3d_utils
@@ -53,7 +55,13 @@ def draw_callback_px(self, thickness):
     """Draw on the viewports"""
     # BLF drawing routine
     font_id = font_info["font_id"]
-    blf.position(font_id, 1300, 80, 0)
+    # blf.position(font_id, 1300, 80, 0)
+    # 获取当前区域的宽度和高度来动态计算位置
+    override = getOverride()
+    region = override['region']
+    if region:
+        # 将位置设置在窗口右下角
+        blf.position(font_id, region.width - 300, region.height - 900, 0)
     blf.size(font_id, 50)
     rounded_number = round(thickness, 2)
     blf.draw(font_id, str(rounded_number) + "mm")
@@ -199,7 +207,7 @@ def newShader(id):
     shader.inputs[7].default_value = 0
     shader.inputs[9].default_value = 0.472
     shader.inputs[14].default_value = 1
-    shader.inputs[15].default_value = 0.105
+    shader.inputs[15].default_value = 1
     links.new(color.outputs[0], nodes["Principled BSDF"].inputs[0])
     links.new(shader.outputs[0], output.inputs[0])
     return mat
@@ -218,7 +226,7 @@ def newColor(id, r, g, b, is_transparency, transparency_degree):
     shader.inputs[7].default_value = 0
     shader.inputs[9].default_value = 0.472
     shader.inputs[14].default_value = 1
-    shader.inputs[15].default_value = 0.105
+    shader.inputs[15].default_value = 1
     links.new(shader.outputs[0], output.inputs[0])
     if is_transparency:
         mat.blend_method = "BLEND"
@@ -550,11 +558,12 @@ def convert_to_mesh(curve_name, mesh_name, depth):
         moveToRight(duplicate_obj)
     elif name == '左耳':
         moveToLeft(duplicate_obj)
-    bpy.context.view_layer.objects.active = duplicate_obj
     bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = duplicate_obj
     duplicate_obj.select_set(state=True)
-    bpy.context.object.data.bevel_depth = depth  # 设置曲线倒角深度
+    bpy.context.object.data.bevel_depth = depth * 2.5  # 设置曲线倒角深度
     bpy.ops.object.convert(target='MESH')  # 转化为网格
+    duplicate_obj.hide_set(True)
     if last_active_obj:
         bpy.context.view_layer.objects.active = last_active_obj
         bpy.ops.object.select_all(action='DESELECT')
@@ -602,7 +611,7 @@ def recover_and_remind_border():
             delete_useless_object(curve_list)
 
         elif enum == "OP3":
-            need_to_delete_model_name_list = [name]
+            need_to_delete_model_name_list = [name, name + "shellObjForBottomCurve"]
             curve_list = [name + "dragcurve", name + "selectcurve", name + "colorcurve", name + 'coloredcurve',
                           name + "point", name + 'create_mould_sphere']
             delete_useless_object(need_to_delete_model_name_list)
@@ -1258,3 +1267,66 @@ def transform_normal(target_obj_name, vert_index_list):
     bpy.context.object.modifiers["DataTransfer"].data_types_loops = {'CUSTOM_NORMAL'}
     bpy.context.object.modifiers["DataTransfer"].loop_mapping = 'POLYINTERP_LNORPROJ'
     bpy.ops.object.modifier_apply(modifier="DataTransfer", single_user=True)
+
+
+
+# ---打印时间相关---
+_last_call_datetime = None  # 存储上一次调用时的时间戳
+_last_call_perf_counter = None  # 存储上一次调用时的高精度时间
+_is_first_call = True  # 标记是否是第一次调用
+
+def track_time(message=""):
+    """
+    记录当前时间，并计算与上一次调用之间的时间间隔。
+    在第一次调用时，它会打印一个开始时间。
+    在后续调用时，它会打印当前时间以及自上次调用以来的时间间隔。
+    Args:
+        message (str): 可选的消息，将与时间戳一起打印。
+    """
+    global _last_call_datetime, _last_call_perf_counter, _is_first_call
+
+    # 获取调用者模块名（尽量跳过当前模块的帧）
+    caller_module = None
+    try:
+        stack = inspect.stack()
+        for frame_info in stack[1:]:
+            module = inspect.getmodule(frame_info.frame)
+            if module and module.__name__ != __name__:
+                caller_module = module.__name__
+                break
+        # 如果没有找到不同模块，退回到直接调用的模块名或文件名
+        if not caller_module:
+            if len(stack) > 1:
+                caller_module = stack[1].frame.f_globals.get("__name__", stack[1].filename)
+            else:
+                caller_module = __name__
+    finally:
+        # 清理以避免引用循环
+        try:
+            del stack
+        except Exception:
+            pass
+
+    current_datetime = datetime.datetime.now()
+    current_perf_counter = time.perf_counter()
+
+    if _is_first_call:
+        print(f"{current_datetime.strftime('%Y-%m-%d %H:%M:%S:%f')} - START [{caller_module}]: {message}")
+        _is_first_call = False
+    else:
+        # 计算 elapsed_seconds 时使用 perf_counter 更精确
+        elapsed_seconds = current_perf_counter - _last_call_perf_counter
+        print(f"{current_datetime.strftime('%Y-%m-%d %H:%M:%S:%f')} - ELAPSED: {elapsed_seconds:.4f}s - [{caller_module}] - {message}")
+
+    # 更新上一次调用时间
+    _last_call_datetime = current_datetime
+    _last_call_perf_counter = current_perf_counter
+
+def reset_time_tracker():
+    """
+    重置时间追踪器，使下一次调用 track_time() 被视为第一次调用。
+    """
+    global _last_call_datetime, _last_call_perf_counter, _is_first_call
+    _last_call_datetime = None
+    _last_call_perf_counter = None
+    _is_first_call = True

@@ -10,39 +10,100 @@ from .soft_eardrum.thickness_and_fill import soft_fill, reset_to_after_cut, rese
 from .hard_eardrum.hard_eardrum_cut import init_hard_cut, hard_recover_before_cut_and_remind_border, re_hard_cut
 from .hard_eardrum.hard_eardrum_bottom_fill import hard_bottom_fill, recover_before_fill
 from .shell_eardrum.shell_eardrum_bottom_fill import shell_bottom_fill, init_shell, submitCircleCutPlane, resetCircleCutPlane, \
-    generate_circle_for_cut, generate_border_curve, reset_after_bottom_curve_change, generateShell
-from .shell_eardrum.shell_canal import submit_shellcanal, submit_receiver, reset_shellcanal, saveInfoAndDeleteShellCanal
-from .parameters_for_create_mould import get_hard_eardrum_border, get_left_hard_eardrum_border, \
-    get_right_hard_eardrum_border_template, get_left_hard_eardrum_border_template
-from .parameters_for_create_mould import set_hard_eardrum_border, set_left_hard_eardrum_border, \
-    set_right_hard_eardrum_border_template, set_left_hard_eardrum_border_template
-from .parameters_for_create_mould import get_soft_eardrum_border, get_left_soft_eardrum_border, \
-    get_right_soft_eardrum_border_template, get_left_soft_eardrum_border_template
-from .parameters_for_create_mould import set_soft_eardrum_border, set_left_soft_eardrum_border, \
-    set_right_soft_eardrum_border_template, set_left_soft_eardrum_border_template
-from .parameters_for_create_mould import get_frame_style_eardrum_border, get_left_frame_style_eardrum_border, \
-    get_right_frame_style_eardrum_border_template, get_left_frame_style_eardrum_border_template
-from .parameters_for_create_mould import set_frame_style_eardrum_border, set_left_frame_style_eardrum_border, \
-    set_right_frame_style_eardrum_border_template, set_left_frame_style_eardrum_border_template
-from .parameters_for_create_mould import set_right_frame_style_hole_border, set_left_frame_style_hole_border
-from .parameters_for_create_mould import get_right_shell_border, get_left_shell_border
-from .parameters_for_create_mould import set_right_shell_border, set_left_shell_border, set_right_shell_plane_border,\
-    set_left_shell_plane_border
+    generate_border_curve, reset_after_bottom_curve_change, generateShell, apply_template
+from .shell_eardrum.shell_canal import submit_shellcanal, submit_receiver, reset_shellcanal, saveInfoAndDeleteShellCanal, \
+    createShellCanal, createArmature, updateArmaturePlaneLocationAndNormal, updateMeshOutShellCanal
+from .shell_eardrum.shell_eardrum_bottom_fill import update_top_circle_min_smooth, mirror_shell_eardrum
+from ..parameters_for_templates import get_right_hard_eardrum_template_border, get_left_hard_eardrum_template_border, \
+    get_right_soft_eardrum_template_border, get_left_soft_eardrum_template_border, get_right_frame_style_eardrum_template_border, \
+    get_left_frame_style_eardrum_template_border, get_right_shell_template_border, get_right_shell_template_plane_border, \
+    get_left_shell_template_border, get_left_shell_template_plane_border
+from .parameters_for_create_mould import get_right_hard_eardrum_border, get_left_hard_eardrum_border, \
+    set_right_hard_eardrum_border, set_left_hard_eardrum_border, get_right_soft_eardrum_border, get_left_soft_eardrum_border, \
+    set_right_soft_eardrum_border, set_left_soft_eardrum_border, get_right_frame_style_eardrum_border, get_left_frame_style_eardrum_border, \
+    set_right_frame_style_eardrum_border, set_left_frame_style_eardrum_border, set_right_frame_style_hole_border, set_left_frame_style_hole_border, \
+    get_right_shell_border, get_left_shell_border, get_right_shell_plane_border, get_left_shell_plane_border, \
+    set_right_shell_border, set_left_shell_border, set_right_shell_plane_border, set_left_shell_plane_border
 from .frame_style_eardrum.frame_style_eardrum_dig_hole import dig_hole, frame_fill
 from .frame_style_eardrum.frame_fill_inner_face import fill_closest_point
-from ..parameter import get_switch_time, get_switch_flag
-from .collision import generate_cubes
-
+from ..parameter import get_switch_time, get_switch_flag, get_shell_curve_obj_active, set_shell_curve_obj_active
+from .collision import  saveCubeInfo, initCube
+from .point import MuJudict
+from ..register_tool import unregister_tools
+from ..global_manager import global_manager
+from ..back_and_forward import record_state, backup_state, forward_state
 
 # 用于控制创建模具的初始化、切割和补面的逻辑
-is_init_finish = True
-is_init_finishL = True
-is_cut_finish = True
-is_cut_finishL = True
-is_fill_finish = True
-is_fill_finishL = True
+# is_init_finish = True
+# is_init_finishL = True
+# is_cut_finish = True
+# is_cut_finishL = True
+# is_fill_finish = True
+# is_fill_finishL = True
 
 last_operate_type = None
+
+def register_create_mould_globals():
+    global last_operate_type
+    global_manager.register("last_operate_type", last_operate_type)
+
+
+def mould_backup():
+    backup_state()
+    enum = bpy.context.scene.muJuTypeEnum
+    if enum == 'OP3':
+        recover_shell_objects()
+        
+
+def mould_forward():
+    forward_state()
+    enum = bpy.context.scene.muJuTypeEnum
+    if enum == 'OP3':
+        recover_shell_objects()
+
+
+def recover_shell_objects():
+    # 恢复拖动立方体模块中全局变量的值
+    initCube()
+    # 恢复物体的父子级关系
+    name = bpy.context.scene.leftWindowObj
+    if bpy.data.objects.get(name + "littleShellCube1"):
+        bpy.data.objects.get(name + "littleShellCube1").constraints["Child Of"].target = bpy.data.objects.get(name + "cube3")
+    if bpy.data.objects.get(name + "littleShellCube2"):
+        bpy.data.objects.get(name + "littleShellCube2").constraints["Child Of"].target = bpy.data.objects.get(name + "cube3")
+    if bpy.data.objects.get(name + "littleShellCube3"):
+        bpy.data.objects.get(name + "littleShellCube3").constraints["Child Of"].target = bpy.data.objects.get(name + "cube3")
+    if bpy.data.objects.get(name + "littleShellCube4"):
+        bpy.data.objects.get(name + "littleShellCube4").constraints["Child Of"].target = bpy.data.objects.get(name + "cube3")
+    if bpy.data.objects.get(name + "littleShellCube1"):
+        bpy.data.objects.get(name + "littleShellCube1").constraints["Child Of"].target = bpy.data.objects.get(name + "cube3")
+    if bpy.data.objects.get(name + "littleShellCylinder1"):
+        bpy.data.objects.get(name + "littleShellCylinder1").constraints["Child Of"].target = bpy.data.objects.get(name + "cube1")
+    if bpy.data.objects.get(name + "littleShellCylinder2"):
+        bpy.data.objects.get(name + "littleShellCylinder2").constraints["Child Of"].target = bpy.data.objects.get(name + "cube2")
+   
+    if bpy.data.objects.get(name + "shellBattery"):
+        bpy.data.objects.get(name + "shellBattery").constraints["Child Of"].target = bpy.data.objects.get(name + "BottomCircle")
+        bpy.data.objects.get(name + "shellBattery").constraints["Limit Location"].space_object = bpy.data.objects.get(name + "BottomCircle")
+    if bpy.data.objects.get(name + "batteryPlaneSnapCurve"):
+        bpy.data.objects.get(name + "batteryPlaneSnapCurve").constraints["Child Of"].target = bpy.data.objects.get(name + "shellBattery")
+    if bpy.data.objects.get(name + "shellBatteryPlane"):
+        bpy.data.objects.get(name + "shellBatteryPlane").constraints["Child Of"].target = bpy.data.objects.get(name + "shellBattery")
+    if bpy.data.objects.get(name + "PlaneBorderCurve"):
+        bpy.data.objects.get(name + "PlaneBorderCurve").constraints["Child Of"].target = bpy.data.objects.get(name + "shellBattery")
+    
+    plane_obj = bpy.data.objects.get(name + "ReceiverPlane")
+    receiver_obj = bpy.data.objects.get(name + "receiver")
+    if plane_obj and receiver_obj:
+        receiver_obj.parent = plane_obj
+   
+    # 恢复管道的状态
+    if bpy.data.objects.get(name + "shellCanalArmature"): 
+        createArmature()
+        createShellCanal()
+        updateArmaturePlaneLocationAndNormal()
+        updateMeshOutShellCanal()
+
 
 def initialTransparency():
     mat = newColor("Transparency", 1, 0.319, 0.133, 1, 0.1)  # 创建材质
@@ -99,7 +160,7 @@ def frontToCreateMould():
     elif name == '左耳':
         moveToLeft(duplicate_obj1)
     # duplicate_obj1.hide_set(True)
-    newColor('blue', 0, 0, 1, 1, 1)
+    newColor('blue', 0, 0, 1, 0, 1)
     initialTransparency()
     duplicate_obj1.data.materials.clear()
     duplicate_obj1.data.materials.append(bpy.data.materials['Transparency'])
@@ -133,7 +194,7 @@ def frontToCreateMould():
 def frontToCreateMouldInit():
     # 复制一份挖孔前的模型以备用
     if bpy.data.objects.get(bpy.context.scene.leftWindowObj + "OriginForCreateMouldR") is not None:
-        return
+        bpy.data.objects.remove(bpy.data.objects.get(bpy.context.scene.leftWindowObj + "OriginForCreateMouldR"))
     cur_obj = bpy.data.objects[bpy.context.scene.leftWindowObj]
     duplicate_obj = cur_obj.copy()
     duplicate_obj.data = cur_obj.data.copy()
@@ -146,7 +207,6 @@ def frontToCreateMouldInit():
         moveToRight(duplicate_obj)
     elif name == '左耳':
         moveToLeft(duplicate_obj)
-    # generate_cubes()
 
 
 def frontFromCreateMould():
@@ -189,6 +249,7 @@ def frontFromCreateMould():
         delete_useless_object(curve_list)
         delete_hole_border()  # 删除框架式耳模中的挖孔边界
     elif enum == 'OP3':
+        saveCubeInfo()
         submitCircleCutPlane()
         saveInfoAndDeleteShellCanal()
         public_object_list = [name + "meshBottomRingBorderR", name + "BottomRingBorderR", name + "shellInnerObj",
@@ -452,7 +513,7 @@ def backToCreateMould():
         initialTransparency()
 
     bpy.data.objects[name+"MouldReset"].hide_set(False)
-    newColor('blue', 0, 0, 1, 1, 1)
+    newColor('blue', 0, 0, 1, 0, 1)
     bpy.data.objects[name+"MouldReset"].data.materials.clear()
     bpy.data.objects[name+"MouldReset"].data.materials.append(bpy.data.materials['Transparency'])
     create_mould_cut()
@@ -502,7 +563,16 @@ def backFromCreateMould():
         delete_useless_object(curve_list)
         delete_hole_border()  # 删除框架式耳模中的挖孔边界
     elif enum == 'OP3':
+        saveCubeInfo()
+        # 上部切割面板切割完成后若不进行平滑,切割平面上没有顶点,容易造成管道切割失败
+        if (name == "右耳"):
+            shangbuqiegemianbanpianyi = bpy.context.scene.shangBuQieGeMianBanPianYiR
+        elif (name == "左耳"):
+            shangbuqiegemianbanpianyi = bpy.context.scene.shangBuQieGeMianBanPianYiL
+        if (shangbuqiegemianbanpianyi < 0.2):
+            update_top_circle_min_smooth()
         submit_shellcanal()
+        submit_receiver()
         submitCircleCutPlane()
         public_object_list = [name + "OriginForCreateMouldR", name + "meshBottomRingBorderR",
                               name + "BottomRingBorderR", name + "shellInnerObj",
@@ -648,20 +718,19 @@ def recover(enum, restart=True):
             delete_useless_object(curve_list)
             delete_hole_border()  # 删除框架式耳模中的挖孔边界
             reset_circle_info()
+            MuJudict().reset_frame_curve_dict()
             if name == '右耳':
-                # set_frame_style_eardrum_border([])
-                set_right_frame_style_eardrum_border_template([])
+                set_right_frame_style_eardrum_border([])
                 set_right_frame_style_hole_border([])
             elif name == '左耳':
-                # set_left_frame_style_eardrum_border([])
-                set_left_frame_style_eardrum_border_template([])
+                set_left_frame_style_eardrum_border([])
                 set_left_frame_style_hole_border([])
 
         elif enum == 'OP3':
             reset_shellcanal()
             resetCircleCutPlane()
             public_object_list = [name, name + "meshBottomRingBorderR", name + "BottomRingBorderR",
-                                  name + "meshPlaneBorderCurve", name + "PlaneBorderCurve"]
+                                  name + "meshPlaneBorderCurve", name + "PlaneBorderCurve", name + "shellInnerObj"]
             cubes_obj_list = [name + "cube1", name + "cube2", name + "cube3", name + "move_cube1", name + "move_cube2",
                               name + "move_cube3", name + "littleShellCube1", name + "littleShellCube2",
                               name + "littleShellCube3", name + "receiver", name + "ReceiverPlane",
@@ -684,11 +753,9 @@ def recover(enum, restart=True):
             delete_useless_object(public_object_list)
             delete_useless_object(curve_list)
             if name == '右耳':
-                # set_soft_eardrum_border([])
-                set_right_soft_eardrum_border_template([])
+                set_right_hard_eardrum_border([])
             elif name == '左耳':
-                # set_left_soft_eardrum_border([])
-                set_left_soft_eardrum_border_template([])
+                set_left_hard_eardrum_border([])
 
         elif enum == "OP1":
             need_to_delete_model_name_list = [name + "FillPlane", name + "ForGetFillPlane", name + "Inner",
@@ -705,11 +772,9 @@ def recover(enum, restart=True):
             delete_useless_object(curve_list)
             reset_circle_info()
             if name == '右耳':
-                # set_hard_eardrum_border([])
-                set_right_hard_eardrum_border_template([])
+                set_right_soft_eardrum_border([])
             elif name == '左耳':
-                # set_left_hard_eardrum_border([])
-                set_left_hard_eardrum_border_template([])
+                set_left_soft_eardrum_border([])
 
         # 将最开始复制出来的OriginForCreateMould名称改为模型名称
         obj.hide_set(False)
@@ -730,7 +795,15 @@ def recover(enum, restart=True):
             moveToLeft(duplicate_obj)
 
         if enum == 'OP3' and restart:
+            if name == '右耳':
+                bpy.context.scene.createmouldinitR = False
+            elif name == '左耳':
+                bpy.context.scene.createmouldinitL = False
             generateShell()
+            if name == '右耳':
+                bpy.context.scene.createmouldinitR = True
+            elif name == '左耳':
+                bpy.context.scene.createmouldinitL = True
 
         # bpy.data.objects["右耳MouldReset"].hide_set(False)
 
@@ -760,6 +833,14 @@ def complete():
         delete_useless_object(curve_list)
         delete_hole_border()  # 删除框架式耳模中的挖孔边界
     elif enum == "OP3":
+        saveCubeInfo()
+        # 上部切割面板切割完成后若不进行平滑,切割平面上没有顶点,容易造成管道切割失败
+        if (name == "右耳"):
+            shangbuqiegemianbanpianyi = bpy.context.scene.shangBuQieGeMianBanPianYiR
+        elif (name == "左耳"):
+            shangbuqiegemianbanpianyi = bpy.context.scene.shangBuQieGeMianBanPianYiL
+        if (shangbuqiegemianbanpianyi < 0.2):
+            update_top_circle_min_smooth()
         submit_shellcanal()
         submit_receiver()
         submitCircleCutPlane()      #先提交管道,再提交删除圆环和其他平面等物体;前者会使用到后者的物体
@@ -832,7 +913,7 @@ class CreateMouldInit(bpy.types.Operator):
         global is_init_finishL
         name = bpy.context.scene.leftWindowObj
         if (name == "右耳"):
-            if not is_init_finish and get_switch_flag() and get_switch_time() == None:
+            if not is_init_finish and get_switch_flag():
                 is_init_finish = True
                 mould_type = bpy.context.scene.muJuTypeEnum
                 if mould_type == 'OP2':
@@ -842,7 +923,7 @@ class CreateMouldInit(bpy.types.Operator):
                 global is_cut_finish
                 is_cut_finish = False
         elif (name == "左耳"):
-            if not is_init_finishL and get_switch_flag() and get_switch_time() == None:
+            if not is_init_finishL and get_switch_flag():
                 is_init_finishL = True
                 mould_type = bpy.context.scene.muJuTypeEnum
                 if mould_type == 'OP2':
@@ -877,85 +958,104 @@ def create_mould_cut():
             name = bpy.context.scene.leftWindowObj
             soft_eardrum_border = None
             if name == '右耳':
-                soft_eardrum_border = get_right_soft_eardrum_border_template()
+                soft_eardrum_border = get_right_soft_eardrum_border()
             elif name == '左耳':
-                print("获取左耳模板")
-                soft_eardrum_border = get_left_soft_eardrum_border_template()
+                soft_eardrum_border = get_left_soft_eardrum_border()
 
             if len(soft_eardrum_border) == 0:
                 if name == '右耳':
-                    soft_eardrum_border = get_soft_eardrum_border()
+                    soft_eardrum_border = get_right_soft_eardrum_template_border()
                 elif name == '左耳':
                     print("获取左耳模板")
-                    soft_eardrum_border = get_left_soft_eardrum_border()
+                    soft_eardrum_border = get_left_soft_eardrum_template_border()
                 init_hard_cut(soft_eardrum_border)
             # 说明修改过蓝线
             else:
                 print("有过记录")
-                re_hard_cut(soft_eardrum_border, 2, 2)
+                re_hard_cut(soft_eardrum_border, 0.5, 0.5)
 
         elif mould_type == "OP2":
             print("硬耳膜切割")
             name = bpy.context.scene.leftWindowObj
             hard_eardrum_border = None
             if name == '右耳':
-                hard_eardrum_border = get_right_hard_eardrum_border_template()
+                hard_eardrum_border = get_right_hard_eardrum_border()
             elif name == '左耳':
-                print("获取左耳模板")
-                hard_eardrum_border = get_left_hard_eardrum_border_template()
+                hard_eardrum_border = get_left_hard_eardrum_border()
 
             if len(hard_eardrum_border) == 0:
                 if name == '右耳':
-                    hard_eardrum_border = get_hard_eardrum_border()
+                    hard_eardrum_border = get_right_hard_eardrum_template_border()
                 elif name == '左耳':
                     print("获取左耳模板")
-                    hard_eardrum_border = get_left_hard_eardrum_border()
+                    hard_eardrum_border = get_left_hard_eardrum_template_border()
                 init_hard_cut(hard_eardrum_border)
             # 说明修改过蓝线
             else:
                 print("有过记录")
-                re_hard_cut(hard_eardrum_border, 2, 2)
+                re_hard_cut(hard_eardrum_border, 0.5, 0.5)
 
         elif mould_type == "OP3":
             print("外壳耳模切割")
+            if not get_shell_curve_obj_active():
+                set_shell_curve_obj_active(True)
             name = bpy.context.scene.leftWindowObj
             shell_border = None
             if name == '右耳':
                 shell_border = get_right_shell_border()
             elif name == '左耳':
-                print("获取左耳模板")
                 shell_border = get_left_shell_border()
 
-            generate_circle_for_cut()
             if len(shell_border) == 0:
-                generate_border_curve()
+                shell_template_border = None
+                if name == '右耳':
+                    shell_template_border = get_right_shell_template_border()
+                elif name == '左耳':
+                    shell_template_border = get_left_shell_template_border()
+                if len(shell_template_border) == 0:
+                    generate_border_curve()
+                    if name == '右耳':
+                        bpy.context.scene.curveadjustR = False
+                    elif name == '左耳':
+                        bpy.context.scene.curveadjustL = False
+                else:
+                    # init_hard_cut(shell_template_border)
+                    apply_template(shell_template_border, 0.5, 0.5)
+                    if name == '右耳':
+                        bpy.context.scene.curveadjustR = True
+                    elif name == '左耳':
+                        bpy.context.scene.curveadjustL = True
             # 说明修改过蓝线
             else:
                 print("有过记录")
-                re_hard_cut(shell_border, 2, 2)
+                re_hard_cut(shell_border, 0.5, 0.5)
+                if name == '右耳':
+                    bpy.context.scene.curveadjustR = True
+                elif name == '左耳':
+                    bpy.context.scene.curveadjustL = True
 
         elif mould_type == "OP4":
             print("框架式耳膜切割")
             name = bpy.context.scene.leftWindowObj
             frame_style_eardrum_border = None
             if name == '右耳':
-                frame_style_eardrum_border = get_right_frame_style_eardrum_border_template()
+                frame_style_eardrum_border = get_right_frame_style_eardrum_border()
             elif name == '左耳':
                 print("获取左耳模板")
-                frame_style_eardrum_border = get_left_frame_style_eardrum_border_template()
+                frame_style_eardrum_border = get_left_frame_style_eardrum_border()
 
             if len(frame_style_eardrum_border) == 0:
                 if name == '右耳':
-                    frame_style_eardrum_border = get_frame_style_eardrum_border()
+                    frame_style_eardrum_border = get_right_frame_style_eardrum_template_border()
                 elif name == '左耳':
                     print("获取左耳模板")
-                    frame_style_eardrum_border = get_left_frame_style_eardrum_border()
+                    frame_style_eardrum_border = get_left_frame_style_eardrum_template_border()
                 init_hard_cut(frame_style_eardrum_border)
             # 说明修改过蓝线
             else:
                 print("有过记录")
-                re_hard_cut(frame_style_eardrum_border, 2, 2)
-
+                re_hard_cut(frame_style_eardrum_border, 0.5, 0.5)
+            
             # extrude_border_by_vertex_groups("BottomOuterBorderVertex", "BottomInnerBorderVertex")
 
     except:
@@ -984,64 +1084,63 @@ def create_mould_cut():
 def create_mould_fill():
     name = bpy.context.scene.leftWindowObj
     mould_type = bpy.context.scene.muJuTypeEnum
-    try:
-        if mould_type == "OP1":
-            print("软耳模填充")
-            soft_fill()
-        elif mould_type == "OP2":
-            print("硬耳膜填充")
-            hard_bottom_fill()
-        elif mould_type == "OP3":
-            print("外壳填充")
-            init_shell()
-        elif mould_type == "OP4":
-            print("框架式耳膜挖洞与填充")
-            # 之前版本：挖洞后上下边界桥接补面
-            # dig_hole()
-            # fill_closest_point()
-            # 当前版本：在软耳膜的基础上挖洞
-            frame_fill()
-        if name == '右耳':
-            bpy.context.scene.createmouldinitR = True
-        elif name == '左耳':
-            bpy.context.scene.createmouldinitL = True
+    # try:
+    if mould_type == "OP1":
+        print("软耳模填充")
+        soft_fill()
+    elif mould_type == "OP2":
+        print("硬耳膜填充")
+        hard_bottom_fill()
+    elif mould_type == "OP3":
+        print("外壳填充")
+        init_shell()
+    elif mould_type == "OP4":
+        print("框架式耳膜挖洞与填充")
+        # 之前版本：挖洞后上下边界桥接补面
+        # dig_hole()
+        # fill_closest_point()
+        # 当前版本：在软耳膜的基础上挖洞
+        frame_fill()
+    if name == '右耳':
+        bpy.context.scene.createmouldinitR = True
+    elif name == '左耳':
+        bpy.context.scene.createmouldinitL = True
 
-    except:
-        print("填充失败")
-        mould_type = bpy.context.scene.muJuTypeEnum
-        bpy.context.view_layer.objects.active = bpy.data.objects.get(name)
-        if mould_type == "OP2":
-            # 回退到补面前的状态
-            recover_before_fill()
-            # 将选择模式改回点选择
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.mesh.select_mode(type='VERT')
-            bpy.ops.object.mode_set(mode='OBJECT')
-        elif mould_type == "OP1":
-            reset_to_after_cut()
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.mesh.select_mode(type='VERT')
-            bpy.ops.object.mode_set(mode='OBJECT')
-        elif mould_type == "OP3":
-            reset_after_bottom_curve_change()
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.mesh.select_mode(type='VERT')
-            bpy.ops.object.mode_set(mode='OBJECT')
-        elif mould_type == "OP4":
-            # recover_to_dig()
-            reset_to_after_cut()
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.mesh.select_mode(type='VERT')
-            bpy.ops.object.mode_set(mode='OBJECT')
-        if bpy.data.materials.get("error_yellow") == None:
-            mat = newColor("error_yellow", 1, 1, 0, 0, 1)
-            mat.use_backface_culling = False
-        bpy.data.objects[name].data.materials.clear()
-        bpy.data.objects[name].data.materials.append(bpy.data.materials["error_yellow"])
-        if name == '右耳':
-            bpy.context.scene.createmouldinitR = True
-        elif name == '左耳':
-            bpy.context.scene.createmouldinitL = True
+    # except:
+    #     print("填充失败")
+    #     mould_type = bpy.context.scene.muJuTypeEnum
+    #     if mould_type == "OP2":
+    #         # 回退到补面前的状态
+    #         recover_before_fill()
+    #         # 将选择模式改回点选择
+    #         bpy.ops.object.mode_set(mode='EDIT')
+    #         bpy.ops.mesh.select_mode(type='VERT')
+    #         bpy.ops.object.mode_set(mode='OBJECT')
+    #     elif mould_type == "OP1":
+    #         reset_to_after_cut()
+    #         bpy.ops.object.mode_set(mode='EDIT')
+    #         bpy.ops.mesh.select_mode(type='VERT')
+    #         bpy.ops.object.mode_set(mode='OBJECT')
+    #     elif mould_type == "OP3":
+    #         reset_after_bottom_curve_change()
+    #         bpy.ops.object.mode_set(mode='EDIT')
+    #         bpy.ops.mesh.select_mode(type='VERT')
+    #         bpy.ops.object.mode_set(mode='OBJECT')
+    #     elif mould_type == "OP4":
+    #         # recover_to_dig()
+    #         reset_to_after_cut()
+    #         bpy.ops.object.mode_set(mode='EDIT')
+    #         bpy.ops.mesh.select_mode(type='VERT')
+    #         bpy.ops.object.mode_set(mode='OBJECT')
+    #     if bpy.data.materials.get("error_yellow") == None:
+    #         mat = newColor("error_yellow", 1, 1, 0, 0, 1)
+    #         mat.use_backface_culling = False
+    #     bpy.data.objects[name].data.materials.clear()
+    #     bpy.data.objects[name].data.materials.append(bpy.data.materials["error_yellow"])
+    #     if name == '右耳':
+    #         bpy.context.scene.createmouldinitR = True
+    #     elif name == '左耳':
+    #         bpy.context.scene.createmouldinitL = True
 
 
 
@@ -1063,7 +1162,7 @@ class CreateMouldCut(bpy.types.Operator): # 这里切割外型
             # if (not is_cut_finishL):
             #     is_cut_finishL = True
         cut_success = True
-        if not is_cut_finish_cur and get_switch_flag() and get_switch_time() == None:
+        if not is_cut_finish_cur and get_switch_flag():
             if name == '右耳':
                 is_cut_finish = True
             elif name == '左耳':
@@ -1083,17 +1182,16 @@ class CreateMouldCut(bpy.types.Operator): # 这里切割外型
                     name = bpy.context.scene.leftWindowObj
                     soft_eardrum_border = None
                     if name == '右耳':
-                        soft_eardrum_border = get_right_soft_eardrum_border_template()
+                        soft_eardrum_border = get_right_soft_eardrum_border()
                     elif name == '左耳':
-                        print("获取左耳模板")
-                        soft_eardrum_border = get_left_soft_eardrum_border_template()
+                        soft_eardrum_border = get_left_soft_eardrum_border()
 
                     if len(soft_eardrum_border) == 0:
                         if name == '右耳':
-                            soft_eardrum_border = get_soft_eardrum_border()
+                            soft_eardrum_border = get_right_soft_eardrum_template_border()
                         elif name == '左耳':
                             print("获取左耳模板")
-                            soft_eardrum_border = get_left_soft_eardrum_border()
+                            soft_eardrum_border = get_left_soft_eardrum_template_border()
                         init_hard_cut(soft_eardrum_border)
                     # 说明修改过蓝线
                     else:
@@ -1105,17 +1203,16 @@ class CreateMouldCut(bpy.types.Operator): # 这里切割外型
                     name = bpy.context.scene.leftWindowObj
                     hard_eardrum_border = None
                     if name == '右耳':
-                        hard_eardrum_border = get_right_hard_eardrum_border_template()
+                        hard_eardrum_border = get_right_hard_eardrum_border()
                     elif name == '左耳':
-                        print("获取左耳模板")
-                        hard_eardrum_border = get_left_hard_eardrum_border_template()
+                        hard_eardrum_border = get_left_hard_eardrum_border()
 
                     if len(hard_eardrum_border) == 0:
                         if name == '右耳':
-                            hard_eardrum_border = get_hard_eardrum_border()
+                            hard_eardrum_border = get_right_hard_eardrum_template_border()
                         elif name == '左耳':
                             print("获取左耳模板")
-                            hard_eardrum_border = get_left_hard_eardrum_border()
+                            hard_eardrum_border = get_left_hard_eardrum_template_border()
                         init_hard_cut(hard_eardrum_border)
                     # 说明修改过蓝线
                     else:
@@ -1124,38 +1221,58 @@ class CreateMouldCut(bpy.types.Operator): # 这里切割外型
 
                 elif mould_type == "OP3":
                     print("外壳耳模切割")
+                    if not get_shell_curve_obj_active():
+                        set_shell_curve_obj_active(True)
                     name = bpy.context.scene.leftWindowObj
                     shell_border = None
                     if name == '右耳':
                         shell_border = get_right_shell_border()
                     elif name == '左耳':
-                        print("获取左耳模板")
                         shell_border = get_left_shell_border()
 
-                    generate_circle_for_cut()
                     if len(shell_border) == 0:
-                        generate_border_curve()
+                        shell_template_border = None
+                        if name == '右耳':
+                            shell_template_border = get_right_shell_template_border()
+                        elif name == '左耳':
+                            shell_template_border = get_left_shell_template_border()
+                        if len(shell_template_border) == 0:
+                            generate_border_curve()
+                            if name == '右耳':
+                                bpy.context.scene.curveadjustR = False
+                            elif name == '左耳':
+                                bpy.context.scene.curveadjustL = False
+                        else:
+                            # init_hard_cut(shell_template_border)
+                            apply_template(shell_template_border, 0.5, 0.5)
+                            if name == '右耳':
+                                bpy.context.scene.curveadjustR = True
+                            elif name == '左耳':
+                                bpy.context.scene.curveadjustL = True
                     # 说明修改过蓝线
                     else:
                         print("有过记录")
-                        re_hard_cut(shell_border, 2, 2)
+                        re_hard_cut(shell_border, 0.5, 0.5)
+                        if name == '右耳':
+                            bpy.context.scene.curveadjustR = True
+                        elif name == '左耳':
+                            bpy.context.scene.curveadjustL = True
 
                 elif mould_type == "OP4":
                     print("框架式耳膜切割")
                     name = bpy.context.scene.leftWindowObj
                     frame_style_eardrum_border = None
                     if name == '右耳':
-                        frame_style_eardrum_border = get_right_frame_style_eardrum_border_template()
+                        frame_style_eardrum_border = get_right_frame_style_eardrum_border()
                     elif name == '左耳':
-                        print("获取左耳模板")
-                        frame_style_eardrum_border = get_left_frame_style_eardrum_border_template()
+                        frame_style_eardrum_border = get_left_frame_style_eardrum_border()
 
                     if len(frame_style_eardrum_border) == 0:
                         if name == '右耳':
-                            frame_style_eardrum_border = get_frame_style_eardrum_border()
+                            frame_style_eardrum_border = get_right_frame_style_eardrum_template_border()
                         elif name == '左耳':
                             print("获取左耳模板")
-                            frame_style_eardrum_border = get_left_frame_style_eardrum_border()
+                            frame_style_eardrum_border = get_left_frame_style_eardrum_template_border()
                         init_hard_cut(frame_style_eardrum_border)
                     # 说明修改过蓝线
                     else:
@@ -1288,7 +1405,7 @@ class CreateMouldFill(bpy.types.Operator): # 这里填充
         return {'RUNNING_MODAL'}
 
 
-class TEST_OT_resethmould(bpy.types.Operator):
+class TEST_OT_resetmould(bpy.types.Operator):
     bl_idname = "object.resetmould"
     bl_label = "重置操作"
     bl_description = "点击按钮重置创建磨具"
@@ -1297,6 +1414,7 @@ class TEST_OT_resethmould(bpy.types.Operator):
         self.execute(context)
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         bpy.context.scene.var = 32
+        record_state()
         return {'FINISHED'}
 
     def execute(self, context):
@@ -1339,115 +1457,29 @@ class TEST_OT_finishmould(bpy.types.Operator):
         self.execute(context)
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
         bpy.context.scene.var = 31
+        record_state()
         return {'FINISHED'}
 
     def execute(self, context):
         complete()
+        if not bpy.context.scene.pressfinish:
+            unregister_tools()
+            bpy.context.scene.pressfinish = True
 
+class TEST_OT_mirrormould(bpy.types.Operator):
+    bl_idname = "object.mirrormould"
+    bl_label = "镜像操作"
+    bl_description = "点击按钮镜像创建磨具"
 
-class resetmould_MyTool(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
+    def invoke(self, context, event):
+        self.execute(context)
+        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+        return {'FINISHED'}
 
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.resetmould"
-    bl_label = "重置创建磨具"
-    bl_description = (
-        "点击重置创建磨具"
-    )
-    bl_icon = "ops.curves.sculpt_comb"
-    bl_widget = None
-    bl_keymap = (
-        ("object.resetmould", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class finishmould_MyTool(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.finishmould"
-    bl_label = "完成创建磨具"
-    bl_description = (
-        "点击完成创建磨具"
-    )
-    bl_icon = "ops.curves.sculpt_delete"
-    bl_widget = None
-    bl_keymap = (
-        ("object.finishmould", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class canalmould_MyTool(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.canalmould"
-    bl_label = "初始化创建通道"
-    bl_description = (
-        "点击在磨具上创建通道"
-    )
-    bl_icon = "brush.sculpt.clay_thumb"
-    bl_widget = None
-    bl_keymap = (
-        ("object.updateshellcanal", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class limitmould_MyTool(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.limitmould"
-    bl_label = "限制器件不能脱出磨具范围"
-    bl_description = (
-        "点击限制磨具"
-    )
-    bl_icon = "brush.sculpt.clay_strips"
-    bl_widget = None
-    bl_keymap = (
-        ("object.updatecollision", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class mirrormould_MyTool(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.mirrormould"
-    bl_label = "镜像创建磨具"
-    bl_description = (
-        "点击镜像创建磨具"
-    )
-    bl_icon = "brush.gpencil_draw.tint"
-    bl_widget = None
-    bl_keymap = (
-        ("object.mirrormould", {"type": 'MOUSEMOVE', "value": 'ANY'},
-         {}),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
+    def execute(self, context):
+        enum = bpy.context.scene.muJuTypeEnum
+        if enum == "OP3":
+            mirror_shell_eardrum()
 
 
 # 注册类
@@ -1455,45 +1487,17 @@ _classes = [
     # CreateMouldInit,
     # CreateMouldCut,
     # CreateMouldFill,
-    TEST_OT_resethmould,
+    TEST_OT_resetmould,
     TEST_OT_finishmould,
+    TEST_OT_mirrormould
 ]
-
-
-def register_createmould_tools():
-    bpy.utils.register_tool(resetmould_MyTool, separator=True, group=False)
-    bpy.utils.register_tool(finishmould_MyTool, separator=True,
-                            group=False, after={resetmould_MyTool.bl_idname})
-    bpy.utils.register_tool(canalmould_MyTool, separator=True, group=False,
-                            after={finishmould_MyTool.bl_idname})
-    bpy.utils.register_tool(limitmould_MyTool, separator=True, group=False,
-                            after={canalmould_MyTool.bl_idname})
-    bpy.utils.register_tool(mirrormould_MyTool, separator=True,
-                            group=False, after={limitmould_MyTool.bl_idname})
 
 
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
-    # bpy.utils.register_tool(resetmould_MyTool, separator=True, group=False)
-    # bpy.utils.register_tool(finishmould_MyTool, separator=True,
-    #                         group=False, after={resetmould_MyTool.bl_idname})
-    # bpy.utils.register_tool(canalmould_MyTool, separator=True, group=False,
-    #                         after={finishmould_MyTool.bl_idname})
-    # bpy.utils.register_tool(limitmould_MyTool, separator=True, group=False,
-    #                         after={canalmould_MyTool.bl_idname})
-    # bpy.utils.register_tool(mirrormould_MyTool, separator=True,
-    #                         group=False, after={limitmould_MyTool.bl_idname})
 
 
 def unregister():
     for cls in _classes:
         bpy.utils.unregister_class(cls)
-    bpy.utils.unregister_tool(resetmould_MyTool)
-    bpy.utils.unregister_tool(finishmould_MyTool)
-    bpy.utils.unregister_tool(canalmould_MyTool)
-    bpy.utils.unregister_tool(limitmould_MyTool)
-    bpy.utils.unregister_tool(mirrormould_MyTool)
-
-
-

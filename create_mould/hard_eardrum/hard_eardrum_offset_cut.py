@@ -5,7 +5,7 @@ from mathutils import Vector, Matrix
 import gpu
 from gpu_extras.batch import batch_for_shader
 from math import degrees, radians, sin, cos, pi
-from ...tool import delete_vert_group, laplacian_smooth, transform_normal
+from ...tool import delete_vert_group, laplacian_smooth, transform_normal, track_time
 import math
 
 
@@ -124,7 +124,9 @@ class OffsetCut(bpy.types.Operator):
         for idx in range(len(pipes)):
             self.boolean_pipe(bm, face_layer, idx)
 
+        track_time("边缘平滑生成管道")
         pipe_cut()
+        track_time("边缘平滑管道切割")
 
         bpy.ops.mesh.select_all(action='DESELECT')
 
@@ -192,8 +194,10 @@ class OffsetCut(bpy.types.Operator):
             v.select = True
         bpy.ops.object.vertex_group_set_active(group=self.center_border_group_name)
         bpy.ops.object.vertex_group_assign()
+        track_time("边缘平滑生成循环边")
 
         bridge_border(self.width, self.center_border_group_name)
+        track_time("边缘平滑桥接循环边")
         bm = bmesh.new()
         bm.from_mesh(active.data)
         bm.select_flush(True)
@@ -1140,15 +1144,20 @@ def bridge_border(width, center_border_group_name):
     # bpy.ops.mesh.average_normals(average_type='CORNER_ANGLE')
     # bpy.ops.object.mode_set(mode='OBJECT')
 
-    bpy.ops.mesh.select_more()
-    bpy.ops.mesh.region_to_loop()
-    bpy.ops.mesh.select_more()
-    bm = bmesh.from_edit_mesh(main_obj.data)
-    transform_index = [v.index for v in bm.verts if v.select]
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.mode_set(mode='OBJECT')
-    transform_obj_name = bpy.context.scene.leftWindowObj + "HardEarDrumForSmooth"
-    transform_normal(transform_obj_name, transform_index)
+    enum = bpy.context.scene.muJuTypeEnum
+    if (enum == "OP1"):
+        bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.ops.object.shade_smooth()
+    elif (enum == "OP2"):
+        bpy.ops.mesh.select_more()
+        bpy.ops.mesh.region_to_loop()
+        bpy.ops.mesh.select_more()
+        bm = bmesh.from_edit_mesh(main_obj.data)
+        transform_index = [v.index for v in bm.verts if v.select]
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        transform_obj_name = bpy.context.scene.leftWindowObj + "HardEarDrumForSmooth"
+        transform_normal(transform_obj_name, transform_index)
 
     # main_obj.vertex_groups.new(name="TransformBorder")
     # bpy.ops.object.vertex_group_assign()

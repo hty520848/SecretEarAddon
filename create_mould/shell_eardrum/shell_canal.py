@@ -11,6 +11,7 @@ import re
 import os
 import time
 from ..collision import update_cube_location_rotate, setActiveAndMoveCubeName, resetCubeLocationAndRotation
+from ...global_manager import global_manager
 
 prev_on_sphere = False
 prev_on_sphereL = False
@@ -25,7 +26,7 @@ shellcanal_dataL = []
 shellcanal_finish = False
 shellcanal_finishL = False
 
-
+update_shell_canal = False
 # mouse_index = 0                   #添加传声孔之后,切换其存在的鼠标行为,记录当前在切换到了哪种鼠标行为
 # mouse_indexL = 0
 
@@ -36,6 +37,25 @@ shellcanal_finishL = False
 add_or_delete = False             # 执行添加或删除红球的过程中,暂停qiehuan modal的检测执行
 add_or_deleteL = False
 
+
+def register_shell_canal_globals():
+    global number, numberL
+    global object_dic, object_dicL
+    global shellcanal_data, shellcanal_dataL
+    global_manager.register("number", number)
+    global_manager.register("numberL", numberL)
+    global_manager.register("object_dic", object_dic)
+    global_manager.register("object_dicL", object_dicL)
+    global_manager.register("shellcanal_data", shellcanal_data)
+    global_manager.register("shellcanal_dataL", shellcanal_dataL)
+
+def get_shell_canal_update():
+    global update_shell_canal
+    return update_shell_canal
+
+def set_shell_canal_update(value):
+    global update_shell_canal
+    update_shell_canal = value
 
 # 新建与RGB颜色相同的材质
 def newColor(id, r, g, b, is_transparency, transparency_degree):
@@ -49,7 +69,7 @@ def newColor(id, r, g, b, is_transparency, transparency_degree):
     shader.inputs[7].default_value = 0
     shader.inputs[9].default_value = 0.472
     shader.inputs[14].default_value = 1
-    shader.inputs[15].default_value = 0.105
+    shader.inputs[15].default_value = 1
     links.new(shader.outputs[0], output.inputs[0])
     if is_transparency:
         mat.blend_method = "BLEND"
@@ -653,10 +673,15 @@ def updateArmaturePlaneLocationAndNormal():
     global object_dic
     global object_dicL
     name = bpy.context.scene.leftWindowObj
+    # 面板偏移参数shellCanalOffsetR为零时,shellcanal_offset值为diameter + thickness,此时管道红球控制点紧贴模型外壁
     if name == '右耳':
-        shellcanal_offset = bpy.context.scene.shellCanalOffsetR
+        diameter = bpy.context.scene.shellCanalDiameterR / 2
+        thickness = bpy.context.scene.shellCanalThicknessR / 2
+        shellcanal_offset = bpy.context.scene.shellCanalOffsetR + diameter + thickness
     else:
-        shellcanal_offset = bpy.context.scene.shellCanalOffsetL
+        diameter = bpy.context.scene.shellCanalDiameterL / 2
+        thickness = bpy.context.scene.shellCanalThicknessL / 2
+        shellcanal_offset = bpy.context.scene.shellCanalOffsetL + diameter + thickness
     cur_obj = bpy.data.objects.get(name)
     #更新管道控制平面位置
     for obj in bpy.data.objects:
@@ -1331,6 +1356,9 @@ def initial_shellcanal():
     else:  # 不存在已保存的圆球位置
         pass
 
+    # 根据管道功能是否开启决定是否隐藏管道
+    updateshellCanalState()
+
     # bpy.ops.object.shellcanalqiehuan('INVOKE_DEFAULT')
 
 def saveInfoAndDeleteShellCanal():
@@ -1525,20 +1553,23 @@ def submit_shellcanal():
     global shellcanal_finishL
     name = bpy.context.scene.leftWindowObj
     shellcanal_finish_cur = None
+    useShellCanal_cur = False
     if (name == "右耳"):
         object_dic_cur = object_dic
         shellcanal_finish_cur = shellcanal_finish
+        useShellCanal_cur = bpy.context.scene.useShellCanalR
         shellcanal_finish = True
     elif (name == "左耳"):
         object_dic_cur = object_dicL
         shellcanal_finish_cur = shellcanal_finishL
+        useShellCanal_cur = bpy.context.scene.useShellCanalL
         shellcanal_finishL = True
     print("外壳管道提交")
 
     if len(object_dic_cur) > 0 and shellcanal_finish_cur == False:
         # 更新记录管道红球信息
         save_shellcanal_info()
-        if len(object_dic_cur) >= 2:
+        if len(object_dic_cur) >= 2 and useShellCanal_cur:
             # 将内部曲线两端向外凸出一段距离
             adjustpoint()
 
@@ -1845,56 +1876,56 @@ def submit_shellcanal():
 
 
 
-            # # 管道内边缘平滑
-            # bpy.ops.object.select_all(action='DESELECT')
-            # cur_obj.select_set(True)
-            # bpy.context.view_layer.objects.active = cur_obj
+            # 管道内边缘平滑
+            bpy.ops.object.select_all(action='DESELECT')
+            cur_obj.select_set(True)
+            bpy.context.view_layer.objects.active = cur_obj
             bpy.context.active_object.data.use_auto_smooth = True
             bpy.context.object.data.auto_smooth_angle = 0.81
-            # bpy.ops.object.mode_set(mode='EDIT')
-            # bpy.ops.mesh.select_all(action='DESELECT')
-            # bpy.ops.object.vertex_group_set_active(group="innerShellSmoothVertex")
-            # bpy.ops.object.vertex_group_select()
-            # bpy.ops.mesh.region_to_loop()            # 选择内平滑顶点的边界
-            # bpy.ops.object.mode_set(mode='OBJECT')
-            # # 根据切割后的物体复制一份用于平滑失败的回退
-            # shell_inner_canal_smooth_reset_obj = bpy.data.objects.get(name + "ShellInnerCanalSmoothReset")
-            # if (shell_inner_canal_smooth_reset_obj != None):
-            #     bpy.data.objects.remove(shell_inner_canal_smooth_reset_obj, do_unlink=True)
-            # duplicate_obj = cur_obj.copy()
-            # duplicate_obj.data = cur_obj.data.copy()
-            # duplicate_obj.animation_data_clear()
-            # duplicate_obj.name = name + "ShellInnerCanalSmoothReset"
-            # bpy.context.collection.objects.link(duplicate_obj)
-            # if name == '右耳':
-            #     moveToRight(duplicate_obj)
-            # elif name == '左耳':
-            #     moveToLeft(duplicate_obj)
-            # duplicate_obj.hide_set(True)
-            # try:
-            #     # 布尔后管道产生的新顶点被选中,根据选中的顶点找出其边界轮廓线,offset_cut后进行倒角
-            #     offset_cut = bpy.context.scene.innerShellCanalOffsetR * 0.3  # 管道直径默认值为1,对应的offset_cut宽度为0.3
-            #     bpy.ops.object.mode_set(mode='EDIT')
-            #     bpy.ops.huier.offset_cut(width=offset_cut, shade_smooth=True, mark_sharp=False, all_cyclic=True)
-            #     bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0, offset_pct=80, segments=5, release_confirm=True)
-            #     bpy.ops.mesh.select_all(action='DESELECT')
-            #     bpy.ops.object.mode_set(mode='OBJECT')
-            # except:
-            #     bpy.ops.object.mode_set(mode='OBJECT')
-            #     print("管道平滑失败回退")
-            #     # 平滑失败则将当前左右耳物体删除并用平滑回退物体将其替换
-            #     shell_inner_canal_smooth_reset_obj = bpy.data.objects.get(name + "ShellInnerCanalSmoothReset")
-            #     if (shell_inner_canal_smooth_reset_obj != None):
-            #         bpy.data.objects.remove(cur_obj, do_unlink=True)
-            #         shell_inner_canal_smooth_reset_obj.name = name
-            #         bpy.ops.object.select_all(action='DESELECT')
-            #         shell_inner_canal_smooth_reset_obj.hide_set(False)
-            #         shell_inner_canal_smooth_reset_obj.select_set(True)
-            #         bpy.context.view_layer.objects.active = shell_inner_canal_smooth_reset_obj
-            # # 若平滑成功未执行回退,则将平滑回退物体删除
-            # shell_inner_canal_smooth_reset_obj = bpy.data.objects.get(name + "ShellInnerCanalSmoothReset")
-            # if (shell_inner_canal_smooth_reset_obj != None):
-            #     bpy.data.objects.remove(shell_inner_canal_smooth_reset_obj, do_unlink=True)
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.vertex_group_set_active(group="innerShellSmoothVertex")
+            bpy.ops.object.vertex_group_select()
+            bpy.ops.mesh.region_to_loop()            # 选择内平滑顶点的边界
+            bpy.ops.object.mode_set(mode='OBJECT')
+            # 根据切割后的物体复制一份用于平滑失败的回退
+            shell_inner_canal_smooth_reset_obj = bpy.data.objects.get(name + "ShellInnerCanalSmoothReset")
+            if (shell_inner_canal_smooth_reset_obj != None):
+                bpy.data.objects.remove(shell_inner_canal_smooth_reset_obj, do_unlink=True)
+            duplicate_obj = cur_obj.copy()
+            duplicate_obj.data = cur_obj.data.copy()
+            duplicate_obj.animation_data_clear()
+            duplicate_obj.name = name + "ShellInnerCanalSmoothReset"
+            bpy.context.collection.objects.link(duplicate_obj)
+            if name == '右耳':
+                moveToRight(duplicate_obj)
+            elif name == '左耳':
+                moveToLeft(duplicate_obj)
+            duplicate_obj.hide_set(True)
+            try:
+                # 布尔后管道产生的新顶点被选中,根据选中的顶点找出其边界轮廓线,offset_cut后进行倒角
+                offset_cut = bpy.context.scene.innerShellCanalOffsetR * 0.3  # 管道直径默认值为1,对应的offset_cut宽度为0.3
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.huier.offset_cut(width=offset_cut, shade_smooth=True, mark_sharp=False, all_cyclic=True)
+                bpy.ops.mesh.bevel(offset_type='PERCENT', offset=0, offset_pct=80, segments=5, release_confirm=True)
+                bpy.ops.mesh.select_all(action='DESELECT')
+                bpy.ops.object.mode_set(mode='OBJECT')
+            except:
+                bpy.ops.object.mode_set(mode='OBJECT')
+                print("管道平滑失败回退")
+                # 平滑失败则将当前左右耳物体删除并用平滑回退物体将其替换
+                shell_inner_canal_smooth_reset_obj = bpy.data.objects.get(name + "ShellInnerCanalSmoothReset")
+                if (shell_inner_canal_smooth_reset_obj != None):
+                    bpy.data.objects.remove(cur_obj, do_unlink=True)
+                    shell_inner_canal_smooth_reset_obj.name = name
+                    bpy.ops.object.select_all(action='DESELECT')
+                    shell_inner_canal_smooth_reset_obj.hide_set(False)
+                    shell_inner_canal_smooth_reset_obj.select_set(True)
+                    bpy.context.view_layer.objects.active = shell_inner_canal_smooth_reset_obj
+            # 若平滑成功未执行回退,则将平滑回退物体删除
+            shell_inner_canal_smooth_reset_obj = bpy.data.objects.get(name + "ShellInnerCanalSmoothReset")
+            if (shell_inner_canal_smooth_reset_obj != None):
+                bpy.data.objects.remove(shell_inner_canal_smooth_reset_obj, do_unlink=True)
 
 
 
@@ -2015,6 +2046,7 @@ class TEST_OT_addshellcanal(bpy.types.Operator):
         global numberL
         global add_or_delete
         global add_or_deleteL
+        global update_shell_canal
         name = bpy.context.scene.leftWindowObj
         number_cur = None
         if (name == "右耳"):
@@ -2060,6 +2092,8 @@ class TEST_OT_addshellcanal(bpy.types.Operator):
             add_or_delete = False
         elif name == '左耳':
             add_or_deleteL = False
+        
+        update_shell_canal = True
 
     def invoke(self, context, event):
         self.addsphere(context, event)
@@ -2077,6 +2111,7 @@ class TEST_OT_deleteshellcanal(bpy.types.Operator):
         global object_dicL
         global add_or_delete
         global add_or_deleteL
+        global update_shell_canal
         sphere_number = on_which_shpere(context, event)
         name = bpy.context.scene.leftWindowObj
         if name == '右耳':
@@ -2165,31 +2200,12 @@ class TEST_OT_deleteshellcanal(bpy.types.Operator):
             add_or_delete = False
         elif name == '左耳':
             add_or_deleteL = False
+        
+        update_shell_canal = True
 
     def invoke(self, context, event):
         self.deletesphere(context, event)
         return {'FINISHED'}
-
-
-class TEST_OT_updateshellcanal(bpy.types.Operator):
-    bl_idname = "object.updateshellcanal"
-    bl_label = "更新管道的状态"
-    bl_description = "显示或者隐藏管道"
-
-    def invoke(self, context, event):
-        print("updateshellcanal invoke")
-        self.execute(context)
-        bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
-        return {'FINISHED'}
-
-    def execute(self, context):
-        name = bpy.context.scene.leftWindowObj
-        if (name == "右耳"):
-            useShellCanal = bpy.context.scene.useShellCanalR
-            bpy.context.scene.useShellCanalR = not useShellCanal
-        elif (name == "左耳"):
-            useShellCanal = bpy.context.scene.useShellCanalL
-            bpy.context.scene.useShellCanalL = not useShellCanal
 
 
 def updateShellCanal(context,event,left_press):
@@ -2263,72 +2279,12 @@ def updateShellCanal(context,event,left_press):
                             updateMeshOutShellCanal()
 
 
-
-
-
-
-
-
-
-
-class public_add_shellcanal_MyTool(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.public_add_shellcanal"
-    bl_label = "外壳管道添加控制点操作"
-    bl_description = (
-        "实现鼠标双击添加控制点操作和公共鼠标行为"
-    )
-    bl_icon = "brush.sculpt.crease"
-    bl_widget = None
-    bl_keymap = (
-        ("object.addshellcanal", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
-        ("view3d.rotate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.move", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
-        ("view3d.dolly", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
-        ("view3d.view_roll", {"type": 'LEFTMOUSE', "value": 'PRESS', "ctrl": True}, None)
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-class delete_drag_shellcanal_MyTool(bpy.types.WorkSpaceTool):
-    bl_space_type = 'VIEW_3D'
-    bl_context_mode = 'OBJECT'
-
-    # The prefix of the idname should be your add-on name.
-    bl_idname = "my_tool.delete_drag_shellcanal"
-    bl_label = ""
-    bl_description = (
-        "对外壳圆球圆球移动和双击删除操作"
-    )
-    bl_icon = "brush.sculpt.displacement_eraser"
-    bl_widget = None
-    bl_keymap = (
-        # ("view3d.select", {"type": 'LEFTMOUSE', "value": 'PRESS'}, {"properties": [("deselect_all", True), ], },),
-        ("transform.translate", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
-        ("object.deleteshellcanal", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
-    )
-
-    def draw_settings(context, layout, tool):
-        pass
-
-
-
 _classes = [
     TEST_OT_addshellcanal,
     TEST_OT_deleteshellcanal,
-    TEST_OT_updateshellcanal
     # TEST_OT_shellcanalqiehuan
 ]
 
-
-def register_shellcanal_tools():
-    bpy.utils.register_tool(public_add_shellcanal_MyTool, separator=True, group=False)
-    bpy.utils.register_tool(delete_drag_shellcanal_MyTool, separator=True, group=False)
 
 
 def register():
@@ -2336,10 +2292,6 @@ def register():
         bpy.utils.register_class(cls)
 
 
-
 def unregister():
     for cls in _classes:
         bpy.utils.unregister_class(cls)
-
-    bpy.utils.unregister_tool(public_add_shellcanal_MyTool)
-    bpy.utils.unregister_tool(delete_drag_shellcanal_MyTool)
